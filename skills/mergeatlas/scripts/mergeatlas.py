@@ -42,6 +42,17 @@ COMMENT_STARTS = ("//", "/*", "#")
 REACH_KINDS = {"core", "cleanup"}
 SURROUNDING_LINES = 4
 TEST_PATH = re.compile(r"(^|/)(tests?|spec|__tests__)/|[._](test|spec)\.")
+TICKET_URLS = {
+    "Jira": r"https://[\w-]+\.atlassian\.net/browse/[A-Z][A-Z0-9]+-\d+",
+    "Linear": r"https://linear\.app/[\w-]+/issue/[A-Z0-9]+-\d+",
+    "Trello": r"https://trello\.com/c/\w+",
+    "Asana": r"https://app\.asana\.com/[\w/-]+",
+    "Shortcut": r"https://app\.shortcut\.com/[\w-]+/story/\d+",
+    "ClickUp": r"https://app\.clickup\.com/t/\w+",
+    "Azure Boards": r"https://dev\.azure\.com/[\w-]+/[^/\s]+/_workitems/edit/\d+",
+}
+TICKET_KEY = re.compile(r"(?<![\w/.-])[A-Z][A-Z0-9]{1,9}-\d+\b")
+BRANCH_KEY = re.compile(r"(?:^|/)([A-Za-z][A-Za-z0-9]{1,9}-\d+)(?![A-Za-z0-9])")
 
 
 def gh(*args):
@@ -117,8 +128,16 @@ def users_of(names, commit, changed):
     return users
 
 
+def ticket_refs(title, body, branch):
+    """Lists what looks like a ticket outside GitHub; the keys are candidates, as UTF-8 matches too."""
+    text = f"{title}\n{body}"
+    urls = {url: name for name, pattern in TICKET_URLS.items() for url in re.findall(pattern, text)}
+    keys = [*TICKET_KEY.findall(text), *(key.upper() for key in BRANCH_KEY.findall(branch))]
+    return [*(f"{name} {url}" for url, name in urls.items()), *dict.fromkeys(keys)]
+
+
 def fetch(number):
-    fields = "number,title,body,state,additions,deletions,files,headRefOid,url,closingIssuesReferences"
+    fields = "number,title,body,state,additions,deletions,files,headRefName,headRefOid,url,closingIssuesReferences"
     pr = json.loads(gh("pr", "view", *number, "--json", fields))
     repo = pr["url"].split("/pull/")[0].split("github.com/")[1]
     map_id = f"{repo.replace('/', '-')}-{pr['number']}"
@@ -146,6 +165,8 @@ def fetch(number):
         print(f"linked issue #{issue['number']}: {issue['title']}\n{issue['body']}")
     if not pr["issues"]:
         print("linked issue: none")
+    for ticket in ticket_refs(pr["title"], pr["body"], pr["headRefName"]):
+        print(f"possible ticket: {ticket}")
     print(f"files ({len(pr['files'])}):")
     for f in pr["files"]:
         print(f"  +{f['additions']} -{f['deletions']} {f['path']}")
@@ -237,6 +258,11 @@ def candidates_of(card, users):
 
 def problems_in(data, stats, read, rows, users):
     found, seen, ids = [], set(), set()
+    for ticket in data.get("tickets", []):
+        if not (ticket.get("key") and ticket.get("title")):
+            found.append(f"ticket {ticket}: needs key and title")
+        if not str(ticket.get("url")).startswith("https://"):
+            found.append(f"ticket {ticket.get('key')}: url must start with https://")
 
     def check_links(name, item, fields):
         for path, first, last in CODE_LINK.findall(" ".join(str(item.get(k, "")) for k in fields)):
@@ -362,7 +388,10 @@ def publish(map_id):
             "url": pr["url"],
             "blob": f"{pr['url'].split('/pull/')[0]}/blob/{pr['headRefOid']}/",
             "diffs": {p: hashlib.sha256(p.encode()).hexdigest() for p in stats},
-            "issues": [{k: i[k] for k in ("number", "title", "url")} for i in pr["issues"]],
+            "issues": [
+                *({"label": f"#{i['number']}", "title": i["title"], "url": i["url"]} for i in pr["issues"]),
+                *({"label": t["key"], "title": t["title"], "url": t["url"]} for t in data.get("tickets", [])),
+            ],
             "background": data["background"], "problem": data["problem"], "solution": data["solution"],
         },
         "cards": data["cards"],

@@ -761,7 +761,7 @@ const storyHtml = () => `
   <h2 class="beat">Background</h2>
   <p>${fmt(META.background)}</p>
   <h2 class="beat">The issue</h2>
-  <div class="issues">${META.issues.map(i => `<a href="${esc(i.url)}" target="_blank" rel="noopener">#${i.number} ${esc(i.title)}</a>`).join('')}</div>
+  <div class="issues">${META.issues.map(i => `<a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.label)} ${esc(i.title)}</a>`).join('')}</div>
   <p>${fmt(META.problem)}</p>
   <h2 class="beat">What this PR does</h2>
   <p>${story(META.solution)}</p>`;

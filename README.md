@@ -33,6 +33,12 @@ From inside the PR's repository, ask your agent to map it, or run `/mergeatlas` 
 
 The map has two views. **Map** is the canvas of cards and arrows, and **Tree** is a collapsible outline of the same cards with their affected files.
 
+## Tickets
+
+GitHub issues linked to the PR work out of the box. For other trackers, MergeAtlas spots the ticket in the PR's title, description or branch name, and your agent reads it through the connection it already has, such as an MCP server. MergeAtlas stores no tracker credentials of its own.
+
+It recognises links from Jira, Linear, Trello, Asana, Shortcut, ClickUp and Azure Boards, and bare keys like `ENG-123`. If your agent can't reach the tracker, it tells you which ticket it couldn't read and builds the map from the PR alone.
+
 ## How it works
 
 The analysis comes from your agent, which reads the issue, the diff and the surrounding source. `skills/mergeatlas/scripts/mergeatlas.py` does the mechanical part: it fetches the PR, lists the candidates for reach, checks the map against the diff, and serves it. Maps and working files stay on your machine in `~/.cache/mergeatlas`.
