@@ -1,0 +1,995 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MergeAtlas</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,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">
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --dot: #cfc9bb;
+    --card: #fffdf8;
+    --ink: #1f1d1a;
+    --muted: #6b665c;
+    --line: #d9d3c5;
+    --shadow: 0 1px 2px rgba(40,30,10,.08), 0 8px 24px rgba(40,30,10,.08);
+    --core: #2f6fdb;
+    --cleanup: #d9731f;
+    --test: #2a9a6b;
+    --docs: #7a7468;
+    --config: #8a5bd6;
+    --add: #1d8a56;
+    --del: #c0392b;
+    --overlay: rgba(31,29,26,.45);
+    --code-bg: #f0ece1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17161a; --dot: #34323a; --card: #222127; --ink: #f1eee8; --muted: #a29d93;
+      --line: #3a3841; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.4);
+      --core: #6b9bff; --cleanup: #f0944a; --test: #4cc593; --docs: #a39d8f; --config: #b392f0;
+      --add: #4cc593; --del: #ef7b6d; --overlay: rgba(0,0,0,.6); --code-bg: #1a191e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  #viewport { position: fixed; inset: 0; cursor: grab; touch-action: none;
+    background-image: radial-gradient(var(--dot) 1.2px, transparent 1.3px); background-size: 28px 28px; }
+  #viewport.panning { cursor: grabbing; }
+  #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+  #edges { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+  #edges .hit { pointer-events: stroke; cursor: pointer; fill: none; stroke: transparent; stroke-width: 22; }
+  #edges .line { fill: none; stroke-width: 2.5; transition: stroke-width .12s, opacity .12s; }
+  #edges .grp.dim { opacity: .18; }
+  #edges .grp:hover .line, #edges .grp.on .line { stroke-width: 4; }
+  .pill { position: absolute; transform: translate(-50%, -50%); background: var(--card); border: 1.5px solid;
+    border-radius: 999px; padding: 3px 11px; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer;
+    box-shadow: var(--shadow); user-select: none; transition: opacity .12s; }
+  .pill.dim { opacity: .18; }
+  .pill:hover { filter: brightness(1.08); }
+
+  .card { position: absolute; width: 400px; background: var(--card); border: 1px solid var(--line);
+    border-top: 5px solid var(--accent); border-radius: 14px; box-shadow: var(--shadow); cursor: pointer;
+    padding: 16px 18px 16px; user-select: none; transition: opacity .12s, box-shadow .12s; }
+  .card:hover { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
+  .card.dim { opacity: .35; }
+  .card.dragging { cursor: grabbing; box-shadow: 0 0 0 2px var(--accent), 0 16px 40px rgba(0,0,0,.2); }
+  .card.stack, .card.reach-card { box-sizing: border-box; width: 300px; --accent: var(--muted); border-top-style: dashed; }
+  .card.stack { box-shadow: 6px 6px 0 -1px var(--card), 6px 6px 0 0 var(--line), 12px 12px 0 -1px var(--card), 12px 12px 0 0 var(--line), var(--shadow); }
+  .card.stack:hover { box-shadow: 6px 6px 0 -1px var(--card), 6px 6px 0 0 var(--muted), 12px 12px 0 -1px var(--card), 12px 12px 0 0 var(--muted), var(--shadow); }
+  .card.stack.open, .card.stack.open:hover { z-index: 3; cursor: default; box-shadow: 0 0 0 1px var(--muted), 0 16px 40px rgba(0,0,0,.28); }
+  .card.stack > h3 { text-wrap: balance; }
+  .stack-files { position: absolute; left: 50%; top: 0; visibility: hidden; }
+  .card.reach-file { width: 260px; transition: none; will-change: transform, opacity; }
+  .card.reach-card h3 { font-size: 16px; overflow-wrap: anywhere; }
+  .card.reach-card p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; margin: 0; font-size: 13px; }
+  .stack-toggle { margin-left: auto; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--code-bg); color: var(--ink); font: inherit; font-size: 12px; cursor: pointer; }
+  .stack-toggle:hover { border-color: var(--muted); }
+  #edges .grp.reach .line { stroke-dasharray: 7 6; stroke-width: 2; }
+  #edges .grp.reach .hit { pointer-events: none; }
+  .card .top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .tag { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
+  .stat { margin-left: auto; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .stat .a { color: var(--add); } .stat .d { color: var(--del); margin-left: 6px; }
+  .card h3 { margin: 0 0 2px; font-size: 19px; letter-spacing: -.01em; }
+  .path { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); margin-bottom: 10px; word-break: break-all; }
+  .card p { margin: 0 0 10px; }
+  .card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+  .card li { margin-bottom: 3px; }
+  .more { margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--accent); }
+
+  #panel { position: fixed; left: 16px; top: 16px; width: min(380px, calc(100vw - 32px)); background: var(--card);
+    border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; z-index: 5; }
+  #panel .brand { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; color: var(--muted); font-size: 12px; font-weight: 600; }
+  #panel .brand img { width: 24px; height: 24px; }
+  #panel h1 { margin: 0 0 2px; font-size: 16px; line-height: 1.3; }
+  #panel .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  #panel { max-height: calc(100vh - 32px); overflow: auto; }
+  #panel .body { font-size: 13px; }
+  h2.beat, .sheet h2.beat { margin: 12px 0 3px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  #panel .body p { margin: 0; }
+  .issues a { display: block; margin-bottom: 4px; color: var(--core); font-weight: 600; text-decoration: none; }
+  .issues a:hover { text-decoration: underline; }
+  .cardlink { font: inherit; color: var(--core); background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
+    text-decoration: underline dotted; text-underline-offset: 2px; }
+  .cardlink:hover { text-decoration-style: solid; }
+  .codelink { color: var(--core); }
+  .sheet .at { display: block; margin-top: 8px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+  #panel.collapsed .body { display: none; }
+  #panel button.toggle { float: right; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .legend i.ln { height: 3px; width: 16px; border-radius: 2px; vertical-align: 3px; }
+
+  #controls { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 6px; z-index: 5; align-items: center; }
+  #controls button { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--card);
+    color: var(--ink); font-size: 18px; cursor: pointer; box-shadow: var(--shadow); }
+  #controls button.wide { width: auto; padding: 0 12px; font-size: 13px; }
+  #zoomlabel { font-size: 12px; color: var(--muted); min-width: 42px; text-align: center; }
+  #hint { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); font-size: 12px; color: var(--muted);
+    background: var(--card); border: 1px solid var(--line); padding: 5px 12px; border-radius: 999px; z-index: 4; white-space: nowrap; }
+  @media (max-width: 720px) { #hint { display: none; } }
+
+  #modal-bg { position: fixed; inset: 0; background: var(--overlay); display: none; z-index: 20; align-items: center; justify-content: center; padding: 16px; }
+  #modal-bg.open { display: flex; }
+  #modal { background: var(--card); border-radius: 16px; width: min(720px, 100%); max-height: calc(100vh - 32px); overflow: auto;
+    border-top: 6px solid var(--accent); box-shadow: 0 24px 80px rgba(0,0,0,.35); padding: 22px 26px 24px; position: relative; }
+  .sheet h2 { margin: 2px 0 2px; font-size: 22px; letter-spacing: -.01em; }
+  #modal .close { position: absolute; right: 14px; top: 12px; border: 0; background: none; font-size: 24px; color: var(--muted); cursor: pointer; }
+  .sheet h4 { margin: 18px 0 4px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .sheet p { margin: 0 0 8px; }
+  .sheet ul { margin: 0 0 8px; padding-left: 20px; }
+  .sheet li { margin-bottom: 4px; }
+  .sheet pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; overflow: auto;
+    font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 6px 0 0; }
+  .sheet code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code-bg); padding: 1px 5px; border-radius: 5px; }
+  .sheet pre .a { color: var(--add); } .sheet pre .d { color: var(--del); }
+  .keyline { display: block; min-height: 1.55em; color: inherit; text-decoration: underline dotted color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 3px; }
+  .review { display: block; margin: 8px 0 4px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg); color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .review:hover { border-color: var(--muted); }
+  .review[data-state="done"] { color: var(--add); }
+  .review[data-state="changed"] { color: var(--del); }
+  .item[data-review="done"] strong::before, .card[data-review="done"] h3::before { content: '✓ '; color: var(--add); }
+  .item[data-review="done"], .card[data-review="done"] { opacity: .6; }
+  .item[data-review="changed"] strong::after, .card[data-review="changed"] h3::after { content: ' · changed'; color: var(--del); font-size: 12px; font-weight: 600; }
+  .snippets-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
+  .sheet .snippets-head h4 { margin: 0; }
+  .file-pager { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin: 0 28px 14px 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .file-pager button { display: flex; align-items: center; gap: 4px; min-width: 0; min-height: 30px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg); color: var(--ink); font: inherit; cursor: pointer; }
+  .file-pager button:hover { border-color: var(--muted); }
+  .file-pager button:disabled { visibility: hidden; }
+  .file-pager button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-pager [data-file-step="-1"] { justify-self: start; max-width: 100%; }
+  .file-pager [data-file-step="1"] { justify-self: end; max-width: 100%; }
+  .steps { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .steps button { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg); color: var(--ink); font-size: 15px; cursor: pointer; }
+  .steps button:hover:not(:disabled) { border-color: var(--muted); }
+  .steps button:disabled { opacity: .35; cursor: default; }
+  .snippet p { margin-top: 6px; }
+  .reach-count { font-weight: 600; }
+  .reach-item { border: 1px solid var(--line); border-radius: 10px; margin: 10px 0; overflow: hidden; }
+  .reach-paths { padding: 8px 12px; background: var(--code-bg); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+  .reach-paths a { display: block; font-weight: 600; text-decoration: none; }
+  .reach-paths a:hover { text-decoration: underline; }
+  .reach-dir { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 6px; }
+  .reach-text { padding: 10px 12px; }
+  .sheet .reach-text p { margin: 0; }
+  .reach summary { cursor: pointer; padding: 8px 12px; color: var(--muted); font-weight: 600; }
+  .reach { border: 1px solid var(--line); border-radius: 10px; margin: 10px 0; }
+  .reach .reach-item { margin: 0 12px 12px; }
+  .sheet .reach-note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .keyline.around { opacity: .55; }
+  .lineno { display: inline-block; width: 4ch; margin-right: 1.5ch; text-align: right; color: var(--muted); user-select: none; }
+  .keygap { display: block; color: var(--muted); padding-left: 5.5ch; }
+  .keyline:hover { background: var(--line); text-decoration-style: solid; text-decoration-color: currentColor; }
+  .route { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0 4px; }
+  .route button { border: 1.5px solid var(--accent); background: none; color: var(--ink); border-radius: 10px; padding: 5px 12px; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .route .arr { color: var(--accent); font-size: 20px; }
+  .links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .links button { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 12.5px; }
+  .links button:hover { border-color: var(--accent); }
+
+  #viewswitch { position: fixed; right: 16px; top: 16px; display: flex; z-index: 6; background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 3px; }
+  #viewswitch button { border: 0; background: none; color: var(--muted); border-radius: 7px; padding: 4px 14px; font: inherit; font-size: 13px; cursor: pointer; }
+  #viewswitch button[aria-pressed="true"] { background: var(--code-bg); color: var(--ink); font-weight: 600; }
+
+  #list { display: none; position: fixed; inset: 0; grid-template-columns: 300px minmax(0, 1fr); }
+  body.list #list { display: grid; }
+  body.list #viewport, body.list #panel, body.list #controls, body.list #hint { display: none; }
+  #sidebar { background: var(--card); border-right: 1px solid var(--line); overflow: auto; padding: 14px 0; }
+  #sidebar .meta { color: var(--muted); font-size: 12px; padding: 0 14px 10px; }
+  .item { display: block; width: 100%; text-align: left; background: none; border: 0; border-left: 4px solid var(--accent);
+    padding: 9px 14px 9px 12px; margin-bottom: 2px; color: var(--ink); font: inherit; cursor: pointer; }
+  .item:hover, .item[aria-current="true"] { background: var(--code-bg); }
+  .item[aria-current="true"] strong { color: var(--accent); }
+  .tree-branch { margin: 0 0 4px 18px; border-left: 1px dashed var(--muted); }
+  .branch { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 12px 6px 8px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; }
+  .branch:hover { background: var(--code-bg); color: var(--ink); }
+  .chevron { flex: none; width: 14px; text-align: center; font-size: 17px; line-height: 1; transition: transform .18s; }
+  .branch[aria-expanded="false"] .chevron { transform: rotate(-90deg); }
+  .tree-children { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .2s ease; }
+  .tree-children[inert] { grid-template-rows: 0fr; }
+  .tree-children > div { overflow: hidden; min-height: 0; }
+  #items .file-item { padding-left: 22px; border-left: 0; }
+  @media (prefers-reduced-motion: reduce) { .chevron, .tree-children { transition: none; } }
+  .file-item strong { font-weight: 600; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file-item .path { display: block; margin: 2px 0 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item.file-item[aria-current="true"] strong { color: var(--ink); }
+  @media (prefers-reduced-motion: reduce) { .branch, .tree-children { transition: none; } }
+  .item strong { display: block; font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+  .item .sub { display: flex; align-items: center; margin-top: 2px; }
+  #detail { overflow: auto; border-top: 6px solid var(--accent); padding: 64px max(26px, calc((100% - 760px) / 2)) 48px; }
+  @media (max-width: 720px) {
+    #viewswitch { top: auto; right: auto; left: 16px; bottom: 16px; }
+    #list { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 38vh) minmax(0, 1fr); }
+    #sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+    #detail { padding: 18px 16px 72px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="viewport">
+  <div id="world">
+    <svg id="edges"></svg>
+  </div>
+</div>
+
+<div id="panel">
+  <button class="toggle" id="ptoggle">hide</button>
+  <div class="brand"><img alt="">MergeAtlas</div>
+  <h1 id="ptitle"></h1>
+  <div class="meta" id="pmeta"></div>
+  <div class="body">
+    <div id="pstory"></div>
+    <div class="legend">
+      <span><i style="background:var(--core)"></i>New behaviour</span>
+      <span><i style="background:var(--cleanup)"></i>Cleanup</span>
+      <span><i style="background:var(--test)"></i>Test</span>
+      <span><i style="background:var(--docs)"></i>Docs</span>
+      <span><i style="background:var(--config)"></i>Config</span>
+      <span><i class="ln" style="background:var(--core)"></i>enables</span>
+      <span><i class="ln" style="background:var(--cleanup)"></i>made redundant</span>
+      <span><i class="ln" style="background:var(--test)"></i>verifies</span>
+      <span><i class="ln" style="background:var(--docs)"></i>documents</span>
+      <span><i class="ln" style="background:var(--config)"></i>depends on</span>
+    </div>
+  </div>
+</div>
+
+<div id="viewswitch" role="group" aria-label="View">
+  <button data-view="map">Map</button>
+  <button data-view="list">Tree</button>
+</div>
+
+<div id="list">
+  <nav id="sidebar" aria-label="Changes">
+    <div class="meta" id="lmeta"></div>
+    <div id="items"></div>
+  </nav>
+  <main id="detail" class="sheet"></main>
+</div>
+
+<div id="controls">
+  <button id="zout" title="Zoom out">−</button>
+  <span id="zoomlabel">100%</span>
+  <button id="zin" title="Zoom in">+</button>
+  <button id="fit" class="wide" title="Fit all cards">Fit</button>
+</div>
+<div id="hint">Drag the canvas to pan · scroll or pinch to zoom · click a card or an arrow for details · drag a card to move it</div>
+
+<div id="modal-bg"><div id="modal" class="sheet" role="dialog" aria-modal="true"></div></div>
+
+<script>
+const KIND = {
+  core:    { color: 'var(--core)',    label: 'New behaviour' },
+  cleanup: { color: 'var(--cleanup)', label: 'Cleanup' },
+  test:    { color: 'var(--test)',    label: 'Test' },
+  docs:    { color: 'var(--docs)',    label: 'Docs' },
+  config:  { color: 'var(--config)',  label: 'Config' },
+};
+const EDGE_KIND = {
+  enables:  { color: 'var(--core)',    label: 'Enables' },
+  replaces: { color: 'var(--cleanup)', label: 'Makes redundant' },
+  verifies: { color: 'var(--test)',    label: 'Verified by' },
+  docs:     { color: 'var(--docs)',    label: 'Documented in' },
+  depends:  { color: 'var(--config)',  label: 'Depends on' },
+  reach:    { color: 'var(--muted)',   label: 'Also reaches' },
+};
+
+let CARDS = [], EDGES = [], META = {};
+
+/* ---------- state ---------- */
+const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const codeUrl = at => {
+  const [path, lines = ''] = at.split('#'), diff = META.diffs[path];
+  return diff ? `${META.url}/files#diff-${diff}${lines.replace(/L/g, 'R')}` : META.blob + at;
+};
+const keyLine = ({ gap, text, path, line, key }) => {
+  if (gap) return '<span class="keygap">⋯</span>';
+  const mark = { '+': ' a', '-': ' d' }[text[0]] ?? '';
+  return `<a class="keyline${mark}${key ? '' : ' around'}" href="${esc(`${META.url}/files#diff-${META.diffs[path]}${line}`)}" target="_blank" rel="noopener"><span class="lineno">${line.slice(1)}</span>${esc(text)}</a>`;
+};
+const codeLink = (at, text) => `<a class="codelink" href="${esc(codeUrl(at))}" target="_blank" rel="noopener">${text}</a>`;
+const fmt = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+  .replace(/\[([^\]]+)\]\(([^)#\s]+#L\d+(?:-L\d+)?)\)/g, (_, text, at) => codeLink(at, text));
+const story = t => fmt(t).replace(/\[([^\]]+)\]\(([\w-]+)\)/g, '<button class="cardlink" data-card="$2">$1</button>');
+const codeHtml = t => esc(t).split('\n').map(l => l.startsWith('+') ? `<span class="a">${l}</span>` : l.startsWith('-') ? `<span class="d">${l}</span>` : l).join('\n');
+
+const $ = (s, r = document) => r.querySelector(s);
+const viewport = $('#viewport'), world = $('#world'), svg = $('#edges');
+const view = { x: 0, y: 0, k: 1 };
+const cardEl = {}; let byId = {};
+const NS = 'http://www.w3.org/2000/svg';
+const pillEl = {}, grpEl = {};
+const reachNodes = [];
+const allNodes = () => [...CARDS, ...reachNodes];
+const allLinks = () => [...EDGES, ...reachNodes.map(n => ({ id: `to:${n.id}`, from: n.source, to: n.id, kind: 'reach' }))];
+const STACK_MS = 340, STACK_COLUMNS = 3, FILE_GAP = 14, STACK_PADDING = 18, FILE_STAGGER = .07;
+const smooth = t => t * t * (3 - 2 * t);
+
+/* ---------- build ---------- */
+function build() {
+  // markers
+  const defs = document.createElementNS(NS, 'defs');
+  for (const [k, v] of Object.entries(EDGE_KIND)) {
+    const m = document.createElementNS(NS, 'marker');
+    m.setAttribute('id', 'arrow-' + k); m.setAttribute('viewBox', '0 0 10 10'); m.setAttribute('refX', '9'); m.setAttribute('refY', '5');
+    m.setAttribute('markerWidth', '8'); m.setAttribute('markerHeight', '8'); m.setAttribute('orient', 'auto-start-reverse');
+    m.setAttribute('markerUnits', 'userSpaceOnUse'); m.setAttribute('markerWidth', '14'); m.setAttribute('markerHeight', '14');
+    const p = document.createElementNS(NS, 'path'); p.setAttribute('d', 'M0,0 L10,5 L0,10 z'); p.setAttribute('fill', v.color);
+    m.appendChild(p); defs.appendChild(m);
+  }
+  svg.appendChild(defs);
+
+  for (const e of EDGES) {
+    const g = document.createElementNS(NS, 'g'); g.setAttribute('class', 'grp');
+    const line = document.createElementNS(NS, 'path'); line.setAttribute('class', 'line');
+    line.setAttribute('stroke', EDGE_KIND[e.kind].color); line.setAttribute('marker-end', `url(#arrow-${e.kind})`);
+    const hit = document.createElementNS(NS, 'path'); hit.setAttribute('class', 'hit');
+    g.append(line, hit); svg.appendChild(g);
+    hit.addEventListener('click', () => openEdge(e.id));
+    hit.addEventListener('pointerenter', () => focusSet(e.id, 'edge'));
+    hit.addEventListener('pointerleave', clearFocus);
+    grpEl[e.id] = { g, line, hit };
+
+    const pill = document.createElement('div'); pill.className = 'pill'; pill.textContent = e.label;
+    pill.style.borderColor = EDGE_KIND[e.kind].color; pill.style.color = EDGE_KIND[e.kind].color;
+    pill.addEventListener('click', () => openEdge(e.id));
+    pill.addEventListener('pointerenter', () => focusSet(e.id, 'edge'));
+    pill.addEventListener('pointerleave', clearFocus);
+    world.appendChild(pill); pillEl[e.id] = pill;
+  }
+
+  for (const c of CARDS) {
+    const el = document.createElement('div'); el.className = 'card'; el.dataset.reviewCard = c.id;
+    el.style.setProperty('--accent', KIND[c.kind].color);
+    el.innerHTML = `
+      <div class="top"><span class="tag">${KIND[c.kind].label}</span>
+        <span class="stat"><span class="a">+${c.add}</span><span class="d">−${c.del}</span></span></div>
+      <h3>${esc(c.title)}</h3>
+      <div class="path">${esc(c.paths.length > 1 ? `${c.paths.length} files · ${c.paths[0]} …` : c.paths[0])}</div>
+      <p>${fmt(c.summary)}</p>
+      <ul>${c.bullets.map(b => `<li>${fmt(b)}</li>`).join('')}</ul>
+      <div class="more">Why this changed →</div>`;
+    world.appendChild(el); cardEl[c.id] = el;
+    attachCardDrag(el, c);
+    el.addEventListener('pointerenter', () => focusSet(c.id, 'card'));
+    el.addEventListener('pointerleave', clearFocus);
+  }
+  buildReach();
+}
+const reachFileHtml = f => {
+  const name = fileName(f), preview = f.effect.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  return `<div class="top"><span class="tag">Not changed · affected</span></div>
+    <h3>${esc(name)}</h3>
+    <div class="path">${esc(f.path.slice(0, -name.length))}</div>
+    <p>${fmt(preview)}</p>`;
+};
+function buildReach() {
+  for (const c of CARDS) {
+    const files = (c.reaches ?? []).flatMap(r => r.paths.map(path => ({ path, effect: r.effect })));
+    if (!files.length) continue;
+    const n = { id: `reach:${c.id}`, source: c.id, files, progress: 0, target: 0 };
+    const stacked = files.length > 1;
+    const el = document.createElement('div'); el.className = `card ${stacked ? 'stack' : 'reach-card'}`;
+    el.innerHTML = stacked ? `
+      <div class="top"><span class="tag">Not changed · affected</span><button class="stack-toggle">Show files</button></div>
+      <h3>${files.length} affected files outside this PR</h3>
+      <div class="stack-files">${files.map((f, i) => `<div class="card reach-card reach-file" data-file="${i}">${reachFileHtml(f)}</div>`).join('')}</div>`
+      : reachFileHtml(files[0]);
+    world.appendChild(el); cardEl[n.id] = el; byId[n.id] = n;
+    attachCardDrag(el, n, pressed => {
+      if (!stacked) return openReach(n, 0);
+      const file = pressed.closest('[data-file]');
+      if (file) openReach(n, +file.dataset.file);
+      else if (n.target === 0 || pressed.closest('.stack-toggle')) toggleStack(n);
+    });
+    el.addEventListener('pointerenter', () => focusSet(c.id, 'card'));
+    el.addEventListener('pointerleave', clearFocus);
+    const g = document.createElementNS(NS, 'g'); g.setAttribute('class', 'grp reach');
+    const line = document.createElementNS(NS, 'path'); line.setAttribute('class', 'line');
+    line.setAttribute('stroke', EDGE_KIND.reach.color); line.setAttribute('marker-end', 'url(#arrow-reach)');
+    const hit = document.createElementNS(NS, 'path'); hit.setAttribute('class', 'hit');
+    g.append(line, hit); svg.appendChild(g);
+    grpEl[`to:${n.id}`] = { g, line, hit };
+    reachNodes.push(n);
+  }
+}
+function measureStack(n) {
+  const el = cardEl[n.id], files = [...el.querySelectorAll('.reach-file')];
+  const fileH = Math.max(...files.map(f => f.offsetHeight)), fileW = files[0].offsetWidth;
+  const columns = Math.min(files.length, STACK_COLUMNS), rows = Math.ceil(files.length / columns);
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const openW = columns * fileW + (columns - 1) * FILE_GAP + STACK_PADDING * 2;
+  const top = h - 8, openH = top + rows * fileH + (rows - 1) * FILE_GAP + STACK_PADDING;
+  n.size = { w, h, openW, openH };
+  n.spots = files.map((f, i) => {
+    const left = STACK_PADDING + (i % columns) * (fileW + FILE_GAP) - openW / 2, y = top + Math.floor(i / columns) * (fileH + FILE_GAP);
+    f.style.left = left + 'px'; f.style.top = y + 'px'; f.style.height = fileH + 'px';
+    return { f, dx: -left - fileW / 2, dy: h - 24 - y };
+  });
+}
+function drawStack(n) {
+  const el = cardEl[n.id], { w, h, openW, openH } = n.size, e = smooth(n.progress);
+  const width = w + (openW - w) * e;
+  n.x -= (width - (n.width ?? w)) / 2; n.width = width;
+  el.style.left = n.x + 'px'; el.style.width = width + 'px'; el.style.height = h + (openH - h) * e + 'px';
+  const reveal = 1 + FILE_STAGGER * (n.spots.length - 1);
+  n.spots.forEach(({ f, dx, dy }, i) => {
+    const t = smooth(Math.min(1, Math.max(0, n.progress * reveal - i * FILE_STAGGER))), left = 1 - t;
+    f.style.transform = `translate(${dx * left}px, ${dy * left}px) scale(${.88 + .12 * t})`;
+    f.style.opacity = Math.min(1, t * 2);
+  });
+  layoutEdges();
+}
+function toggleStack(n) {
+  const el = cardEl[n.id];
+  if (!n.size) measureStack(n);
+  n.target = 1 - n.target;
+  el.querySelector('.stack-toggle').textContent = n.target ? 'Collapse' : 'Show files';
+  el.classList.add('open');
+  el.querySelector('.stack-files').style.visibility = 'visible';
+  cancelAnimationFrame(n.frame);
+  const from = n.progress, change = n.target - from, still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const duration = still ? 0 : STACK_MS * Math.abs(change);
+  let start = null;
+  const step = now => {
+    start ??= now;
+    const t = duration ? Math.min(1, (now - start) / duration) : 1;
+    n.progress = from + change * t;
+    drawStack(n);
+    if (t < 1) { n.frame = requestAnimationFrame(step); return; }
+    if (!n.target) { el.classList.remove('open'); el.querySelector('.stack-files').style.visibility = ''; }
+  };
+  n.frame = requestAnimationFrame(step);
+}
+function rectOf(id) {
+  const el = cardEl[id], c = byId[id];
+  return { l: c.x, t: c.y, r: c.x + el.offsetWidth, b: c.y + el.offsetHeight, w: el.offsetWidth, h: el.offsetHeight };
+}
+function chooseSides(a, b) {
+  const hgap = Math.max(b.l - a.r, a.l - b.r), vgap = Math.max(b.t - a.b, a.t - b.b);
+  if (vgap >= hgap && vgap > 0) return b.t > a.t ? ['b', 't'] : ['t', 'b'];
+  return b.l > a.l ? ['r', 'l'] : ['l', 'r'];
+}
+const cubicAt = (s, t) => {
+  const u = 1 - t, at = n => u*u*u*s[0][n] + 3*u*u*t*s[1][n] + 3*u*t*t*s[2][n] + t*t*t*s[3][n];
+  return [at(0), at(1)];
+};
+function placePills(curves) {
+  const placed = [], clear = 8;
+  const free = (x, y, w, h) => placed.every(p => Math.abs(x - p.x) > (w + p.w) / 2 + clear || Math.abs(y - p.y) > (h + p.h) / 2 + clear);
+  for (const { id, segs } of curves) {
+    const pill = pillEl[id], w = pill.offsetWidth, h = pill.offsetHeight;
+    let spot = null;
+    for (const t of [0.5, 0.35, 0.65, 0.2, 0.8]) {
+      for (const s of segs) {
+        const [x, y] = cubicAt(s, t);
+        if (free(x, y, w, h)) { spot = [x, y]; break; }
+      }
+      if (spot) break;
+    }
+    spot ||= cubicAt(segs[0], 0.5);
+    placed.push({ x: spot[0], y: spot[1], w, h });
+    pill.style.left = spot[0] + 'px'; pill.style.top = spot[1] + 'px';
+  }
+}
+function layoutEdges() {
+  const info = allLinks().map(e => {
+    const A = rectOf(e.from), B = rectOf(e.to), down = B.t >= A.b + 20;
+    const lanes = down ? laneOf[e.id] || [] : [];
+    return { e, A, B, lanes, sides: down ? ['b', 't'] : chooseSides(A, B) };
+  });
+  // spread attachments along each side, ordered by where the arrow heads next
+  const slots = {};
+  const add = (card, side, key, other) => ((slots[card + side] ||= []).push({ key, other }));
+  const across = (R, side) => (side === 'l' || side === 'r' ? (R.t + R.b) / 2 : (R.l + R.r) / 2);
+  for (const { e, A, B, lanes, sides: [sa, sb] } of info) {
+    add(e.from, sa, e.id + 'a', lanes[0]?.x ?? across(B, sa));
+    add(e.to, sb, e.id + 'b', lanes.at(-1)?.x ?? across(A, sb));
+  }
+  const frac = {};
+  for (const list of Object.values(slots)) {
+    list.sort((p, q) => p.other - q.other);
+    list.forEach((s, i) => (frac[s.key] = (i + 1) / (list.length + 1)));
+  }
+  const pt = (R, side, f) =>
+    side === 'l' ? [R.l, R.t + R.h * f] : side === 'r' ? [R.r, R.t + R.h * f]
+    : side === 't' ? [R.l + R.w * f, R.t] : [R.l + R.w * f, R.b];
+  const dir = { l: [-1, 0], r: [1, 0], t: [0, -1], b: [0, 1] };
+  const curves = [];
+  for (const { e, A, B, lanes, sides: [sa, sb] } of info) {
+    const p0 = pt(A, sa, frac[e.id + 'a']), p3 = pt(B, sb, frac[e.id + 'b']);
+    // gaps between rows are curves; lanes through a row are straight
+    const stops = [[p0, dir[sa]]];
+    for (const l of lanes) stops.push([[l.x, l.top], [0, -1]], [[l.x, l.bottom], [0, 1]]);
+    stops.push([p3, dir[sb]]);
+    let d = `M${p0}`;
+    const segs = [];
+    for (let i = 0; i + 1 < stops.length; i += 2) {
+      const [a, da] = stops[i], [b, db] = stops[i + 1];
+      const off = Math.max(50, Math.hypot(b[0] - a[0], b[1] - a[1]) * 0.45);
+      const c1 = [a[0] + da[0] * off, a[1] + da[1] * off], c2 = [b[0] + db[0] * off, b[1] + db[1] * off];
+      segs.push([a, c1, c2, b]);
+      d += ` C${c1} ${c2} ${b}`;
+      if (i + 2 < stops.length) d += ` L${stops[i + 2][0]}`;
+    }
+    const { line, hit } = grpEl[e.id];
+    line.setAttribute('d', d); hit.setAttribute('d', d);
+    if (e.kind !== 'reach') curves.push({ id: e.id, segs });
+  }
+  placePills(curves);
+}
+
+/* ---------- highlight ---------- */
+function focusSet(id, type) {
+  const cards = new Set(), edges = new Set();
+  if (type === 'card') {
+    cards.add(id);
+    EDGES.forEach(e => { if (e.from === id || e.to === id) { edges.add(e.id); cards.add(e.from); cards.add(e.to); } });
+  } else if (type === 'link') {
+    cards.add(id);
+  } else {
+    const e = EDGES.find(x => x.id === id); edges.add(id); cards.add(e.from); cards.add(e.to);
+  }
+  for (const c of CARDS) cardEl[c.id].classList.toggle('dim', !cards.has(c.id));
+  for (const n of reachNodes) {
+    const near = type === 'card' && n.source === id;
+    cardEl[n.id].classList.toggle('dim', !near);
+    grpEl[`to:${n.id}`].g.classList.toggle('dim', !near);
+    grpEl[`to:${n.id}`].g.classList.toggle('on', near);
+  }
+  for (const e of EDGES) {
+    grpEl[e.id].g.classList.toggle('dim', !edges.has(e.id));
+    grpEl[e.id].g.classList.toggle('on', edges.has(e.id));
+    pillEl[e.id].classList.toggle('dim', !edges.has(e.id));
+  }
+}
+function clearFocus() {
+  for (const c of CARDS) cardEl[c.id].classList.remove('dim');
+  for (const n of reachNodes) { cardEl[n.id].classList.remove('dim'); grpEl[`to:${n.id}`].g.classList.remove('dim', 'on'); }
+  for (const e of EDGES) { grpEl[e.id].g.classList.remove('dim', 'on'); pillEl[e.id].classList.remove('dim'); }
+}
+
+/* ---------- pan / zoom ---------- */
+function apply() {
+  world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
+  viewport.style.backgroundSize = `${28 * view.k}px ${28 * view.k}px`;
+  viewport.style.backgroundPosition = `${view.x}px ${view.y}px`;
+  $('#zoomlabel').textContent = Math.round(view.k * 100) + '%';
+}
+function zoomAt(cx, cy, factor) {
+  const k = Math.min(2.5, Math.max(0.15, view.k * factor)), f = k / view.k;
+  view.x = cx - (cx - view.x) * f; view.y = cy - (cy - view.y) * f; view.k = k; apply();
+}
+// the panel keeps a band to itself: the left side when open on a wide window, else the top
+function clearArea() {
+  const panel = $('#panel'), pad = 40, sideways = innerWidth >= 900 && !panel.classList.contains('collapsed');
+  const left = sideways ? panel.offsetWidth + 32 : pad, top = sideways ? pad : panel.offsetHeight + 28;
+  return { left, top, right: innerWidth - pad, bottom: innerHeight - 56 };
+}
+const nudge = (low, high, min, max) => (low < min || high - low > max - min ? min - low : high > max ? max - high : 0);
+function panTo(l, t, r, b) {
+  const area = clearArea(), { x, y, k } = view;
+  const dx = nudge(x + l * k, x + r * k, area.left, area.right), dy = nudge(y + t * k, y + b * k, area.top, area.bottom);
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  touched = true;
+  let start = null;
+  const step = now => {
+    start ??= now;
+    const t = still ? 1 : Math.min(1, (now - start) / STACK_MS), e = smooth(t);
+    view.x = x + dx * e; view.y = y + dy * e; apply();
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+function showGrid(n) {
+  if (n.files.length === 1 || listView) return openReach(n, 0);
+  hide();
+  if (!n.size) measureStack(n);
+  if (!n.target) toggleStack(n);
+  const { openW, openH, w } = n.size, middle = n.x + (n.width ?? w) / 2;
+  panTo(middle - openW / 2, n.y, middle + openW / 2, n.y + openH);
+}
+function fit() {
+  let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+  for (const c of allNodes()) { const R = rectOf(c.id); l = Math.min(l, R.l); t = Math.min(t, R.t); r = Math.max(r, R.r); b = Math.max(b, R.b); }
+  for (const lane of Object.values(laneOf).flat()) { l = Math.min(l, lane.x); r = Math.max(r, lane.x); }
+  const { left, top, right, bottom } = clearArea(), W = right - left, H = bottom - top;
+  const k = Math.max(0.15, Math.min(1, W / (r - l), H / (b - t)));
+  view.k = k;
+  view.x = left + (W - (r - l) * k) / 2 - l * k;
+  view.y = top + (H - (b - t) * k) / 2 - t * k;
+  apply();
+}
+viewport.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  if (ev.ctrlKey || ev.metaKey) zoomAt(ev.clientX, ev.clientY, Math.exp(-ev.deltaY * 0.01));
+  else { view.x -= ev.deltaX; view.y -= ev.deltaY; apply(); }
+}, { passive: false });
+
+const pointers = new Map(); let pinch = null, panning = null;
+viewport.addEventListener('pointerdown', ev => {
+  if (ev.target.closest('.card, .pill, .hit')) return;
+  viewport.setPointerCapture(ev.pointerId); pointers.set(ev.pointerId, [ev.clientX, ev.clientY]);
+  if (pointers.size === 1) { panning = { x: ev.clientX, y: ev.clientY, vx: view.x, vy: view.y }; viewport.classList.add('panning'); }
+  else if (pointers.size === 2) { panning = null; const [a, b] = [...pointers.values()]; pinch = { d: Math.hypot(a[0]-b[0], a[1]-b[1]) }; }
+});
+viewport.addEventListener('pointermove', ev => {
+  if (!pointers.has(ev.pointerId)) return;
+  pointers.set(ev.pointerId, [ev.clientX, ev.clientY]);
+  if (pinch && pointers.size === 2) {
+    const [a, b] = [...pointers.values()], d = Math.hypot(a[0]-b[0], a[1]-b[1]);
+    zoomAt((a[0]+b[0])/2, (a[1]+b[1])/2, d / pinch.d); pinch.d = d;
+  } else if (panning) {
+    view.x = panning.vx + ev.clientX - panning.x; view.y = panning.vy + ev.clientY - panning.y; apply();
+  }
+});
+const endPtr = ev => { pointers.delete(ev.pointerId); if (pointers.size < 2) pinch = null; if (!pointers.size) { panning = null; viewport.classList.remove('panning'); } };
+viewport.addEventListener('pointerup', endPtr); viewport.addEventListener('pointercancel', endPtr);
+
+$('#zin').onclick = () => zoomAt(innerWidth / 2, innerHeight / 2, 1.25);
+$('#zout').onclick = () => zoomAt(innerWidth / 2, innerHeight / 2, 0.8);
+$('#fit').onclick = fit;
+$('#ptoggle').onclick = () => { const p = $('#panel'); p.classList.toggle('collapsed'); $('#ptoggle').textContent = p.classList.contains('collapsed') ? 'show' : 'hide'; };
+
+/* ---------- card drag ---------- */
+function attachCardDrag(el, c, open = () => openCard(c.id)) {
+  let s = null;
+  el.addEventListener('pointerdown', ev => {
+    if (ev.button !== 0 || ev.target.closest('.stack-toggle')) return;
+    el.setPointerCapture(ev.pointerId);
+    s = { px: ev.clientX, py: ev.clientY, x: c.x, y: c.y, moved: false };
+  });
+  el.addEventListener('pointermove', ev => {
+    if (!s) return;
+    const dx = ev.clientX - s.px, dy = ev.clientY - s.py;
+    if (!s.moved && Math.hypot(dx, dy) < 5) return;
+    s.moved = true; el.classList.add('dragging');
+    c.x = s.x + dx / view.k; c.y = s.y + dy / view.k;
+    el.style.left = c.x + 'px'; el.style.top = c.y + 'px'; layoutEdges();
+  });
+  let dragged = false, pressed = el;
+  const end = () => { if (s) dragged = s.moved; s = null; el.classList.remove('dragging'); };
+  el.addEventListener('pointerdown', ev => { dragged = false; pressed = ev.target; }, true);
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+  el.addEventListener('click', () => { if (!dragged) open(pressed); dragged = false; });
+}
+
+/* ---------- modal ---------- */
+const modalBg = $('#modal-bg'), modal = $('#modal'), detail = $('#detail');
+const OVERVIEW = 'overview';
+let listView = false, selected = OVERVIEW, sequence = [];
+const metaHtml = () => `<a class="codelink" href="${esc(META.url)}" target="_blank" rel="noopener">PR #${META.number}</a> \u00b7 ${META.state || ''} \u00b7 ${META.files} files \u00b7 +${META.additions} \u2212${META.deletions} \u00b7 <span class="progress">${reviewProgress()}</span>`;
+const section = (title, text) => text ? `<h4>${title}</h4><p>${fmt(text)}</p>` : '';
+/* A mark stores the card's fingerprint, so a later push to that card shows as changed. */
+const reviewState = c => (!(c.id in reviewed) ? 'none' : reviewed[c.id] === c.fingerprint ? 'done' : 'changed');
+const reviewProgress = () => `${CARDS.filter(c => reviewState(c) === 'done').length} of ${CARDS.length} reviewed`;
+const REVIEW_LABEL = { none: 'Mark as reviewed', done: '✓ Reviewed', changed: 'Changed since you reviewed · mark again' };
+const reviewButton = c => `<button class="review" data-review-toggle="${c.id}" data-state="${reviewState(c)}" aria-pressed="${reviewState(c) === 'done'}">${REVIEW_LABEL[reviewState(c)]}</button>`;
+function loadReviewed(id) {
+  reviewKey = `mergeatlas-reviewed:${id}`;
+  try { reviewed = JSON.parse(localStorage.getItem(reviewKey)) ?? {}; } catch { reviewed = {}; }
+}
+function toggleReviewed(id) {
+  const c = byId[id];
+  if (reviewState(c) === 'done') delete reviewed[id]; else reviewed[id] = c.fingerprint;
+  try { localStorage.setItem(reviewKey, JSON.stringify(reviewed)); } catch {}
+  showReviewed();
+}
+function showReviewed() {
+  for (const el of document.querySelectorAll('.item[data-card], [data-review-card]')) {
+    const c = byId[el.dataset.card ?? el.dataset.reviewCard];
+    if (c) el.dataset.review = reviewState(c);
+  }
+  for (const el of document.querySelectorAll('.progress')) el.textContent = reviewProgress();
+  for (const el of document.querySelectorAll('[data-review-toggle]')) el.outerHTML = reviewButton(byId[el.dataset.reviewToggle]);
+}
+function snippetsHtml(snippets) {
+  if (!snippets.length) return '';
+  const steps = snippets.length > 1 ? `<div class="steps">
+    <button data-step="-1" aria-label="Previous key lines" disabled>←</button>
+    <span class="step-at">1 of ${snippets.length}</span>
+    <button data-step="1" aria-label="Next key lines">→</button>
+  </div>` : '';
+  return `<div class="snippets">
+    <div class="snippets-head"><h4>Key lines</h4>${steps}</div>
+    ${snippets.map((s, i) => `<div class="snippet"${i ? ' hidden' : ''}><p>${fmt(s.why)}</p><pre>${s.lines.map(keyLine).join('')}</pre></div>`).join('')}
+  </div>`;
+}
+function stepSnippet(button) {
+  const box = button.closest('.snippets'), all = [...box.querySelectorAll('.snippet')];
+  const at = all.findIndex(s => !s.hidden) + Number(button.dataset.step);
+  all.forEach((s, i) => { s.hidden = i !== at; });
+  box.querySelector('.step-at').textContent = `${at + 1} of ${all.length}`;
+  box.querySelector('[data-step="-1"]').disabled = at === 0;
+  box.querySelector('[data-step="1"]').disabled = at === all.length - 1;
+}
+function reachHtml(c) {
+  const reaches = c.reaches ?? [], unaffected = c.unaffected ?? [];
+  if (!reaches.length && !unaffected.length) return '';
+  const fileLink = path => {
+    const name = path.split('/').pop();
+    return codeLink(path, `${esc(name)}<span class="reach-dir">${esc(path.slice(0, -name.length))}</span>`);
+  };
+  const item = (paths, text) => `<div class="reach-item"><div class="reach-paths">${paths.map(fileLink).join('')}</div><div class="reach-text"><p>${fmt(text)}</p></div></div>`;
+  const affected = new Set(reaches.flatMap(r => r.paths)).size;
+  const skipped = unaffected.reduce((sum, u) => sum + u.paths.length, 0);
+  return `
+    <h4>Also reaches</h4>
+    <p class="reach-count">Affected: ${affected} of ${c.checked} ${c.checked === 1 ? 'file' : 'files'} outside this PR</p>
+    ${reaches.map(r => item(r.paths, r.effect)).join('')}
+    ${skipped ? `<details class="reach"><summary>${skipped} unaffected</summary>${unaffected.map(u => item(u.paths, u.reason)).join('')}</details>` : ''}
+    <p class="reach-note">Found by name, one step out from the changed code. Dependency injection, reflection and configuration are not searched.</p>`;
+}
+function cardHtml(c) {
+  const out = EDGES.filter(e => e.from === c.id), inn = EDGES.filter(e => e.to === c.id);
+  const link = (e, dirLabel, other) => `<button data-edge="${e.id}">${dirLabel} ${esc(byId[other].title)} · ${esc(e.label)}</button>`;
+  const grid = reachNodes.find(n => n.source === c.id);
+  const gridLink = grid ? `<button data-grid="${grid.id}">→ ${grid.files.length > 1 ? `${grid.files.length} affected files` : esc(fileName(grid.files[0]))} · outside this PR</button>` : '';
+  return `
+    <div class="tag" style="color:${KIND[c.kind].color}">${KIND[c.kind].label} · <span class="stat"><span class="a">+${c.add}</span><span class="d">−${c.del}</span></span></div>
+    <h2>${esc(c.title)}</h2>
+    <div class="path">${c.paths.map(p => codeLink(p, esc(p))).join('<br>')}</div>
+    ${reviewButton(c)}
+    ${section('What it is', c.summary)}
+    ${section('The problem', c.problem)}
+    ${section('What changes', c.change)}
+    ${section('Why this fixes it', c.fix)}
+    ${snippetsHtml(c.snippets ?? [])}
+    ${reachHtml(c)}
+    ${out.length || grid ? `<h4>Affects</h4><div class="links">${out.map(e => link(e, '→', e.to)).join('')}${gridLink}</div>` : ''}
+    ${inn.length ? `<h4>Affected by</h4><div class="links">${inn.map(e => link(e, '←', e.from)).join('')}</div>` : ''}`;
+}
+function edgeHtml(e) {
+  const K = EDGE_KIND[e.kind];
+  return `
+    <div class="tag" style="color:${K.color}">${K.label}</div>
+    <h2>${esc(e.label)}</h2>
+    <div class="route"><button data-card="${e.from}">${esc(byId[e.from].title)}</button><span class="arr">→</span><button data-card="${e.to}">${esc(byId[e.to].title)}</button></div>
+    ${section('How they connect', e.connection)}
+    ${codeLink(e.connection_at, esc(e.connection_at)).replace('class="codelink"', 'class="codelink at"')}
+    <pre>${codeHtml(e.connection_code)}</pre>
+    ${section('How the change flows', e.flow)}
+    ${section('What the target does', e.effect)}`;
+}
+const storyHtml = () => `
+  <h2 class="beat">Background</h2>
+  <p>${fmt(META.background)}</p>
+  <h2 class="beat">The issue</h2>
+  <div class="issues">${META.issues.map(i => `<a href="${esc(i.url)}" target="_blank" rel="noopener">#${i.number} ${esc(i.title)}</a>`).join('')}</div>
+  <p>${fmt(META.problem)}</p>
+  <h2 class="beat">What this PR does</h2>
+  <p>${story(META.solution)}</p>`;
+
+function present(html, accent, item) {
+  const target = listView ? detail : modal;
+  target.style.setProperty('--accent', accent);
+  target.innerHTML = listView ? html : `<button class="close" aria-label="Close">×</button>${html}`;
+  target.scrollTop = 0;
+  if (!listView) return modalBg.classList.add('open');
+  if (!item) return;
+  selected = item;
+  for (const b of $('#items').querySelectorAll('.item')) {
+    b.setAttribute('aria-current', b.dataset.item === item);
+    if (b.dataset.item === item) b.scrollIntoView({ block: 'nearest' });
+  }
+}
+const openCard = id => present(cardHtml(byId[id]), KIND[byId[id].kind].color, id);
+const openEdge = id => { const e = EDGES.find(x => x.id === id); present(edgeHtml(e), EDGE_KIND[e.kind].color); };
+const fileName = f => f.path.split('/').pop();
+function openReach(n, i) {
+  const f = n.files[i], name = fileName(f), last = n.files.length - 1;
+  if (listView) setBranch(n, true);
+  const pageTo = (to, step) => {
+    const other = n.files[to];
+    return `<button data-reach="${n.id}" data-file-to="${to}" data-file-step="${step}" ${other ? `aria-label="${step < 0 ? 'Previous' : 'Next'} file: ${esc(fileName(other))}"` : 'disabled'}>
+      ${other ? `${step < 0 ? '← ' : ''}<span>${esc(fileName(other))}</span>${step > 0 ? ' →' : ''}` : ''}</button>`;
+  };
+  const pager = last ? `<div class="file-pager">${pageTo(i - 1, -1)}<span class="step-at">File ${i + 1} of ${n.files.length}</span>${pageTo(i + 1, 1)}</div>` : '';
+  present(`${pager}<div class="tag" style="color:var(--muted)">Not changed · affected</div>
+    <h2>${esc(name)}</h2>
+    <div class="path">${codeLink(f.path, esc(f.path))}</div>
+    ${section('What changes for it', f.effect)}
+    <h4>Affected by</h4><div class="links"><button data-card="${n.source}">← ${esc(byId[n.source].title)}</button></div>`, 'var(--muted)', `${n.id}#${i}`);
+}
+const openOverview = () => present(`<h2>${esc(META.title)}</h2><div class="path">${metaHtml()}</div>${storyHtml()}`, 'var(--core)', OVERVIEW);
+function hide() { modalBg.classList.remove('open'); }
+function follow(ev) {
+  const b = ev.target.closest('[data-edge]'); if (b) return openEdge(b.dataset.edge);
+  const grid = ev.target.closest('[data-grid]'); if (grid) return showGrid(byId[grid.dataset.grid]);
+  const file = ev.target.closest('[data-file-to]'); if (file) return openReach(byId[file.dataset.reach], +file.dataset.fileTo);
+  const c = ev.target.closest('[data-card]'); if (c) openCard(c.dataset.card);
+}
+modalBg.addEventListener('click', ev => {
+  if (ev.target === modalBg || ev.target.closest('.close')) return hide();
+  follow(ev);
+});
+detail.addEventListener('click', follow);
+addEventListener('keydown', ev => { if (ev.key === 'Escape') hide(); });
+addEventListener('click', ev => {
+  const step = ev.target.closest('[data-step]'); if (step) stepSnippet(step);
+  const review = ev.target.closest('[data-review-toggle]'); if (review) toggleReviewed(review.dataset.reviewToggle);
+});
+const solution = $('#pstory'), linkIn = ev => ev.target.closest('[data-card]');
+solution.addEventListener('pointerover', ev => { const l = linkIn(ev); if (l) focusSet(l.dataset.card, 'link'); });
+solution.addEventListener('pointerout', ev => { if (linkIn(ev)) clearFocus(); });
+solution.addEventListener('click', ev => { const l = linkIn(ev); if (l) openCard(l.dataset.card); });
+
+/* ---------- layout ---------- */
+const PER_ROW = 5, CARD_GAP = 120, LANE_GAP = 46, MIN_ROW_GAP = 170, ROW_GAP_PER_ARROW = 30, SWEEPS = 12;
+let laneOf = {};
+
+function autoLayout() {
+  const nodes = allNodes(), links = allLinks();
+  const rank = Object.fromEntries(nodes.map(c => [c.id, 0]));
+  for (let i = 0; i < nodes.length; i++)
+    for (const e of links) if (rank[e.to] <= rank[e.from] && rank[e.from] < nodes.length) rank[e.to] = rank[e.from] + 1;
+  const rows = [], rowOf = {};
+  for (let r = 0; r <= Math.max(0, ...Object.values(rank)); r++) {
+    const ids = nodes.filter(c => rank[c.id] === r);
+    for (let i = 0; i < ids.length; i += PER_ROW) {
+      const row = ids.slice(i, i + PER_ROW).map(c => ({ card: c, w: cardEl[c.id].offsetWidth, up: [], down: [] }));
+      row.forEach(n => (rowOf[n.card.id] = rows.length));
+      rows.push(row);
+    }
+  }
+  const nodeOf = id => rows[rowOf[id]].find(n => n.card.id === id);
+  const join = (a, b) => { a.down.push(b); b.up.push(a); };
+
+  // an arrow that skips rows takes a lane through each one, as a card of no width
+  const lanes = {};
+  for (const e of links) {
+    if (rowOf[e.to] <= rowOf[e.from]) continue;
+    let prev = nodeOf(e.from);
+    lanes[e.id] = [];
+    for (let r = rowOf[e.from] + 1; r < rowOf[e.to]; r++) {
+      const lane = { w: 0, up: [], down: [] };
+      rows[r].push(lane); lanes[e.id].push(lane); join(prev, lane); prev = lane;
+    }
+    join(prev, nodeOf(e.to));
+  }
+
+  const number = row => row.forEach((n, i) => (n.pos = i));
+  rows.forEach(number);
+  const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+  const order = (row, key) => {
+    const score = new Map(row.map(n => [n, n[key].length ? mean(n[key].map(m => m.pos)) : n.pos]));
+    row.sort((a, b) => score.get(a) - score.get(b));
+    number(row);
+  };
+  for (let i = 0; i < SWEEPS; i++) {
+    const pass = i % 2 ? rows.slice().reverse() : rows;
+    pass.forEach(row => order(row, i % 2 ? 'down' : 'up'));
+  }
+
+  const space = (a, b) => (a.w + b.w) / 2 + (a.card && b.card ? CARD_GAP : LANE_GAP);
+  // left-packed and right-packed placements around the wanted spots, averaged, keep every gap
+  const place = (row, want) => {
+    const left = [], right = [];
+    row.forEach((n, i) => (left[i] = i ? Math.max(want[i], left[i - 1] + space(row[i - 1], n)) : want[i]));
+    for (let i = row.length - 1; i >= 0; i--) right[i] = i < row.length - 1 ? Math.min(want[i], right[i + 1] - space(row[i], row[i + 1])) : want[i];
+    row.forEach((n, i) => (n.x = (left[i] + right[i]) / 2));
+  };
+  for (const row of rows) { let x = 0; row.forEach((n, i) => { x += i ? space(row[i - 1], n) : 0; n.x = x; }); const c = mean(row.map(n => n.x)); row.forEach(n => (n.x -= c)); }
+  for (let i = 0; i < SWEEPS; i++) {
+    const pass = i % 2 ? rows.slice().reverse() : rows, key = i % 2 ? 'down' : 'up';
+    for (const row of pass) place(row, row.map(n => (n[key].length ? mean(n[key].map(m => m.x)) : n.x)));
+  }
+
+  let y = 0;
+  rows.forEach(row => {
+    const h = Math.max(0, ...row.filter(n => n.card).map(n => cardEl[n.card.id].offsetHeight));
+    row.forEach(n => {
+      if (n.card) { n.card.x = n.x - n.w / 2; n.card.y = y; cardEl[n.card.id].style.left = n.card.x + 'px'; cardEl[n.card.id].style.top = y + 'px'; }
+      else { n.top = y; n.bottom = y + h; }
+    });
+    y += h + Math.max(MIN_ROW_GAP, 60 + ROW_GAP_PER_ARROW * row.reduce((s, n) => s + n.down.length, 0));
+  });
+  laneOf = lanes;
+  sequence = rows.flat().filter(n => n.card && !n.card.source).map(n => n.card);
+}
+
+/* ---------- list view ---------- */
+function buildList() {
+  const items = $('#items');
+  $('#lmeta').innerHTML = metaHtml();
+  const fileRow = (n, f, i) => {
+    const name = fileName(f);
+    return `<button class="item file-item" data-item="${n.id}#${i}" style="--accent:var(--muted)">
+      <strong>${esc(name)}</strong><span class="path">${esc(f.path.slice(0, -name.length))}</span></button>`;
+  };
+  const cardRow = c => {
+    const n = reachNodes.find(r => r.source === c.id), count = n?.files.length;
+    return `<button class="item" data-card="${c.id}" data-item="${c.id}" style="--accent:${KIND[c.kind].color}">
+        <strong>${esc(c.title)}</strong>
+        <span class="sub"><span class="tag">${KIND[c.kind].label}</span>
+          <span class="stat"><span class="a">+${c.add}</span><span class="d">−${c.del}</span></span></span>
+      </button>
+      ${n ? `<div class="tree-branch">
+        <button class="branch" data-branch="${n.id}" aria-expanded="true"><span class="chevron" aria-hidden="true">▾</span>${count} affected file${count > 1 ? 's' : ''} outside this PR</button>
+        <div class="tree-children" data-children="${n.id}"><div>${n.files.map((f, i) => fileRow(n, f, i)).join('')}</div></div>
+      </div>` : ''}`;
+  };
+  items.innerHTML = `<button class="item" data-card="${OVERVIEW}" data-item="${OVERVIEW}" style="--accent:var(--muted)"><strong>Overview</strong></button>` + sequence.map(cardRow).join('');
+  items.addEventListener('click', ev => {
+    const branch = ev.target.closest('[data-branch]');
+    if (branch) return setBranch(byId[branch.dataset.branch], branch.getAttribute('aria-expanded') !== 'true');
+    const b = ev.target.closest('[data-item]'); if (b) openItem(b.dataset.item);
+  });
+}
+function setBranch(n, open) {
+  $(`[data-branch="${n.id}"]`).setAttribute('aria-expanded', open);
+  $(`[data-children="${n.id}"]`).inert = !open;
+  if (!open && selected.startsWith(`${n.id}#`)) openItem(n.source);
+}
+function openItem(id) {
+  if (id === OVERVIEW) return openOverview();
+  const [node, file] = id.split('#');
+  return file ? openReach(byId[node], +file) : openCard(id);
+}
+function setView(list) {
+  listView = list; hide();
+  document.body.classList.toggle('list', list);
+  for (const b of document.querySelectorAll('#viewswitch button')) b.setAttribute('aria-pressed', (b.dataset.view === 'list') === list);
+  const url = new URL(location);
+  if (list) url.searchParams.set('view', 'list'); else url.searchParams.delete('view');
+  history.replaceState(null, '', url);
+  if (list) return openItem(selected);
+  layoutEdges(); if (!touched) fit();
+}
+const MOVE_KEYS = { ArrowUp: -1, k: -1, ArrowDown: 1, j: 1 }, FILE_KEYS = { ArrowLeft: -1, h: -1, ArrowRight: 1, l: 1 }, SCROLL_STEP = 80;
+addEventListener('keydown', ev => {
+  const step = MOVE_KEYS[ev.key], fileStep = FILE_KEYS[ev.key];
+  if (!listView && fileStep && modalBg.classList.contains('open')) modal.querySelector(`[data-file-step="${fileStep}"]:not(:disabled)`)?.click();
+  if (!listView || !(step || fileStep) || ev.altKey || ev.metaKey || ev.shiftKey) return;
+  ev.preventDefault();
+  if (fileStep) {
+    const [node, file] = selected.split('#'), n = file ? byId[node] : reachNodes.find(r => r.source === selected);
+    return n && !ev.ctrlKey ? setBranch(n, fileStep > 0) : undefined;
+  }
+  if (ev.ctrlKey) return detail.scrollBy(0, step * SCROLL_STEP);
+  const items = [...$('#items').querySelectorAll('.item')].filter(b => !b.closest('[inert]'));
+  const next = items[items.findIndex(b => b.dataset.item === selected) + step];
+  if (next) openItem(next.dataset.item);
+});
+$('#viewswitch').addEventListener('click', ev => { const b = ev.target.closest('[data-view]'); if (b) setView(b.dataset.view === 'list'); });
+
+let reviewed = {}, reviewKey;
+
+/* ---------- boot ---------- */
+async function boot() {
+  const id = new URLSearchParams(location.search).get('map');
+  let data;
+  try {
+    const res = await fetch(`data/${encodeURIComponent(id)}.json`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(res.status);
+    data = await res.json();
+  } catch (err) {
+    document.body.insertAdjacentHTML('beforeend', `<div style="position:fixed;inset:0;display:grid;place-items:center;text-align:center;padding:24px"><div><h2>No map found</h2><p>Ask Claude to map a PR, then open the link it gives you.</p></div></div>`);
+    return;
+  }
+  META = data.pr; CARDS = data.cards; EDGES = data.edges; byId = Object.fromEntries(CARDS.map(c => [c.id, c]));
+  loadReviewed(id);
+  document.title = `PR #${META.number} · MergeAtlas`;
+  $('#panel .brand img').src = $('link[rel=icon]').href;
+  $('#ptitle').textContent = META.title;
+  $('#pmeta').innerHTML = metaHtml();
+  $('#pstory').innerHTML = storyHtml();
+  build();
+  if (innerWidth < 900) $('#ptoggle').click();
+  await (document.fonts?.ready ?? Promise.resolve());
+  autoLayout(); layoutEdges(); fit(); buildList(); showReviewed();
+  setView(new URLSearchParams(location.search).get('view') === 'list');
+  addEventListener('resize', () => { if (listView) return; layoutEdges(); if (!touched) fit(); });
+}
+let touched = false;
+for (const t of ['wheel', 'pointerdown']) viewport.addEventListener(t, () => { touched = true; }, { capture: true });
+boot();
+</script>
+</body>
+</html>
