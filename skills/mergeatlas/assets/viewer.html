@@ -92,8 +92,7 @@
   #panel .body p { margin: 0; }
   .issues a { display: block; margin-bottom: 4px; color: var(--core); font-weight: 600; text-decoration: none; }
   .issues a:hover { text-decoration: underline; }
-  .cardlink { font: inherit; color: var(--core); background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
-    text-decoration: underline dotted; text-underline-offset: 2px; }
+  .cardlink { color: var(--core); text-decoration: underline dotted; text-underline-offset: 2px; }
   .cardlink:hover { text-decoration-style: solid; }
   .codelink { color: var(--core); }
   .sheet .at { display: block; margin-top: 8px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
@@ -296,7 +295,8 @@ const keyLine = ({ gap, text, path, line, key }) => {
 const codeLink = (at, text) => `<a class="codelink" href="${esc(codeUrl(at))}" target="_blank" rel="noopener">${text}</a>`;
 const fmt = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   .replace(/\[([^\]]+)\]\(([^)#\s]+#L\d+(?:-L\d+)?)\)/g, (_, text, at) => codeLink(at, text));
-const story = t => fmt(t).replace(/\[([^\]]+)\]\(([\w-]+)\)/g, '<button class="cardlink" data-card="$2">$1</button>');
+const story = t => fmt(t).replace(/\[([^\]]+)\]\(([\w-]+)\)/g, '<a class="cardlink" href="#" data-card="$2">$1</a>');
+document.addEventListener('click', ev => { if (ev.target.closest('.cardlink')) ev.preventDefault(); });
 const codeHtml = t => esc(t).split('\n').map(l => l.startsWith('+') ? `<span class="a">${l}</span>` : l.startsWith('-') ? `<span class="d">${l}</span>` : l).join('\n');
 
 const $ = (s, r = document) => r.querySelector(s);

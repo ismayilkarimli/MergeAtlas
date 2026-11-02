@@ -35,10 +35,18 @@ CODE_LINK = re.compile(r"\[[^\]]+\]\(" + LOCATION + r"\)")
 FILE_HEADER = re.compile(r"diff --git a/.* b/(.*)$")
 HUNK_HEADER = re.compile(r"@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)$")
 DECLARATION = re.compile(
-    r"\b(?:class|mixin|enum|extension|typedef|interface|struct|type|def|func|function|trait|protocol|object)"
+    r"\b(?:class|mixin|enum|extension|typedef|interface|struct|type|def|func|function|trait|protocol|object"
+    r"|const|let|var|val)"
     r"\s+([A-Za-z_]\w*)|([A-Za-z_]\w*)\s*(?:<[^>]*>)?\("
 )
 COMMENT_STARTS = ("//", "/*", "#")
+QUOTED = re.compile(r"""'[^']*'|"[^"]*"|`[^`]*`""")
+LANGUAGE_FAMILIES = (
+    (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte"),
+    (".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp"),
+    (".java", ".kt", ".kts"),
+    (".swift", ".m", ".mm"),
+)
 REACH_KINDS = {"core", "cleanup"}
 SURROUNDING_LINES = 4
 TEST_PATH = re.compile(r"(^|/)(tests?|spec|__tests__)/|[._](test|spec)\.")
@@ -82,8 +90,8 @@ def declared_name(line):
 
 
 def changed_names(diff):
-    """Maps each file to the names it changes: hunk headers name the enclosing declaration."""
-    names, path, in_hunk = {}, None, False
+    """Maps each file to the names it changes: a changed line belongs to the last declaration above it."""
+    names, path, in_hunk, declaration = {}, None, False, None
     for line in diff.splitlines():
         header, hunk = FILE_HEADER.match(line), HUNK_HEADER.match(line)
         if header:
@@ -92,15 +100,11 @@ def changed_names(diff):
         if TEST_PATH.search(path or ""):
             continue
         if hunk:
-            in_hunk = True
-            declaration = hunk.group(3)
-        elif in_hunk and line[:1] in ("+", "-"):
-            declaration = line[1:]
-        else:
-            continue
-        name = declared_name(declaration)
-        if name:
-            names.setdefault(path, set()).add(name)
+            in_hunk, declaration = True, declared_name(hunk.group(3))
+        elif in_hunk and line[:1] in (" ", "+", "-"):
+            declaration = declared_name(line[1:]) or declaration
+            if line[0] != " " and declaration:
+                names.setdefault(path, set()).add(declaration)
     return names
 
 
@@ -114,15 +118,23 @@ def public_names(path, names, commit):
     return public | {name for name in declared if name and not name.startswith("_")}
 
 
+def same_language(path):
+    """Returns pathspecs for the file's language, whose extensions often mix within one project."""
+    suffix = Path(path).suffix
+    family = next((f for f in LANGUAGE_FAMILIES if suffix in f), (suffix,))
+    return [f"*{s}" for s in family]
+
+
 def users_of(names, commit, changed):
     """Maps each changed file to the unchanged files of its language that use its names."""
     users = {}
     for path, file_names in names.items():
         for name in sorted(public_names(path, file_names, commit)):
-            search = ["git", "grep", "-n", "-w", "-F", "-e", name, commit, "--", f"*{Path(path).suffix}"]
+            search = ["git", "grep", "-n", "-w", "-F", "-e", name, commit, "--", *same_language(path)]
             for match in subprocess.run(search, capture_output=True, text=True, errors="replace").stdout.splitlines():
                 _, user, line, text = match.split(":", 3)
-                if user not in changed:
+                is_comment = text.lstrip().startswith((*COMMENT_STARTS, "*"))
+                if user not in changed and not is_comment and re.search(rf"\b{re.escape(name)}\b", QUOTED.sub("", text)):
                     hits = users.setdefault(path, {}).setdefault(user, [])
                     hits.append({"name": name, "line": int(line), "text": text.strip()[:160]})
     return users
