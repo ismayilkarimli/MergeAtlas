@@ -5,6 +5,8 @@
   mergeatlas.py search <map-id> [--regex | --paths] <term>
                                  Search the PR's head commit outside its changed files and log the result.
   mergeatlas.py publish <map-id> Validate <map-id>.input.json, write the map, serve it.
+  mergeatlas.py card <map-id> <card-id | story>
+                                 Print one card as a cold reader sees it, for the cold read.
   mergeatlas.py serve            Run the viewer server; publish starts it when needed.
 """
 import hashlib
@@ -28,14 +30,19 @@ PORT = 8765
 
 KINDS = {"core", "cleanup", "test", "docs", "config"}
 EDGE_KINDS = {"enables", "replaces", "verifies", "docs", "depends"}
-CARD_FIELDS = ("id", "kind", "title", "paths", "summary", "bullets", "change")
+CARD_FIELDS = ("id", "kind", "title", "paths", "summary", "bullets", "changes")
 COMPONENT_FIELDS = ("id", "title", "summary", "cards")
 EDGE_FIELDS = ("from", "to", "kind", "label", "connection", "connection_code", "connection_at", "flow")
-CARD_TEXT = ("summary", "bullets", "problem", "change", "fix")
+CARD_TEXT = ("summary", "bullets", "problem")
+CHANGE_TEXT = ("problem", "change", "result")
 EDGE_TEXT = ("connection", "flow", "effect")
 CARD_LINK = re.compile(r"\[[^\]]+\]\(([\w-]+)\)")
 LOCATION = r"([^)#\s]+)#L(\d+)(?:-L(\d+))?"
 CODE_LINK = re.compile(r"\[[^\]]+\]\(" + LOCATION + r"\)")
+ANY_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+CODE_SPAN = re.compile(r"`[^`]*`")
+SENTENCE_END = re.compile(r"(?<=[.!?:])\s+")
+POINTER = re.compile(r"\b(above|below|as mentioned|as noted|mentioned earlier|earlier card|previous card|other cards?|next card)\b", re.I)
 FILE_HEADER = re.compile(r"diff --git a/.* b/(.*)$")
 HUNK_HEADER = re.compile(r"@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)$")
 REACH_KINDS = {"core", "cleanup"}
@@ -279,6 +286,20 @@ def candidates_in(searches, broad, together):
     return sources
 
 
+def open_whys(name, text):
+    """Finds the two shapes a script can see: a reason that stops short of the code, and a lean on another card."""
+    found = []
+    for sentence in SENTENCE_END.split(text):
+        words = CODE_SPAN.sub("code", sentence)
+        reason = re.search(r"\bbecause\b(.*)", words, re.I)
+        if reason and not CODE_LINK.search(reason[1]):
+            found.append(f"{name}: a reason ends with no code link after its because: {sentence!r}")
+        pointer = POINTER.search(ANY_LINK.sub(r"\1", words))
+        if pointer:
+            found.append(f"{name}: leans on {pointer[0]!r}, so name the thing itself: {sentence!r}")
+    return found
+
+
 def problems_in(data, stats, read, rows, searches, together):
     found, seen, ids, accounted = [], set(), set(), set()
     for ticket in data.get("tickets", []):
@@ -295,28 +316,45 @@ def problems_in(data, stats, read, rows, searches, together):
     for c in data.get("cards", []):
         name = c.get("id", "?")
         found += [f"card {name}: missing {k}" for k in CARD_FIELDS if not c.get(k)]
-        for number, snippet in enumerate(c.get("snippets", []), 1):
-            check_links(f"card {name} snippet {number}", snippet, ("why",))
-            if not snippet.get("why"):
-                found.append(f"card {name}: snippet {number} has no why")
-            if not key_lines(c, snippet.get("code", ""), rows):
-                found.append(f"card {name}: snippet {number} is not in the diff of one of its files, in order")
+        shown = {}
+        for number, change in enumerate(c.get("changes", []), 1):
+            where = f"card {name} change {number}"
+            found += [f"{where}: missing {k}" for k in ("title", "change") if not change.get(k)]
+            check_links(where, change, CHANGE_TEXT)
+            for field in CHANGE_TEXT:
+                found += open_whys(f"{where} {field}", change.get(field) or "")
+            if not CODE_LINK.search(change.get("change", "")):
+                found.append(f"{where}: change has no code link")
+            if c.get("kind") == "core" and not change.get("result"):
+                found.append(f"{where}: missing result")
+            for code in change.get("snippets", []):
+                shown.setdefault(code, []).append(change)
+                if not key_lines(c, code, rows):
+                    found.append(f"{where}: a snippet is not in the diff of one of its files, in order")
+        for code, changes in shown.items():
+            if len(changes) > 1 and len({change.get("problem") for change in changes}) < len(changes):
+                found.append(f"card {name}: changes {[change.get('title') for change in changes]} share lines, so each states its own problem")
+        for term in c.get("terms", []):
+            found += [f"card {name}: a term needs term and meaning" for k in ("term", "meaning") if not term.get(k)]
+            check_links(f"card {name} term", term, ("meaning",))
+            found += open_whys(f"card {name} term", term.get("meaning", ""))
         if c.get("kind") in REACH_KINDS and len(c.get("paths", [])) > 1:
             found.append(f"card {name}: a {c['kind']} card holds one file")
         if c.get("kind") == "core" and not c.get("problem"):
             found.append(f"card {name}: missing problem")
         check_links(f"card {name}", c, CARD_TEXT)
+        for field in ("summary", "problem"):
+            found += open_whys(f"card {name} {field}", c.get(field) or "")
         reaches, unaffected = c.get("reaches", []), c.get("unaffected", [])
         for entry in reaches:
             check_links(f"card {name}", entry, ("effect",))
+            found += open_whys(f"card {name} reach", entry.get("effect", ""))
             if not CODE_LINK.search(entry.get("effect", "")):
                 found.append(f"card {name}: a reaches entry has no code link in its effect")
         found += [f"card {name}: an unaffected entry has no reason" for entry in unaffected if not entry.get("reason")]
         listed = {p for entry in reaches + unaffected for p in entry.get("paths", [])}
         found += [f"card {name}: no such file {p}" for p in sorted(listed) if read(p) is None]
         accounted |= listed
-        if not CODE_LINK.search(c.get("change", "")):
-            found.append(f"card {name}: change has no code link")
         if c.get("kind") not in KINDS:
             found.append(f"card {name}: unknown kind {c.get('kind')}")
         if name in ids:
@@ -362,6 +400,8 @@ def problems_in(data, stats, read, rows, searches, together):
             found.append(f"arrow {name}: points at itself")
         found += [f"arrow {name}: no card {e[k]}" for k in ("from", "to") if e.get(k) not in ids]
         check_links(f"arrow {name}", e, EDGE_TEXT)
+        for field in EDGE_TEXT:
+            found += open_whys(f"arrow {name} {field}", e.get(field) or "")
         if not CODE_LINK.search(e.get("flow", "")):
             found.append(f"arrow {name}: flow has no code link")
         at = re.fullmatch(LOCATION, e.get("connection_at", ""))
@@ -386,6 +426,47 @@ class NoStoreHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
+
+
+def plain(text):
+    return ANY_LINK.sub(r"\1", text or "")
+
+
+def card_text(map_id, card_id):
+    """Prints one card as a cold reader sees it, with link targets removed so only the words count."""
+    data = json.loads((WORK / f"{map_id}.input.json").read_text())
+    if card_id == "story":
+        print("\n\n".join(plain(data.get(k)) for k in ("background", "problem", "solution")))
+        return
+    cards = {c["id"]: c for c in data["cards"]}
+    if card_id not in cards:
+        sys.exit(f"no card {card_id}: choose from story, {', '.join(cards)}")
+    c = cards[card_id]
+    print(f"# {', '.join(c['paths'])}")
+    for field in ("summary", "problem"):
+        if c.get(field):
+            print(f"\n{field}: {plain(c[field])}")
+    for term in c.get("terms", []):
+        print(f"\nterm {term['term']}: {plain(term['meaning'])}")
+    for number, change in enumerate(c["changes"], 1):
+        print(f"\nchange {number}: {change['title']}")
+        for field in CHANGE_TEXT:
+            if change.get(field):
+                print(f"{field}: {plain(change[field])}")
+        for code in change.get("snippets", []):
+            print(f"key lines:\n{code}")
+    for r in c.get("reaches", []):
+        print(f"\nalso reaches {', '.join(r['paths'])}: {plain(r['effect'])}")
+    for u in c.get("unaffected", []):
+        print(f"\nunaffected {', '.join(u['paths'])}: {plain(u['reason'])}")
+    for e in data["edges"]:
+        if card_id in (e["from"], e["to"]):
+            other = cards[e["to"] if e["from"] == card_id else e["from"]]
+            direction = "to" if e["from"] == card_id else "from"
+            print(f"\narrow {direction} {', '.join(other['paths'])}: {e['label']}\n{e['connection_code']}")
+            for field in EDGE_TEXT:
+                if e.get(field):
+                    print(f"{field}: {plain(e[field])}")
 
 
 def run_server():
@@ -424,8 +505,8 @@ def publish(map_id):
         c["add"] = sum(stats[p][0] for p in c["paths"])
         c["del"] = sum(stats[p][1] for p in c["paths"])
         c["fingerprint"] = fingerprint(c, rows)
-        for snippet in c.get("snippets", []):
-            snippet["lines"] = key_lines(c, snippet.pop("code"), rows)
+        for change in c["changes"]:
+            change["snippets"] = [key_lines(c, code, rows) for code in change.get("snippets", [])]
         if c.get("kind") in REACH_KINDS:
             c["checked"] = len({p for entry in c.get("reaches", []) + c.get("unaffected", []) for p in entry["paths"]})
     for i, e in enumerate(data["edges"]):
@@ -468,6 +549,8 @@ def main():
         search(args[0], args[-1], args[1].removeprefix("--") if len(args) == 3 else "text")
     elif command == "publish" and len(args) == 1:
         publish(args[0])
+    elif command == "card" and len(args) == 2:
+        card_text(*args)
     elif command == "serve" and not args:
         run_server()
     else:

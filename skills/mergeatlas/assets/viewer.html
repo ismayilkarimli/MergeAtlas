@@ -133,8 +133,12 @@
   .item[data-review="done"] strong::before, .card[data-review="done"] h3::before { content: '✓ '; color: var(--add); }
   .item[data-review="done"], .card[data-review="done"] { opacity: .6; }
   .item[data-review="changed"] strong::after, .card[data-review="changed"] h3::after { content: ' · changed'; color: var(--del); font-size: 12px; font-weight: 600; }
-  .snippets-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
-  .sheet .snippets-head h4 { margin: 0; }
+  .changes-head { position: sticky; top: -22px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding: 12px 0 8px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .sheet .changes-head h4 { margin: 0; }
+  .sheet .change h3 { margin: 14px 0 0; font-size: 16px; line-height: 1.35; }
+  .terms { margin: 6px 0 0; }
+  .terms dt { font-weight: 600; margin-top: 8px; }
+  .terms dd { margin: 2px 0 0; }
   .file-pager { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin: 0 28px 14px 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
   .file-pager button { display: flex; align-items: center; gap: 4px; min-width: 0; min-height: 30px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg); color: var(--ink); font: inherit; cursor: pointer; }
   .file-pager button:hover { border-color: var(--muted); }
@@ -146,7 +150,6 @@
   .steps button { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg); color: var(--ink); font-size: 15px; cursor: pointer; }
   .steps button:hover:not(:disabled) { border-color: var(--muted); }
   .steps button:disabled { opacity: .35; cursor: default; }
-  .snippet p { margin-top: 6px; }
   .snippet-file { margin-top: 6px; font-size: 12.5px; overflow-wrap: anywhere; }
   .part { margin-top: 12px; }
   .part p { margin-top: 6px; }
@@ -337,7 +340,8 @@ function componentView(components, edges) {
       ...g, files, reaches, unaffected,
       kind: Object.keys(KIND).find(k => files.some(f => f.kind === k)),
       paths: files.flatMap(f => f.paths), add: sum('add'), del: sum('del'),
-      bullets: files.map(f => f.holds), snippets: files.flatMap(f => f.snippets ?? []),
+      bullets: files.map(f => f.holds),
+      changes: files.flatMap(f => f.changes.map(change => ({ ...change, file: f.title }))),
       checked: new Set([...affected, ...unaffected.flatMap(u => u.paths)]).size,
     };
   });
@@ -769,27 +773,37 @@ function showReviewed() {
   for (const el of document.querySelectorAll('.progress')) el.textContent = reviewProgress();
   for (const el of document.querySelectorAll('[data-review-toggle]')) el.outerHTML = reviewButton(byId[el.dataset.reviewToggle]);
 }
-const snippetFile = s => s.lines.find(l => l.path).path;
-function snippetsHtml(snippets) {
-  if (!snippets.length) return '';
-  const steps = snippets.length > 1 ? `<div class="steps">
-    <button data-step="-1" aria-label="Previous key lines" disabled>←</button>
-    <span class="step-at">1 of ${snippets.length}</span>
-    <button data-step="1" aria-label="Next key lines">→</button>
+const snippetFile = lines => lines.find(l => l.path).path;
+const snippetHtml = lines => `<div class="snippet-file">${codeLink(snippetFile(lines), esc(snippetFile(lines)))}</div><pre>${lines.map(keyLine).join('')}</pre>`;
+function changesHtml(changes) {
+  const steps = changes.length > 1 ? `<div class="steps">
+    <button data-step="-1" aria-label="Previous change" disabled>←</button>
+    <span class="step-at">1 of ${changes.length}</span>
+    <button data-step="1" aria-label="Next change">→</button>
   </div>` : '';
-  return `<div class="snippets">
-    <div class="snippets-head"><h4>Key lines</h4>${steps}</div>
-    ${snippets.map((s, i) => `<div class="snippet"${i ? ' hidden' : ''}><div class="snippet-file">${codeLink(snippetFile(s), esc(snippetFile(s)))}</div><p>${fmt(s.why)}</p><pre>${s.lines.map(keyLine).join('')}</pre></div>`).join('')}
+  return `<div class="changes">
+    <div class="changes-head"><h4>${changes.length > 1 ? 'Changes' : 'The change'}</h4>${steps}</div>
+    ${changes.map((c, i) => `<div class="change"${i ? ' hidden' : ''}>
+      <h3>${esc(c.title)}</h3>
+      ${c.file ? `<div class="path">${esc(c.file)}</div>` : ''}
+      ${section('The problem here', c.problem)}
+      ${section('What changes', c.change)}
+      ${c.snippets.length ? `<h4>Key lines</h4>${c.snippets.map(snippetHtml).join('')}` : ''}
+      ${section('Why this fixes it', c.result)}
+    </div>`).join('')}
   </div>`;
 }
-function stepSnippet(button) {
-  const box = button.closest('.snippets'), all = [...box.querySelectorAll('.snippet')];
-  const at = all.findIndex(s => !s.hidden) + Number(button.dataset.step);
-  all.forEach((s, i) => { s.hidden = i !== at; });
+function stepChange(button) {
+  const box = button.closest('.changes'), all = [...box.querySelectorAll('.change')];
+  const at = all.findIndex(c => !c.hidden) + Number(button.dataset.step);
+  all.forEach((c, i) => { c.hidden = i !== at; });
   box.querySelector('.step-at').textContent = `${at + 1} of ${all.length}`;
   box.querySelector('[data-step="-1"]').disabled = at === 0;
   box.querySelector('[data-step="1"]').disabled = at === all.length - 1;
+  const sheet = box.closest('#modal'), head = box.querySelector('.changes-head').getBoundingClientRect();
+  sheet.scrollTop += all[at].getBoundingClientRect().top - head.bottom - 14;
 }
+const termsHtml = terms => terms?.length ? `<h4>Terms</h4><dl class="terms">${terms.map(t => `<dt>${fmt(t.term)}</dt><dd>${fmt(t.meaning)}</dd>`).join('')}</dl>` : '';
 function reachHtml(c) {
   const reaches = c.reaches ?? [], unaffected = c.unaffected ?? [];
   if (!reaches.length && !unaffected.length) return '';
@@ -825,8 +839,8 @@ function cardHtml(c) {
     <div class="path">${c.paths.map(p => codeLink(p, esc(p))).join('<br>')}</div>
     ${reviewButton(c)}
     ${section('What it is', c.summary)}
-    ${c.files ? filesHtml(c) : `${section('The problem', c.problem)}${section('What changes', c.change)}${section('Why this fixes it', c.fix)}`}
-    ${snippetsHtml(c.snippets ?? [])}
+    ${c.files ? filesHtml(c) : `${section('The problem', c.problem)}${termsHtml(c.terms)}`}
+    ${changesHtml(c.changes)}
     ${reachHtml(c)}
     ${out.length || grid ? `<h4>Affects</h4><div class="links">${out.map(e => link(e, '→', e.to)).join('')}${gridLink}</div>` : ''}
     ${inn.length ? `<h4>Affected by</h4><div class="links">${inn.map(e => link(e, '←', e.from)).join('')}</div>` : ''}`;
@@ -835,7 +849,7 @@ function filesHtml(c) {
   const inside = VIEWS.files.edges.filter(e => componentOf[e.from] === c.id && componentOf[e.to] === c.id);
   return `<h4>Its files</h4>
     ${c.files.map(f => `<div class="part"><div class="links"><button data-card="${f.id}">${esc(f.title)}</button></div>
-      ${[f.problem, f.change, f.fix].filter(Boolean).map(t => `<p>${fmt(t)}</p>`).join('')}</div>`).join('')}
+      ${f.problem ? `<p>${fmt(f.problem)}</p>` : ''}</div>`).join('')}
     ${inside.length ? `<h4>Between its files</h4><div class="links">${inside.map(e => `<button data-edge="${e.id}">${esc(e.label)}</button>`).join('')}</div>` : ''}`;
 }
 function edgeHtml(e) {
@@ -910,7 +924,7 @@ modalBg.addEventListener('click', ev => {
 detail.addEventListener('click', follow);
 addEventListener('keydown', ev => { if (ev.key === 'Escape') hide(); });
 addEventListener('click', ev => {
-  const step = ev.target.closest('[data-step]'); if (step) stepSnippet(step);
+  const step = ev.target.closest('[data-step]'); if (step) stepChange(step);
   const review = ev.target.closest('[data-review-toggle]'); if (review) toggleReviewed(review.dataset.reviewToggle);
 });
 const solution = $('#pstory'), linkIn = ev => ev.target.closest('[data-card]');
