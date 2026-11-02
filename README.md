@@ -18,15 +18,16 @@ When you're asked to review a change that reaches further than its diff, in a pr
 
 It's made for changes with a medium to large blast radius: several files, some of them affected only indirectly. A config tweak doesn't need a map. Your agent or the PR description can tell you what it touches.
 
-It's an agent skill that turns a pull request into an interactive map on localhost. The story of the change comes first: what this part of the project does, the problem, and what the PR does about it. Each changed component is a card, and arrows show how a change in one reaches another, including through files the PR never touches. The map stops at understanding, so it doesn't find bugs, give verdicts, or tell you what to do. Those stay with you.
+It's an agent skill that turns a pull request into an interactive map on localhost. The story of the change comes first: what this part of the project does, the problem, and what the PR does about it. Each changed file is a card, a toggle groups them into components, and arrows show how a change in one reaches another, including through files the PR never touches. The map stops at understanding, so it doesn't find bugs, give verdicts, or tell you what to do. Those stay with you.
 
 ## Features
 
 - **Map view:** an infinite canvas of cards and cause-and-effect arrows that you can pan, zoom and rearrange.
+- **Files and Components:** see one card per file by default, or switch to grouped components in either view.
 - **Tree view:** a collapsible outline of the same cards and their affected files, with keyboard navigation.
 - **The story:** background, problem and solution in plain words, linked to the cards that did each part.
 - **Affected files:** unchanged files that behave differently because of the PR sit in a stack beside the card that reaches them.
-- **Key lines:** the lines most worth your attention on each card, and why they matter.
+- **Key lines:** the lines most worth your attention on each card, the file they come from, and why they matter.
 - **Code links:** claims link to their lines, in the PR's Files changed tab or at the head commit.
 - **Review marks:** mark cards as reviewed as you go, and see your progress across the PR.
 - **Light and dark themes:** the viewer follows your system setting.
@@ -60,7 +61,7 @@ Then, from inside the PR's repository, ask your agent to map it, or run `/mergea
 
 ## How it works
 
-The analysis comes from your agent, which reads the issue, the diff and the surrounding source. `skills/mergeatlas/scripts/mergeatlas.py` does the mechanical part: it fetches the PR, lists the candidates for reach, checks the map against the diff, and serves it. Maps and working files stay on your machine in `~/.cache/mergeatlas`.
+The analysis comes from your agent, which reads the issue, the diff and the surrounding source. `skills/mergeatlas/scripts/mergeatlas.py` does the mechanical part: it fetches the PR, runs the searches your agent chooses for affected files, checks the map against the diff, and serves it. Those searches are plain text, so MergeAtlas works in any language, and each map shows what was searched. Maps and working files stay on your machine in `~/.cache/mergeatlas`.
 
 ## License
 

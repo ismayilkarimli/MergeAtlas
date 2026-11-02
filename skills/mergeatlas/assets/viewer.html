@@ -147,6 +147,9 @@
   .steps button:hover:not(:disabled) { border-color: var(--muted); }
   .steps button:disabled { opacity: .35; cursor: default; }
   .snippet p { margin-top: 6px; }
+  .snippet-file { margin-top: 6px; font-size: 12.5px; overflow-wrap: anywhere; }
+  .part { margin-top: 12px; }
+  .part p { margin-top: 6px; }
   .reach-count { font-weight: 600; }
   .reach-item { border: 1px solid var(--line); border-radius: 10px; margin: 10px 0; overflow: hidden; }
   .reach-paths { padding: 8px 12px; background: var(--code-bg); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
@@ -158,6 +161,7 @@
   .reach summary { cursor: pointer; padding: 8px 12px; color: var(--muted); font-weight: 600; }
   .reach { border: 1px solid var(--line); border-radius: 10px; margin: 10px 0; }
   .reach .reach-item { margin: 0 12px 12px; }
+  .sheet .searches { margin: 0; padding: 0 12px 12px 30px; overflow-wrap: anywhere; }
   .sheet .reach-note { color: var(--muted); font-size: 12px; margin-top: 10px; }
   .keyline.around { opacity: .55; }
   .lineno { display: inline-block; width: 4ch; margin-right: 1.5ch; text-align: right; color: var(--muted); user-select: none; }
@@ -170,10 +174,12 @@
   .links button { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 12.5px; }
   .links button:hover { border-color: var(--accent); }
 
-  #viewswitch { position: fixed; right: 16px; top: 16px; display: flex; z-index: 6; background: var(--card);
+  #switches { position: fixed; right: 16px; top: 16px; display: flex; gap: 8px; z-index: 6; }
+  .switch { display: flex; background: var(--card);
     border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 3px; }
-  #viewswitch button { border: 0; background: none; color: var(--muted); border-radius: 7px; padding: 4px 14px; font: inherit; font-size: 13px; cursor: pointer; }
-  #viewswitch button[aria-pressed="true"] { background: var(--code-bg); color: var(--ink); font-weight: 600; }
+  .switch[hidden] { display: none; }
+  .switch button { border: 0; background: none; color: var(--muted); border-radius: 7px; padding: 4px 14px; font: inherit; font-size: 13px; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--code-bg); color: var(--ink); font-weight: 600; }
 
   #list { display: none; position: fixed; inset: 0; grid-template-columns: 300px minmax(0, 1fr); }
   body.list #list { display: grid; }
@@ -202,7 +208,7 @@
   .item .sub { display: flex; align-items: center; margin-top: 2px; }
   #detail { overflow: auto; border-top: 6px solid var(--accent); padding: 64px max(26px, calc((100% - 760px) / 2)) 48px; }
   @media (max-width: 720px) {
-    #viewswitch { top: auto; right: auto; left: 16px; bottom: 16px; }
+    #switches { top: auto; right: auto; left: 16px; bottom: 16px; flex-direction: column; align-items: flex-start; }
     #list { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 38vh) minmax(0, 1fr); }
     #sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
     #detail { padding: 18px 16px 72px; }
@@ -239,9 +245,15 @@
   </div>
 </div>
 
-<div id="viewswitch" role="group" aria-label="View">
-  <button data-view="map">Map</button>
-  <button data-view="list">Tree</button>
+<div id="switches">
+  <div id="groupswitch" class="switch" role="group" aria-label="Cards" hidden>
+    <button data-group="files">Files</button>
+    <button data-group="components">Components</button>
+  </div>
+  <div id="viewswitch" class="switch" role="group" aria-label="View">
+    <button data-view="map">Map</button>
+    <button data-view="list">Tree</button>
+  </div>
 </div>
 
 <div id="list">
@@ -279,7 +291,8 @@ const EDGE_KIND = {
   reach:    { color: 'var(--muted)',   label: 'Also reaches' },
 };
 
-let CARDS = [], EDGES = [], META = {};
+let CARDS = [], EDGES = [], META = {}, VIEWS = {}, SEARCHES = [], grouped = false;
+const componentOf = {};
 
 /* ---------- state ---------- */
 const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -308,10 +321,53 @@ const pillEl = {}, grpEl = {};
 const reachNodes = [];
 const allNodes = () => [...CARDS, ...reachNodes];
 const allLinks = () => [...EDGES, ...reachNodes.map(n => ({ id: `to:${n.id}`, from: n.source, to: n.id, kind: 'reach' }))];
-const STACK_MS = 340, STACK_COLUMNS = 3, FILE_GAP = 14, STACK_PADDING = 18, FILE_STAGGER = .07;
+const STACK_MS = 340, STACK_COLUMNS = 3, FILE_GAP = 14, STACK_PADDING = 18, FILE_STAGGER = .07, STACK_CLEARANCE = 32;
 const smooth = t => t * t * (3 - 2 * t);
 
 /* ---------- build ---------- */
+/* The grouped view is worked out from the file cards, so the two views can't disagree. */
+function componentView(components, edges) {
+  const cards = components.map(g => {
+    const files = g.cards.map(id => byId[id]), sum = key => files.reduce((total, f) => total + f[key], 0);
+    files.forEach(f => (componentOf[f.id] = g.id));
+    const reaches = files.flatMap(f => f.reaches ?? []), affected = new Set(reaches.flatMap(r => r.paths));
+    const unaffected = files.flatMap(f => f.unaffected ?? [])
+      .map(u => ({ ...u, paths: u.paths.filter(p => !affected.has(p)) })).filter(u => u.paths.length);
+    return {
+      ...g, files, reaches, unaffected,
+      kind: Object.keys(KIND).find(k => files.some(f => f.kind === k)),
+      paths: files.flatMap(f => f.paths), add: sum('add'), del: sum('del'),
+      bullets: files.map(f => f.holds), snippets: files.flatMap(f => f.snippets ?? []),
+      checked: new Set([...affected, ...unaffected.flatMap(u => u.paths)]).size,
+    };
+  });
+  const between = Map.groupBy(edges.filter(e => componentOf[e.from] !== componentOf[e.to]), e => `${componentOf[e.from]}>${componentOf[e.to]}`);
+  return {
+    cards,
+    edges: [...between].map(([key, parts]) => ({
+      id: `c:${key}`, from: componentOf[parts[0].from], to: componentOf[parts[0].to], kind: parts[0].kind,
+      label: parts.length > 1 ? `${parts.length} links` : parts[0].label, parts,
+    })),
+  };
+}
+const showView = () => ({ cards: CARDS, edges: EDGES } = grouped ? VIEWS.components : VIEWS.files);
+function setGrouping(on) {
+  const list = listView;
+  grouped = on; touched = false; hide(); showView();
+  svg.replaceChildren();
+  for (const el of world.querySelectorAll('.card, .pill')) el.remove();
+  for (const els of [cardEl, pillEl, grpEl]) for (const id in els) delete els[id];
+  reachNodes.length = 0;
+  document.body.classList.remove('list');
+  build(); autoLayout(); buildList(); showReviewed();
+  for (const b of document.querySelectorAll('#groupswitch button')) b.setAttribute('aria-pressed', (b.dataset.group === 'components') === on);
+  const url = new URL(location);
+  if (on) url.searchParams.set('group', 'components'); else url.searchParams.delete('group');
+  history.replaceState(null, '', url);
+  if (selected.includes('#')) selected = OVERVIEW;
+  else selected = on ? componentOf[selected] ?? selected : byId[selected]?.files?.[0].id ?? selected;
+  setView(list);
+}
 function build() {
   // markers
   const defs = document.createElementNS(NS, 'defs');
@@ -371,7 +427,8 @@ const reachFileHtml = f => {
 };
 function buildReach() {
   for (const c of CARDS) {
-    const files = (c.reaches ?? []).flatMap(r => r.paths.map(path => ({ path, effect: r.effect })));
+    const effects = Map.groupBy((c.reaches ?? []).flatMap(r => r.paths.map(path => ({ path, effect: r.effect }))), f => f.path);
+    const files = [...effects].map(([path, same]) => ({ path, effect: same.map(f => f.effect).join(' ') }));
     if (!files.length) continue;
     const n = { id: `reach:${c.id}`, source: c.id, files, progress: 0, target: 0 };
     const stacked = files.length > 1;
@@ -413,11 +470,22 @@ function measureStack(n) {
     return { f, dx: -left - fileW / 2, dy: h - 24 - y };
   });
 }
-function drawStack(n) {
+/* The nearest spot where the open stack covers no other card, as its centre and top. */
+function clearSpot(n) {
+  const { openW, openH } = n.size, others = allNodes().filter(o => o !== n).map(o => rectOf(o.id));
+  const clear = (x, y) => others.every(o => x + openW / 2 + STACK_CLEARANCE <= o.l || x - openW / 2 - STACK_CLEARANCE >= o.r
+    || y + openH + STACK_CLEARANCE <= o.t || y - STACK_CLEARANCE >= o.b);
+  const xs = [n.home.x, ...others.flatMap(o => [o.l - STACK_CLEARANCE - openW / 2, o.r + STACK_CLEARANCE + openW / 2])];
+  const ys = [n.home.y, ...others.flatMap(o => [o.t - STACK_CLEARANCE - openH, o.b + STACK_CLEARANCE])];
+  const spots = xs.flatMap(x => ys.map(y => ({ x, y }))).filter(s => clear(s.x, s.y));
+  const away = s => Math.hypot(s.x - n.home.x, s.y - n.home.y);
+  return spots.reduce((best, s) => (away(s) < away(best) ? s : best));
+}
+function drawStack(n, moved) {
   const el = cardEl[n.id], { w, h, openW, openH } = n.size, e = smooth(n.progress);
   const width = w + (openW - w) * e;
-  n.x -= (width - (n.width ?? w)) / 2; n.width = width;
-  el.style.left = n.x + 'px'; el.style.width = width + 'px'; el.style.height = h + (openH - h) * e + 'px';
+  n.x = n.from.x + (n.to.x - n.from.x) * moved - width / 2; n.y = n.from.y + (n.to.y - n.from.y) * moved; n.width = width;
+  el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; el.style.width = width + 'px'; el.style.height = h + (openH - h) * e + 'px';
   const reveal = 1 + FILE_STAGGER * (n.spots.length - 1);
   n.spots.forEach(({ f, dx, dy }, i) => {
     const t = smooth(Math.min(1, Math.max(0, n.progress * reveal - i * FILE_STAGGER))), left = 1 - t;
@@ -430,6 +498,8 @@ function toggleStack(n) {
   const el = cardEl[n.id];
   if (!n.size) measureStack(n);
   n.target = 1 - n.target;
+  n.from = { x: n.x + (n.width ?? n.size.w) / 2, y: n.y };
+  if (n.target) { n.home ??= n.from; n.to = clearSpot(n); } else n.to = n.home ?? n.from;
   el.querySelector('.stack-toggle').textContent = n.target ? 'Collapse' : 'Show files';
   el.classList.add('open');
   el.querySelector('.stack-files').style.visibility = 'visible';
@@ -441,9 +511,9 @@ function toggleStack(n) {
     start ??= now;
     const t = duration ? Math.min(1, (now - start) / duration) : 1;
     n.progress = from + change * t;
-    drawStack(n);
+    drawStack(n, smooth(t));
     if (t < 1) { n.frame = requestAnimationFrame(step); return; }
-    if (!n.target) { el.classList.remove('open'); el.querySelector('.stack-files').style.visibility = ''; }
+    if (!n.target) { n.home = null; el.classList.remove('open'); el.querySelector('.stack-files').style.visibility = ''; }
   };
   n.frame = requestAnimationFrame(step);
 }
@@ -480,9 +550,9 @@ function placePills(curves) {
 }
 function layoutEdges() {
   const info = allLinks().map(e => {
-    const A = rectOf(e.from), B = rectOf(e.to), down = B.t >= A.b + 20;
-    const lanes = down ? laneOf[e.id] || [] : [];
-    return { e, A, B, lanes, sides: down ? ['b', 't'] : chooseSides(A, B) };
+    const A = rectOf(e.from), B = rectOf(e.to), down = B.t >= A.b + 20, up = A.t >= B.b + 20;
+    const lanes = down ? laneOf[e.id] || [] : up ? [...laneOf[e.id] || []].reverse() : [];
+    return { e, A, B, lanes, down, sides: down ? ['b', 't'] : up ? ['t', 'b'] : chooseSides(A, B) };
   });
   // spread attachments along each side, ordered by where the arrow heads next
   const slots = {};
@@ -502,11 +572,14 @@ function layoutEdges() {
     : side === 't' ? [R.l + R.w * f, R.t] : [R.l + R.w * f, R.b];
   const dir = { l: [-1, 0], r: [1, 0], t: [0, -1], b: [0, 1] };
   const curves = [];
-  for (const { e, A, B, lanes, sides: [sa, sb] } of info) {
+  for (const { e, A, B, lanes, down, sides: [sa, sb] } of info) {
     const p0 = pt(A, sa, frac[e.id + 'a']), p3 = pt(B, sb, frac[e.id + 'b']);
     // gaps between rows are curves; lanes through a row are straight
     const stops = [[p0, dir[sa]]];
-    for (const l of lanes) stops.push([[l.x, l.top], [0, -1]], [[l.x, l.bottom], [0, 1]]);
+    for (const l of lanes) {
+      const ends = [[[l.x, l.top], [0, -1]], [[l.x, l.bottom], [0, 1]]];
+      stops.push(...(down ? ends : ends.reverse()));
+    }
     stops.push([p3, dir[sb]]);
     let d = `M${p0}`;
     const segs = [];
@@ -532,7 +605,7 @@ function focusSet(id, type) {
     cards.add(id);
     EDGES.forEach(e => { if (e.from === id || e.to === id) { edges.add(e.id); cards.add(e.from); cards.add(e.to); } });
   } else if (type === 'link') {
-    cards.add(id);
+    for (const c of CARDS) if (c.id === id || c.id === componentOf[id] || byId[id].files?.includes(c)) cards.add(c.id);
   } else {
     const e = EDGES.find(x => x.id === id); edges.add(id); cards.add(e.from); cards.add(e.to);
   }
@@ -592,8 +665,8 @@ function showGrid(n) {
   hide();
   if (!n.size) measureStack(n);
   if (!n.target) toggleStack(n);
-  const { openW, openH, w } = n.size, middle = n.x + (n.width ?? w) / 2;
-  panTo(middle - openW / 2, n.y, middle + openW / 2, n.y + openH);
+  const { openW, openH, w } = n.size, spot = n.home ? n.to : { x: n.x + (n.width ?? w) / 2, y: n.y };
+  panTo(spot.x - openW / 2, spot.y, spot.x + openW / 2, spot.y + openH);
 }
 function fit() {
   let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
@@ -650,7 +723,7 @@ function attachCardDrag(el, c, open = () => openCard(c.id)) {
     const dx = ev.clientX - s.px, dy = ev.clientY - s.py;
     if (!s.moved && Math.hypot(dx, dy) < 5) return;
     s.moved = true; el.classList.add('dragging');
-    c.x = s.x + dx / view.k; c.y = s.y + dy / view.k;
+    c.x = s.x + dx / view.k; c.y = s.y + dy / view.k; c.home = null;
     el.style.left = c.x + 'px'; el.style.top = c.y + 'px'; layoutEdges();
   });
   let dragged = false, pressed = el;
@@ -667,7 +740,13 @@ let listView = false, selected = OVERVIEW, sequence = [];
 const metaHtml = () => `<a class="codelink" href="${esc(META.url)}" target="_blank" rel="noopener">PR #${META.number}</a> \u00b7 ${META.state || ''} \u00b7 ${META.files} files \u00b7 +${META.additions} \u2212${META.deletions} \u00b7 <span class="progress">${reviewProgress()}</span>`;
 const section = (title, text) => text ? `<h4>${title}</h4><p>${fmt(text)}</p>` : '';
 /* A mark stores the card's fingerprint, so a later push to that card shows as changed. */
-const reviewState = c => (!(c.id in reviewed) ? 'none' : reviewed[c.id] === c.fingerprint ? 'done' : 'changed');
+const reviewState = c => {
+  if (c.files) {
+    const states = c.files.map(reviewState);
+    return states.every(s => s === 'done') ? 'done' : states.includes('changed') ? 'changed' : 'none';
+  }
+  return !(c.id in reviewed) ? 'none' : reviewed[c.id] === c.fingerprint ? 'done' : 'changed';
+};
 const reviewProgress = () => `${CARDS.filter(c => reviewState(c) === 'done').length} of ${CARDS.length} reviewed`;
 const REVIEW_LABEL = { none: 'Mark as reviewed', done: '✓ Reviewed', changed: 'Changed since you reviewed · mark again' };
 const reviewButton = c => `<button class="review" data-review-toggle="${c.id}" data-state="${reviewState(c)}" aria-pressed="${reviewState(c) === 'done'}">${REVIEW_LABEL[reviewState(c)]}</button>`;
@@ -677,7 +756,8 @@ function loadReviewed(id) {
 }
 function toggleReviewed(id) {
   const c = byId[id];
-  if (reviewState(c) === 'done') delete reviewed[id]; else reviewed[id] = c.fingerprint;
+  const done = reviewState(c) === 'done';
+  for (const f of c.files ?? [c]) { if (done) delete reviewed[f.id]; else reviewed[f.id] = f.fingerprint; }
   try { localStorage.setItem(reviewKey, JSON.stringify(reviewed)); } catch {}
   showReviewed();
 }
@@ -689,6 +769,7 @@ function showReviewed() {
   for (const el of document.querySelectorAll('.progress')) el.textContent = reviewProgress();
   for (const el of document.querySelectorAll('[data-review-toggle]')) el.outerHTML = reviewButton(byId[el.dataset.reviewToggle]);
 }
+const snippetFile = s => s.lines.find(l => l.path).path;
 function snippetsHtml(snippets) {
   if (!snippets.length) return '';
   const steps = snippets.length > 1 ? `<div class="steps">
@@ -698,7 +779,7 @@ function snippetsHtml(snippets) {
   </div>` : '';
   return `<div class="snippets">
     <div class="snippets-head"><h4>Key lines</h4>${steps}</div>
-    ${snippets.map((s, i) => `<div class="snippet"${i ? ' hidden' : ''}><p>${fmt(s.why)}</p><pre>${s.lines.map(keyLine).join('')}</pre></div>`).join('')}
+    ${snippets.map((s, i) => `<div class="snippet"${i ? ' hidden' : ''}><div class="snippet-file">${codeLink(snippetFile(s), esc(snippetFile(s)))}</div><p>${fmt(s.why)}</p><pre>${s.lines.map(keyLine).join('')}</pre></div>`).join('')}
   </div>`;
 }
 function stepSnippet(button) {
@@ -724,10 +805,17 @@ function reachHtml(c) {
     <p class="reach-count">Affected: ${affected} of ${c.checked} ${c.checked === 1 ? 'file' : 'files'} outside this PR</p>
     ${reaches.map(r => item(r.paths, r.effect)).join('')}
     ${skipped ? `<details class="reach"><summary>${skipped} unaffected</summary>${unaffected.map(u => item(u.paths, u.reason)).join('')}</details>` : ''}
-    <p class="reach-note">Found by name, one step out from the changed code. Dependency injection, reflection and configuration are not searched.</p>`;
+    ${searchesHtml()}
+    <p class="reach-note">Found by text search and past commits. A file that shares no text with the change can still be missed.</p>`;
+}
+function searchesHtml() {
+  if (!SEARCHES.length) return '';
+  const row = s => `<li><code>${esc(s.term)}</code>${s.mode === 'text' ? '' : ` ${s.mode === 'paths' ? 'in file paths' : 'as a regex'}`}: ${s.files} ${s.files === 1 ? 'file' : 'files'}${s.broad ? `, set aside: ${esc(s.broad)}` : ''}</li>`;
+  return `<details class="reach"><summary>Searched for ${SEARCHES.length} ${SEARCHES.length === 1 ? 'term' : 'terms'}</summary><ul class="searches">${SEARCHES.map(row).join('')}</ul></details>`;
 }
 function cardHtml(c) {
-  const out = EDGES.filter(e => e.from === c.id), inn = EDGES.filter(e => e.to === c.id);
+  const { edges } = c.files ? VIEWS.components : VIEWS.files;
+  const out = edges.filter(e => e.from === c.id), inn = edges.filter(e => e.to === c.id);
   const link = (e, dirLabel, other) => `<button data-edge="${e.id}">${dirLabel} ${esc(byId[other].title)} · ${esc(e.label)}</button>`;
   const grid = reachNodes.find(n => n.source === c.id);
   const gridLink = grid ? `<button data-grid="${grid.id}">→ ${grid.files.length > 1 ? `${grid.files.length} affected files` : esc(fileName(grid.files[0]))} · outside this PR</button>` : '';
@@ -737,19 +825,26 @@ function cardHtml(c) {
     <div class="path">${c.paths.map(p => codeLink(p, esc(p))).join('<br>')}</div>
     ${reviewButton(c)}
     ${section('What it is', c.summary)}
-    ${section('The problem', c.problem)}
-    ${section('What changes', c.change)}
-    ${section('Why this fixes it', c.fix)}
+    ${c.files ? filesHtml(c) : `${section('The problem', c.problem)}${section('What changes', c.change)}${section('Why this fixes it', c.fix)}`}
     ${snippetsHtml(c.snippets ?? [])}
     ${reachHtml(c)}
     ${out.length || grid ? `<h4>Affects</h4><div class="links">${out.map(e => link(e, '→', e.to)).join('')}${gridLink}</div>` : ''}
     ${inn.length ? `<h4>Affected by</h4><div class="links">${inn.map(e => link(e, '←', e.from)).join('')}</div>` : ''}`;
 }
+function filesHtml(c) {
+  const inside = VIEWS.files.edges.filter(e => componentOf[e.from] === c.id && componentOf[e.to] === c.id);
+  return `<h4>Its files</h4>
+    ${c.files.map(f => `<div class="part"><div class="links"><button data-card="${f.id}">${esc(f.title)}</button></div>
+      ${[f.problem, f.change, f.fix].filter(Boolean).map(t => `<p>${fmt(t)}</p>`).join('')}</div>`).join('')}
+    ${inside.length ? `<h4>Between its files</h4><div class="links">${inside.map(e => `<button data-edge="${e.id}">${esc(e.label)}</button>`).join('')}</div>` : ''}`;
+}
 function edgeHtml(e) {
   const K = EDGE_KIND[e.kind];
+  const head = `<div class="tag" style="color:${K.color}">${K.label}</div><h2>${esc(e.label)}</h2>`;
+  return head + (e.parts?.map(p => `<h3>${esc(p.label)}</h3>${edgeBody(p)}`).join('') ?? edgeBody(e));
+}
+function edgeBody(e) {
   return `
-    <div class="tag" style="color:${K.color}">${K.label}</div>
-    <h2>${esc(e.label)}</h2>
     <div class="route"><button data-card="${e.from}">${esc(byId[e.from].title)}</button><span class="arr">→</span><button data-card="${e.to}">${esc(byId[e.to].title)}</button></div>
     ${section('How they connect', e.connection)}
     ${codeLink(e.connection_at, esc(e.connection_at)).replace('class="codelink"', 'class="codelink at"')}
@@ -780,7 +875,10 @@ function present(html, accent, item) {
   }
 }
 const openCard = id => present(cardHtml(byId[id]), KIND[byId[id].kind].color, id);
-const openEdge = id => { const e = EDGES.find(x => x.id === id); present(edgeHtml(e), EDGE_KIND[e.kind].color); };
+const openEdge = id => {
+  const e = [...EDGES, ...VIEWS.files.edges].find(x => x.id === id);
+  present(edgeHtml(e.parts?.length === 1 ? e.parts[0] : e), EDGE_KIND[e.kind].color);
+};
 const fileName = f => f.path.split('/').pop();
 function openReach(n, i) {
   const f = n.files[i], name = fileName(f), last = n.files.length - 1;
@@ -826,9 +924,22 @@ let laneOf = {};
 
 function autoLayout() {
   const nodes = allNodes(), links = allLinks();
+  // an arrow that closes a loop runs upward, so it takes no part in ranking
+  const seen = new Set(), walking = new Set(), forward = [];
+  const walk = id => {
+    seen.add(id); walking.add(id);
+    for (const e of links) {
+      if (e.from !== id || walking.has(e.to)) continue;
+      forward.push(e);
+      if (!seen.has(e.to)) walk(e.to);
+    }
+    walking.delete(id);
+  };
+  const targets = new Set(links.map(e => e.to));
+  for (const c of [...nodes.filter(c => !targets.has(c.id)), ...nodes]) if (!seen.has(c.id)) walk(c.id);
   const rank = Object.fromEntries(nodes.map(c => [c.id, 0]));
   for (let i = 0; i < nodes.length; i++)
-    for (const e of links) if (rank[e.to] <= rank[e.from] && rank[e.from] < nodes.length) rank[e.to] = rank[e.from] + 1;
+    for (const e of forward) rank[e.to] = Math.max(rank[e.to], rank[e.from] + 1);
   const rows = [], rowOf = {};
   for (let r = 0; r <= Math.max(0, ...Object.values(rank)); r++) {
     const ids = nodes.filter(c => rank[c.id] === r);
@@ -844,14 +955,15 @@ function autoLayout() {
   // an arrow that skips rows takes a lane through each one, as a card of no width
   const lanes = {};
   for (const e of links) {
-    if (rowOf[e.to] <= rowOf[e.from]) continue;
-    let prev = nodeOf(e.from);
+    if (rowOf[e.to] === rowOf[e.from]) continue;
+    const [top, bottom] = rowOf[e.from] < rowOf[e.to] ? [e.from, e.to] : [e.to, e.from];
+    let prev = nodeOf(top);
     lanes[e.id] = [];
-    for (let r = rowOf[e.from] + 1; r < rowOf[e.to]; r++) {
+    for (let r = rowOf[top] + 1; r < rowOf[bottom]; r++) {
       const lane = { w: 0, up: [], down: [] };
       rows[r].push(lane); lanes[e.id].push(lane); join(prev, lane); prev = lane;
     }
-    join(prev, nodeOf(e.to));
+    join(prev, nodeOf(bottom));
   }
 
   const number = row => row.forEach((n, i) => (n.pos = i));
@@ -916,12 +1028,12 @@ function buildList() {
       </div>` : ''}`;
   };
   items.innerHTML = `<button class="item" data-card="${OVERVIEW}" data-item="${OVERVIEW}" style="--accent:var(--muted)"><strong>Overview</strong></button>` + sequence.map(cardRow).join('');
-  items.addEventListener('click', ev => {
-    const branch = ev.target.closest('[data-branch]');
-    if (branch) return setBranch(byId[branch.dataset.branch], branch.getAttribute('aria-expanded') !== 'true');
-    const b = ev.target.closest('[data-item]'); if (b) openItem(b.dataset.item);
-  });
 }
+$('#items').addEventListener('click', ev => {
+  const branch = ev.target.closest('[data-branch]');
+  if (branch) return setBranch(byId[branch.dataset.branch], branch.getAttribute('aria-expanded') !== 'true');
+  const b = ev.target.closest('[data-item]'); if (b) openItem(b.dataset.item);
+});
 function setBranch(n, open) {
   $(`[data-branch="${n.id}"]`).setAttribute('aria-expanded', open);
   $(`[data-children="${n.id}"]`).inert = !open;
@@ -958,6 +1070,10 @@ addEventListener('keydown', ev => {
   if (next) openItem(next.dataset.item);
 });
 $('#viewswitch').addEventListener('click', ev => { const b = ev.target.closest('[data-view]'); if (b) setView(b.dataset.view === 'list'); });
+$('#groupswitch').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-group]');
+  if (b && (b.dataset.group === 'components') !== grouped) setGrouping(!grouped);
+});
 
 let reviewed = {}, reviewKey;
 
@@ -973,7 +1089,21 @@ async function boot() {
     document.body.insertAdjacentHTML('beforeend', `<div style="position:fixed;inset:0;display:grid;place-items:center;text-align:center;padding:24px"><div><h2>No map found</h2><p>Ask Claude to map a PR, then open the link it gives you.</p></div></div>`);
     return;
   }
-  META = data.pr; CARDS = data.cards; EDGES = data.edges; byId = Object.fromEntries(CARDS.map(c => [c.id, c]));
+  // a one-file card is titled by its file; what the file holds stays for its component's list
+  for (const c of data.cards) {
+    c.holds = c.title;
+    if (c.paths.length === 1) c.title = c.paths[0].split('/').pop();
+  }
+  META = data.pr; byId = Object.fromEntries(data.cards.map(c => [c.id, c]));
+  SEARCHES = data.searches ?? [];
+  VIEWS = { files: { cards: data.cards, edges: data.edges } };
+  const params = new URLSearchParams(location.search), components = data.components ?? [];
+  VIEWS.components = componentView(components, data.edges);
+  for (const c of VIEWS.components.cards) byId[c.id] = c;
+  $('#groupswitch').hidden = !components.some(g => g.cards.length > 1);
+  grouped = !$('#groupswitch').hidden && params.get('group') === 'components';
+  for (const b of document.querySelectorAll('#groupswitch button')) b.setAttribute('aria-pressed', (b.dataset.group === 'components') === grouped);
+  showView();
   loadReviewed(id);
   document.title = `PR #${META.number} · MergeAtlas`;
   $('#panel .brand img').src = $('link[rel=icon]').href;
@@ -984,7 +1114,7 @@ async function boot() {
   if (innerWidth < 900) $('#ptoggle').click();
   await (document.fonts?.ready ?? Promise.resolve());
   autoLayout(); layoutEdges(); fit(); buildList(); showReviewed();
-  setView(new URLSearchParams(location.search).get('view') === 'list');
+  setView(params.get('view') === 'list');
   addEventListener('resize', () => { if (listView) return; layoutEdges(); if (!touched) fit(); });
 }
 let touched = false;

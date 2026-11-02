@@ -1,25 +1,27 @@
 ---
 name: mergeatlas
-description: "MergeAtlas: an interactive infinite-canvas diagram of a pull request on localhost, with a card per changed component and cause-and-effect arrows that explain what changed and why. Use when the user asks to map, diagram or visualize a PR."
+description: "MergeAtlas: an interactive infinite-canvas diagram of a pull request on localhost, with a card per changed file, a toggle that groups them into components, and cause-and-effect arrows that explain what changed and why. Use when the user asks to map, diagram or visualize a PR."
 ---
 
-A **map** lets a reviewer understand a PR from the canvas alone: the problem it solves, which components change, how they relate, what each one is and why it needs changing, and how a change in A reaches B through the code that connects them. The analysis is yours; `scripts/mergeatlas.py` (next to this file) fetches the PR, lists the candidates for reach, checks the map, and publishes it.
+A **map** lets a reviewer understand a PR from the canvas alone: the problem it solves, which files change, how they relate, what each one is and why it needs changing, and how a change in A reaches B through the code that connects them. The analysis is yours; `scripts/mergeatlas.py` (next to this file) fetches the PR, runs the searches you choose for reach, checks the map, and publishes it.
 
 The reader is a skilled engineer asked to review a change that reaches further than its diff, in a project they don't know. A map gives them the context to do that review and ends at comprehension: it states what is there, and every judgement stays with them. So the map holds facts and their stakes, with no bug reports, no verdicts on whether the PR is right or meets its issue, and no advice on what to do next.
 
 ## Steps
 
-1. **Fetch.** From inside the PR's repository run `python3 <skill-dir>/scripts/mergeatlas.py fetch [number]`. With no number it uses the current branch's PR. It prints the map id, head commit, diff path, reach path, linked issues, possible tickets, and file list. Done when you have those. No PRs to map: tell the user and stop.
+1. **Fetch.** From inside the PR's repository run `python3 <skill-dir>/scripts/mergeatlas.py fetch [number]`. With no number it uses the current branch's PR. It prints the map id, head commit, diff path, co-change path, linked issues, possible tickets, and file list. Done when you have those. No PRs to map: tell the user and stop.
 
 2. **Read.** Read every linked issue and every ticket, following Tickets below, then the whole diff file, then open the surrounding source with `git show <head-commit>:<path>`. Done when you can state the problem in the issue's terms, every changed file is accounted for, and every link you plan to draw is confirmed in source: the caller, the import, the test that exercises it.
 
-3. **Sort the reach.** The reach file maps each changed file to the unchanged files that use its names or read the fields it writes, with the matching lines. It holds candidates, so most will turn out unaffected. A matched line can mislead, so open the callers it leaves unclear. Done when every candidate of a `core` or `cleanup` card sits in `reaches` or `unaffected`, reasoned from what the changed code does and what that caller passes.
+3. **Search the reach.** Affected files sit outside the diff, so hunt for them as an engineer would. From inside the repository run `python3 <skill-dir>/scripts/mergeatlas.py search <map-id> "<term>"`, or add `--regex` or `--paths`. It searches every tracked text file at the head commit, or every file path, leaves out the PR's files, and logs the result. Search is case-sensitive and matches substrings, so choose terms for this language and project: names whose behaviour changed, fields and values the change writes, and keys, routes, columns and strings that link code without a shared name. Try their variations, such as another casing or a generated form. When a result shows a wrapper, alias or re-export, search for that name too. Open `<work-dir>/<map-id>.cochange.json`, which maps changed files to the unchanged files their past commits often touched, since it can reveal a link no term would. Done when every changed behaviour has been searched and the latest round found no new relevant file.
 
-4. **Write the map** as JSON to `<work-dir>/<map-id>.input.json`, following the rules below.
+4. **Sort the reach.** A match can mislead, so open the callers it leaves unclear. Done when every file from your searches, and every co-change file of a `core` or `cleanup` card, sits in `reaches` or `unaffected` on the card it relates to, reasoned from what the changed code does and what that file does with it. A search too broad to sort goes in `broad_searches` with its reason, after a narrower search has replaced it.
 
-5. **Publish.** From inside the repository, run `python3 <skill-dir>/scripts/mergeatlas.py publish <map-id>`. It rejects a map with problems and lists them; fix them and rerun. Done when it prints a URL.
+5. **Write the map** as JSON to `<work-dir>/<map-id>.input.json`, following the rules below.
 
-6. **Check.** Open the URL in the browser. Done when every card and arrow renders with no console errors, one card, one arrow and one story link open their modals, the Tree view shows the same cards in the map's order with each card's affected files under it, a branch collapses, a card with reach shows Also reaches, its affected files show on the map, a stack expands and collapses, the card's Affects opens that grid, the file arrows step through it, a card with several snippets steps through them with its arrows, and marking a card as reviewed survives a reload. Give the user the URL, and say which reasons are inferred rather than stated in the PR.
+6. **Publish.** From inside the repository, run `python3 <skill-dir>/scripts/mergeatlas.py publish <map-id>`. It rejects a map with problems and lists them; fix them and rerun. Done when it prints a URL.
+
+7. **Check.** Open the URL in the browser. Done when every card and arrow renders with no console errors, one card, one arrow and one story link open their modals, the Tree view shows the same cards in the map's order with each card's affected files under it, a branch collapses, a card with reach shows Also reaches and the searched terms, its affected files show on the map, a stack expands and collapses, the Files and Components toggle switches both views and keeps review marks, the card's Affects opens that grid, the file arrows step through it, a card with several snippets steps through them with its arrows, and marking a card as reviewed survives a reload. Give the user the URL, and say which reasons are inferred rather than stated in the PR.
 
 ## Tickets
 
@@ -39,17 +41,18 @@ Every map reads as a review of an open PR, whatever its state. The current behav
 
 - `background`: 1 to 3 sentences on what this area of the project does and how it works today, in plain words. Explain every project term the story depends on. Cover only what this change needs, and stop before any fault.
 - `problem`: 2 to 3 sentences on the situation before this PR, in the terms of the issue: what the user or system ran into and why it was wrong. It stops before any fix.
-- `solution`: 2 to 3 sentences that pick up where `problem` ends: what this PR introduces and how that resolves the problem. It names the main component, and it covers the problem's parts one by one. Link each statement to the card that did that part with `[words](card-id)`, so the story doubles as an index of the canvas. Every `core` card gets a link.
+- `solution`: 2 to 3 sentences that pick up where `problem` ends: what this PR introduces and how that resolves the problem. It names the main component, and it covers the problem's parts one by one. Link each statement to the card or component that did that part with `[words](id)`, so the story doubles as an index of the canvas. Every `core` card gets a link, directly or through its component.
 
 With no linked issue or ticket, build `problem` from the PR description and the code removed, and open it with "No linked issue:".
 
 ## Map rules
 
-**Cards** are components: a class, widget, module, screen, service, endpoint. Files of one component share a card. Mechanical files (goldens, generated code, renames) share one card. Aim for 4 to 12 cards. Every changed file sits in exactly one card.
+**Cards** are files: each changed file gets its own card, and a `core` or `cleanup` card holds exactly one. Mechanical files (goldens, generated code, renames) share one card. Every changed file sits in exactly one card.
 
-A card tells a reviewer who has never seen the component why it is in this PR, in one or two sentences per field:
+A card tells a reviewer who has never seen the file why it is in this PR, in one or two sentences per field:
 
-- `summary`: what the component does in the app.
+- `title`: the name of what the file holds, such as a class, widget, module, screen, service or endpoint. The Components view lists it under the component; a one-file card shows its file name instead.
+- `summary`: what the file does in the app.
 - `problem`: what it does today, why that is a problem, and the outcome for the user or the system. Required on `core` cards.
 - `change`: what this PR changes, with its cause: "X goes away because Y".
 - `fix`: how the change removes the outcome in `problem`.
@@ -64,7 +67,9 @@ Card `kind`:
 - `docs`: documentation
 - `config`: build, CI, dependency, or configuration changes
 
-**Arrows** run from the component whose change causes an effect to the component affected. Draw an arrow only for a link you confirmed. Fewer meaningful arrows beat a web; a card may have none.
+**Components** group the cards for the viewer's Components toggle. A component is a class, widget, module, screen, service or endpoint that spans files. Aim for 4 to 12. Every card sits in exactly one component, and a card with no companions gets a component of its own. Each has an `id`, a `title`, a `summary` of what it does in the app, and its `cards`. The viewer builds everything else in that view from the cards and arrows.
+
+**Arrows** run from the card whose change causes an effect to the card affected. Draw an arrow only for a link you confirmed. Fewer meaningful arrows beat a web; a card may have none.
 
 An arrow shows the connection itself, then what travels along it:
 
@@ -81,14 +86,22 @@ Arrow `kind`:
 - `docs`: the target documents the source
 - `depends`: the target changed to keep working with the source
 
-**Reach.** `reaches` and `unaffected` tell the reviewer what this PR changes in files it never touches, on the card whose paths declare the code. The map draws each `reaches` path off its card, stacked when there are several. Publish rejects a `core` or `cleanup` card that leaves a candidate out of both.
+**Reach.** `reaches` and `unaffected` tell the reviewer what this PR changes in files it never touches, on the card whose paths declare the code. The map draws each `reaches` path off its card, stacked when there are several. Publish rejects a map that leaves a file from a kept search, or a co-change file of a `core` or `cleanup` card, out of both.
 
 - `reaches`: `paths` that behave differently, and an `effect` saying what changes for them, with a code link. Group paths that share one effect. Add any indirect user you confirm in source, such as a screen hosting a changed form.
 - `unaffected`: `paths` that behave as before, and the `reason`. A reason states the condition that keeps them out: a default they keep, a branch they skip. Group paths that share a reason.
 
 **Key lines.** `snippets` are the lines that deserve a reviewer's attention over the rest of the card, most important first. Give a card one snippet for each such place, so a large card gets several, each up to 12 lines. Plumbing, such as fields, constructors and wiring, stays out.
 
-A snippet's `why` is one sentence on what singles these lines out: what rests on them, where a mistake would surface, or what breaks far from here. The reviewer is a skilled engineer who reads the code themselves, so `why` adds what the code cannot show and leaves what the lines do to the code.
+A snippet's `why` explains these lines to someone who has never seen the project, in two to four sentences, in this order:
+
+1. The part of the problem they deal with, in the terms of the card's `problem` or the story.
+2. How they deal with it: the mechanism, with any behaviour of the language, framework or project it relies on.
+3. What happens without them, and how far that reaches. A small gap gets called small.
+
+For a test, the part is the behaviour it pins, and the last point is the failure it would catch. The reviewer reads the code themselves, so `why` gives the reasoning around the lines. Lines whose `why` cannot name a part of the problem stay out.
+
+Thin: "This covers the first render, before `componentDidUpdate` has run." Full: "The sync leaves one gap in #4689's mismatch, and this line closes it. React runs `componentDidUpdate` after updates but not on mount, and the default is false, so an editor opened dark would start out saying light. Seeding from `theme` makes the two agree from the start. The gap is small: without this line the sync corrects the value on the first update."
 
 Take each snippet's lines from one file's diff, in diff order, and copy only the lines that matter; publish adds the surrounding lines from the diff, dimmed, links each line to its place in Files changed, and rejects a line it cannot find.
 
@@ -104,14 +117,15 @@ Text fields take backticks for identifiers and `**bold**`; everything else is pl
 {
   "background": "What this area of the project does, in plain words",
   "problem": "The situation before this PR",
-  "solution": "What this PR introduces, with [statements linked](short-slug) to cards",
+  "solution": "What this PR introduces, with [statements linked](short-slug) to cards or components",
   "tickets": [{"key": "ENG-123", "title": "The ticket's title", "url": "https://linear.app/acme/issue/ENG-123"}],
+  "broad_searches": [{"term": "A logged term too broad to sort", "reason": "Why, and which search replaced it"}],
   "cards": [{
     "id": "short-slug",
     "kind": "core",
-    "title": "Component name",
-    "paths": ["every/file/of/this/component.dart"],
-    "summary": "One line: what this component does in the app",
+    "title": "What this file holds",
+    "paths": ["the/changed/file.dart"],
+    "summary": "One line: what this file does in the app",
     "bullets": ["2-3 short facts about the change"],
     "problem": "Today, why it is a problem, and the outcome",
     "change": "What this PR changes, and because of what",
@@ -119,6 +133,12 @@ Text fields take backticks for identifiers and `**bold**`; everything else is pl
     "snippets": [{"code": "Up to 12 diff lines, keeping + and - marks", "why": "What singles these lines out over the rest"}],
     "reaches": [{"paths": ["an/unchanged/caller.dart"], "effect": "What changes for it, with a [code link](path/to/file.dart#L20)"}],
     "unaffected": [{"paths": ["another/caller.dart"], "reason": "The condition that keeps it as before"}]
+  }],
+  "components": [{
+    "id": "component-slug",
+    "title": "Component name",
+    "summary": "One line: what this component does in the app",
+    "cards": ["short-slug"]
   }],
   "edges": [{
     "from": "card-id",

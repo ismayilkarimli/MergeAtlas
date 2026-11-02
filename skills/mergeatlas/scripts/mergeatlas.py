@@ -2,6 +2,8 @@
 """Mechanical half of the mergeatlas skill.
 
   mergeatlas.py fetch [number]   Fetch a PR into the work directory.
+  mergeatlas.py search <map-id> [--regex | --paths] <term>
+                                 Search the PR's head commit outside its changed files and log the result.
   mergeatlas.py publish <map-id> Validate <map-id>.input.json, write the map, serve it.
   mergeatlas.py serve            Run the viewer server; publish starts it when needed.
 """
@@ -13,6 +15,7 @@ import socket
 import subprocess
 import sys
 import urllib.request
+from collections import Counter
 from functools import lru_cache, partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -26,6 +29,7 @@ PORT = 8765
 KINDS = {"core", "cleanup", "test", "docs", "config"}
 EDGE_KINDS = {"enables", "replaces", "verifies", "docs", "depends"}
 CARD_FIELDS = ("id", "kind", "title", "paths", "summary", "bullets", "change")
+COMPONENT_FIELDS = ("id", "title", "summary", "cards")
 EDGE_FIELDS = ("from", "to", "kind", "label", "connection", "connection_code", "connection_at", "flow")
 CARD_TEXT = ("summary", "bullets", "problem", "change", "fix")
 EDGE_TEXT = ("connection", "flow", "effect")
@@ -34,24 +38,15 @@ LOCATION = r"([^)#\s]+)#L(\d+)(?:-L(\d+))?"
 CODE_LINK = re.compile(r"\[[^\]]+\]\(" + LOCATION + r"\)")
 FILE_HEADER = re.compile(r"diff --git a/.* b/(.*)$")
 HUNK_HEADER = re.compile(r"@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)$")
-DECLARATION = re.compile(
-    r"\b(?:class|mixin|enum|extension|typedef|interface|struct|type|def|func|function|trait|protocol|object"
-    r"|const|let|var|val)"
-    r"\s+([A-Za-z_]\w*)|([A-Za-z_]\w*)\s*(?:<[^>]*>)?\("
-)
-WRITTEN_FIELD = re.compile(r"\.([A-Za-z]\w*)\s*=(?![=>])|\b([A-Za-z]\w*):(?!:)\s*\S")
-COMMON_FIELD_USERS = 10
-COMMENT_STARTS = ("//", "/*", "#")
-QUOTED =re.compile(r"""'[^']*'|"[^"]*"|`[^`]*`""")
-LANGUAGE_FAMILIES = (
-    (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte"),
-    (".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp"),
-    (".java", ".kt", ".kts"),
-    (".swift", ".m", ".mm"),
-)
 REACH_KINDS = {"core", "cleanup"}
 SURROUNDING_LINES = 4
-TEST_PATH = re.compile(r"(^|/)(tests?|spec|__tests__)/|[._](test|spec)\.")
+SHOWN_FILES = 30
+SHOWN_MATCHES = 3
+COCHANGE_COMMITS = 200
+COCHANGE_LARGEST_COMMIT = 50
+COCHANGE_MIN_COMMITS = 3
+COCHANGE_MIN_SHARE = 0.3
+COCHANGE_FILES = 10
 TICKET_URLS = {
     "Jira": r"https://[\w-]+\.atlassian\.net/browse/[A-Z][A-Z0-9]+-\d+",
     "Linear": r"https://linear\.app/[\w-]+/issue/[A-Z0-9]+-\d+",
@@ -83,99 +78,28 @@ def text_only(diff):
     )
 
 
-def declared_name(line):
-    """Returns the name a top-level line declares, None for anything else."""
-    if not line[:1].strip() or line.startswith(COMMENT_STARTS):
-        return None
-    found = DECLARATION.search(line)
-    return found and (found.group(1) or found.group(2))
+def files_at(commit):
+    listed = subprocess.run(["git", "ls-tree", "-r", "-z", "--name-only", commit], check=True, capture_output=True, text=True)
+    return set(filter(None, listed.stdout.split("\0")))
 
 
-def changed_names(diff):
-    """Maps each file to the names it changes: a changed line belongs to the last declaration above it."""
-    names, path, in_hunk, declaration = {}, None, False, None
-    for line in diff.splitlines():
-        header, hunk = FILE_HEADER.match(line), HUNK_HEADER.match(line)
-        if header:
-            path, in_hunk = header.group(1), False
-            continue
-        if TEST_PATH.search(path or ""):
-            continue
-        if hunk:
-            in_hunk, declaration = True, declared_name(hunk.group(3))
-        elif in_hunk and line[:1] in (" ", "+", "-"):
-            declaration = declared_name(line[1:]) or declaration
-            if line[0] != " " and declaration:
-                names.setdefault(path, set()).add(declaration)
-    return names
-
-
-def is_comment(line):
-    return line.lstrip().startswith((*COMMENT_STARTS, "*"))
-
-
-def written_fields(diff):
-    """Maps each file to the fields its changed lines write, which reach readers no declaration names."""
-    fields, path = {}, None
-    for line in diff.splitlines():
-        header = FILE_HEADER.match(line)
-        if header:
-            path = header.group(1)
-        elif not TEST_PATH.search(path or "") and line[:1] in ("+", "-") and not line.startswith(("+++", "---")):
-            if not is_comment(line[1:]):
-                found = WRITTEN_FIELD.findall(QUOTED.sub("", line[1:]))
-                fields.setdefault(path, set()).update(name for pair in found for name in pair if name)
-    return fields
-
-
-def public_names(path, names, commit):
-    """Changes inside a private declaration reach users through the file's public names."""
-    public = {name for name in names if not name.startswith("_")}
-    if len(public) == len(names):
-        return public
-    source = subprocess.run(["git", "show", f"{commit}:{path}"], capture_output=True, text=True, errors="replace")
-    declared = {declared_name(line) for line in source.stdout.splitlines()}
-    return public | {name for name in declared if name and not name.startswith("_")}
-
-
-def same_language(path):
-    """Returns pathspecs for the file's language, whose extensions often mix within one project."""
-    suffix = Path(path).suffix
-    family = next((f for f in LANGUAGE_FAMILIES if suffix in f), (suffix,))
-    return [f"*{s}" for s in family]
-
-
-def uses_of(name, path, commit, changed):
-    """Maps the unchanged files of the path's language that use the name to their matching lines."""
-    uses = {}
-    search = ["git", "grep", "-n", "-w", "-F", "-e", name, commit, "--", *same_language(path)]
-    for match in subprocess.run(search, capture_output=True, text=True, errors="replace").stdout.splitlines():
-        _, user, line, text = match.split(":", 3)
-        if user not in changed and not is_comment(text) and re.search(rf"\b{re.escape(name)}\b", QUOTED.sub("", text)):
-            uses.setdefault(user, []).append({"name": name, "line": int(line), "text": text.strip()[:160]})
-    return uses
-
-
-def member_reads(uses, name):
-    """Keeps the non-test uses that reach the name through an object, since a bare name is likely an unrelated local."""
-    read = re.compile(rf"\.{re.escape(name)}\b")
-    found = {user: [hit for hit in hits if read.search(hit["text"])] for user, hits in uses.items()}
-    return {user: hits for user, hits in found.items() if hits and not TEST_PATH.search(user)}
-
-
-def users_of(names, fields, commit, changed):
-    """Maps each changed file to the unchanged files that use its names or read the fields it writes."""
-    users = {}
-    for path in names.keys() | fields.keys():
-        declared = public_names(path, names.get(path, set()), commit)
-        searches = [uses_of(name, path, commit, changed) for name in sorted(declared)]
-        written = sorted(fields.get(path, set()) - declared)
-        field_uses = [member_reads(uses_of(name, path, commit, changed), name) for name in written]
-        searches += [uses for uses in field_uses if len(uses) <= COMMON_FIELD_USERS]
-        for uses in searches:
-            for user, hits in uses.items():
-                users.setdefault(path, {}).setdefault(user, []).extend(hits)
-    return users
+def co_changes(changed, commit):
+    """Maps each changed file to the unchanged files its past commits often touched too."""
+    existing, found = files_at(commit) - changed, {}
+    for path in sorted(changed):
+        log = subprocess.run(
+            ["git", "log", "-n", str(COCHANGE_COMMITS), "--format=%x00", "--name-only", "--no-renames", "--full-diff",
+             commit, "--", path],
+            capture_output=True, text=True, errors="replace",
+        ).stdout
+        commits = [set(filter(None, c.split("\n"))) for c in log.split("\0")[1:]]
+        commits = [c for c in commits if len(c) <= COCHANGE_LARGEST_COMMIT]
+        counts = Counter(file for c in commits for file in c & existing)
+        together = {file: n for file, n in counts.most_common(COCHANGE_FILES)
+                    if n >= COCHANGE_MIN_COMMITS and n / len(commits) >= COCHANGE_MIN_SHARE}
+        if together:
+            found[path] = together
+    return found
 
 
 def ticket_refs(title, body, branch):
@@ -200,16 +124,16 @@ def fetch(number):
     diff_path.write_text(text_only(gh("pr", "diff", str(pr["number"]), "--repo", repo)))
     subprocess.run(["git", "fetch", "origin", f"pull/{pr['number']}/head"], check=True, capture_output=True)
     changed = {f["path"] for f in pr["files"]}
-    diff = diff_path.read_text()
-    users = users_of(changed_names(diff), written_fields(diff), pr["headRefOid"], changed)
-    reach_path = WORK / f"{map_id}.reach.json"
-    reach_path.write_text(json.dumps(users, indent=2))
+    together = co_changes(changed, pr["headRefOid"])
+    cochange_path = WORK / f"{map_id}.cochange.json"
+    cochange_path.write_text(json.dumps(together, indent=2))
+    (WORK / f"{map_id}.searches.json").write_text("[]")
     (WORK / f"{map_id}.pr.json").write_text(json.dumps(pr))
     print(f"map id:      {map_id}")
     print(f"work dir:    {WORK}")
     print(f"head commit: {pr['headRefOid']}")
     print(f"diff:        {diff_path} ({len(diff_path.read_text().splitlines())} lines, binary files omitted)")
-    print(f"reach:       {reach_path} ({len({u for file in users.values() for u in file})} unchanged files use changed names or fields)")
+    print(f"co-changes:  {cochange_path} ({len({u for file in together.values() for u in file})} unchanged files often change with these)")
     print(f"title:       {pr['title']}")
     print(f"description: {pr['body'] or '(none)'}")
     for issue in pr["issues"]:
@@ -221,6 +145,44 @@ def fetch(number):
     print(f"files ({len(pr['files'])}):")
     for f in pr["files"]:
         print(f"  +{f['additions']} -{f['deletions']} {f['path']}")
+
+
+def matches_of(term, regex, commit):
+    """Maps the files holding the term to their matching lines."""
+    found = subprocess.run(
+        ["git", "grep", "-n", "-I", "--null", "-E" if regex else "-F", "-e", term, commit],
+        capture_output=True, text=True, errors="replace",
+    )
+    if found.returncode > 1:
+        sys.exit(found.stderr)
+    matches = {}
+    for match in filter(None, found.stdout.split("\n")):
+        location, line, text = match.split("\0", 2)
+        matches.setdefault(location.split(":", 1)[1], []).append(f"{line}: {text.strip()[:160]}")
+    return matches
+
+
+def search(map_id, term, mode):
+    pr = json.loads((WORK / f"{map_id}.pr.json").read_text())
+    commit, changed = pr["headRefOid"], {f["path"] for f in pr["files"]}
+    if mode == "paths":
+        matches = {path: [] for path in files_at(commit) if term in path}
+    else:
+        matches = matches_of(term, mode == "regex", commit)
+    matches = {path: lines for path, lines in sorted(matches.items()) if path not in changed}
+    log_path = WORK / f"{map_id}.searches.json"
+    log = [s for s in json.loads(log_path.read_text()) if (s["term"], s["mode"]) != (term, mode)]
+    log.append({"term": term, "mode": mode, "files": list(matches)})
+    log_path.write_text(json.dumps(log, indent=2))
+    print(f"{len(matches)} unchanged files match {term!r}")
+    for path, lines in list(matches.items())[:SHOWN_FILES]:
+        print(path)
+        for line in lines[:SHOWN_MATCHES]:
+            print(f"  {line}")
+        if len(lines) > SHOWN_MATCHES:
+            print(f"  ... {len(lines) - SHOWN_MATCHES} more")
+    if len(matches) > SHOWN_FILES:
+        print(f"... {len(matches) - SHOWN_FILES} more files")
 
 
 def source_at(commit):
@@ -303,12 +265,22 @@ def fingerprint(card, rows):
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def candidates_of(card, users):
-    return {user for path in card["paths"] for user in users.get(path, {})}
+def candidates_in(searches, broad, together):
+    """Maps each file a kept search or past commits surfaced to where it came from."""
+    dropped = {entry.get("term") for entry in broad}
+    sources = {}
+    for s in searches:
+        if s["term"] not in dropped:
+            for path in s["files"]:
+                sources.setdefault(path, f"search {s['term']!r}")
+    for files in together.values():
+        for path in files:
+            sources.setdefault(path, "co-change")
+    return sources
 
 
-def problems_in(data, stats, read, rows, users):
-    found, seen, ids = [], set(), set()
+def problems_in(data, stats, read, rows, searches, together):
+    found, seen, ids, accounted = [], set(), set(), set()
     for ticket in data.get("tickets", []):
         if not (ticket.get("key") and ticket.get("title")):
             found.append(f"ticket {ticket}: needs key and title")
@@ -329,6 +301,8 @@ def problems_in(data, stats, read, rows, users):
                 found.append(f"card {name}: snippet {number} has no why")
             if not key_lines(c, snippet.get("code", ""), rows):
                 found.append(f"card {name}: snippet {number} is not in the diff of one of its files, in order")
+        if c.get("kind") in REACH_KINDS and len(c.get("paths", [])) > 1:
+            found.append(f"card {name}: a {c['kind']} card holds one file")
         if c.get("kind") == "core" and not c.get("problem"):
             found.append(f"card {name}: missing problem")
         check_links(f"card {name}", c, CARD_TEXT)
@@ -338,10 +312,9 @@ def problems_in(data, stats, read, rows, users):
             if not CODE_LINK.search(entry.get("effect", "")):
                 found.append(f"card {name}: a reaches entry has no code link in its effect")
         found += [f"card {name}: an unaffected entry has no reason" for entry in unaffected if not entry.get("reason")]
-        accounted = {p for entry in reaches + unaffected for p in entry.get("paths", [])}
-        found += [f"card {name}: no such file {p}" for p in sorted(accounted) if read(p) is None]
-        if c.get("kind") in REACH_KINDS:
-            found += [f"card {name}: not accounted for: {p}" for p in sorted(candidates_of(c, users) - accounted)]
+        listed = {p for entry in reaches + unaffected for p in entry.get("paths", [])}
+        found += [f"card {name}: no such file {p}" for p in sorted(listed) if read(p) is None]
+        accounted |= listed
         if not CODE_LINK.search(c.get("change", "")):
             found.append(f"card {name}: change has no code link")
         if c.get("kind") not in KINDS:
@@ -356,6 +329,30 @@ def problems_in(data, stats, read, rows, users):
                 found.append(f"card {name}: {p} is already in another card")
             seen.add(p)
     found += [f"no card holds {p}" for p in sorted(set(stats) - seen)]
+    broad = data.get("broad_searches", [])
+    logged = {s["term"] for s in searches}
+    if not searches and any(c.get("kind") in REACH_KINDS for c in data.get("cards", [])):
+        found.append("no searches logged: run search for what this PR changes")
+    found += [f"broad search {e.get('term')!r}: not in the search log" for e in broad if e.get("term") not in logged]
+    found += [f"broad search {e.get('term')!r}: no reason" for e in broad if not e.get("reason")]
+    reach_paths = {p for c in data.get("cards", []) if c.get("kind") in REACH_KINDS for p in c.get("paths", [])}
+    sources = candidates_in(searches, broad, {path: files for path, files in together.items() if path in reach_paths})
+    found += [f"not accounted for: {p} (from {sources[p]})" for p in sorted(sources.keys() - accounted)]
+    grouped, component_ids, component_of = set(), set(), {}
+    for g in data.get("components", []):
+        name = g.get("id", "?")
+        found += [f"component {name}: missing {k}" for k in COMPONENT_FIELDS if not g.get(k)]
+        if name in ids or name in component_ids:
+            found.append(f"component {name}: duplicate id")
+        component_ids.add(name)
+        for card in g.get("cards", []):
+            if card not in ids:
+                found.append(f"component {name}: no card {card}")
+            if card in grouped:
+                found.append(f"component {name}: {card} is already in another component")
+            grouped.add(card)
+            component_of[card] = name
+    found += [f"no component holds card {i}" for i in sorted(ids - grouped)]
     for e in data.get("edges", []):
         name = f"{e.get('from')} -> {e.get('to')}"
         found += [f"arrow {name}: missing {k}" for k in EDGE_FIELDS if not e.get(k)]
@@ -377,9 +374,9 @@ def problems_in(data, stats, read, rows, users):
                       for l in e.get("connection_code", "").splitlines() if l.strip() not in source]
     found += [f"missing {k}" for k in ("background", "problem", "solution") if not data.get(k)]
     linked = set(CARD_LINK.findall(data.get("solution", "")))
-    found += [f"solution links to unknown card {i}" for i in sorted(linked - ids)]
+    found += [f"solution links to unknown card {i}" for i in sorted(linked - ids - component_ids)]
     found += [f"solution has no link to core card {c['id']}" for c in data.get("cards", [])
-              if c.get("kind") == "core" and c.get("id") not in linked]
+              if c.get("kind") == "core" and not linked & {c.get("id"), component_of.get(c.get("id"))}]
     return found
 
 
@@ -418,8 +415,9 @@ def publish(map_id):
     stats = {f["path"]: (f["additions"], f["deletions"]) for f in pr["files"]}
     read = source_at(pr["headRefOid"])
     rows = diff_rows((WORK / f"{map_id}.diff").read_text())
-    users = json.loads((WORK / f"{map_id}.reach.json").read_text())
-    problems = problems_in(data, stats, read, rows, users)
+    searches = json.loads((WORK / f"{map_id}.searches.json").read_text())
+    together = json.loads((WORK / f"{map_id}.cochange.json").read_text())
+    problems = problems_in(data, stats, read, rows, searches, together)
     if problems:
         sys.exit("Map rejected:\n" + "\n".join(f"  {p}" for p in problems))
     for c in data["cards"]:
@@ -429,9 +427,10 @@ def publish(map_id):
         for snippet in c.get("snippets", []):
             snippet["lines"] = key_lines(c, snippet.pop("code"), rows)
         if c.get("kind") in REACH_KINDS:
-            c["checked"] = len(candidates_of(c, users))
+            c["checked"] = len({p for entry in c.get("reaches", []) + c.get("unaffected", []) for p in entry["paths"]})
     for i, e in enumerate(data["edges"]):
         e["id"] = f"e{i + 1}"
+    broad_reasons = {e["term"]: e["reason"] for e in data.get("broad_searches", [])}
     output = {
         "pr": {
             "number": pr["number"], "title": pr["title"], "state": pr["state"].lower(), "files": len(stats),
@@ -447,12 +446,17 @@ def publish(map_id):
         },
         "cards": data["cards"],
         "edges": data["edges"],
+        "components": data["components"],
+        "searches": [
+            {"term": s["term"], "mode": s["mode"], "files": len(s["files"]), "broad": broad_reasons.get(s["term"])}
+            for s in searches
+        ],
     }
     DATA.mkdir(parents=True, exist_ok=True)
     (DATA / f"{map_id}.json").write_text(json.dumps(output, indent=2))
     shutil.copy(VIEWER, HOME / "index.html")
     serve()
-    print(f"{len(data['cards'])} cards, {len(data['edges'])} arrows")
+    print(f"{len(data['cards'])} cards, {len(data['components'])} components, {len(data['edges'])} arrows")
     print(f"http://127.0.0.1:{PORT}/?map={map_id}")
 
 
@@ -460,6 +464,8 @@ def main():
     command, args = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else ("", [])
     if command == "fetch" and len(args) <= 1:
         fetch(args)
+    elif command == "search" and len(args) in (2, 3) and args[1:-1] in ([], ["--regex"], ["--paths"]):
+        search(args[0], args[-1], args[1].removeprefix("--") if len(args) == 3 else "text")
     elif command == "publish" and len(args) == 1:
         publish(args[0])
     elif command == "serve" and not args:
