@@ -133,12 +133,9 @@
   .item[data-review="done"] strong::before, .card[data-review="done"] h3::before { content: '✓ '; color: var(--add); }
   .item[data-review="done"], .card[data-review="done"] { opacity: .6; }
   .item[data-review="changed"] strong::after, .card[data-review="changed"] h3::after { content: ' · changed'; color: var(--del); font-size: 12px; font-weight: 600; }
-  .changes-head { position: sticky; top: -22px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding: 12px 0 8px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .changes-head { position: sticky; top: -22px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0 8px; background: var(--card); border-bottom: 1px solid var(--line); }
   .sheet .changes-head h4 { margin: 0; }
-  .sheet .change h3 { margin: 14px 0 0; font-size: 16px; line-height: 1.35; }
-  .terms { margin: 6px 0 0; }
-  .terms dt { font-weight: 600; margin-top: 8px; }
-  .terms dd { margin: 2px 0 0; }
+  .changes { margin-top: 18px; padding: 0 16px 14px; border: 1px solid var(--line); border-radius: 12px; }
   .file-pager { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin: 0 28px 14px 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
   .file-pager button { display: flex; align-items: center; gap: 4px; min-width: 0; min-height: 30px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg); color: var(--ink); font: inherit; cursor: pointer; }
   .file-pager button:hover { border-color: var(--muted); }
@@ -784,9 +781,8 @@ function changesHtml(changes) {
   return `<div class="changes">
     <div class="changes-head"><h4>${changes.length > 1 ? 'Changes' : 'The change'}</h4>${steps}</div>
     ${changes.map((c, i) => `<div class="change"${i ? ' hidden' : ''}>
-      <h3>${esc(c.title)}</h3>
       ${c.file ? `<div class="path">${esc(c.file)}</div>` : ''}
-      ${section('The problem here', c.problem)}
+      ${section('The problem', c.problem)}
       ${section('What changes', c.change)}
       ${c.snippets.length ? `<h4>Key lines</h4>${c.snippets.map(snippetHtml).join('')}` : ''}
       ${section('Why this fixes it', c.result)}
@@ -801,9 +797,8 @@ function stepChange(button) {
   box.querySelector('[data-step="-1"]').disabled = at === 0;
   box.querySelector('[data-step="1"]').disabled = at === all.length - 1;
   const sheet = box.closest('#modal'), head = box.querySelector('.changes-head').getBoundingClientRect();
-  sheet.scrollTop += all[at].getBoundingClientRect().top - head.bottom - 14;
+  sheet.scrollTop += all[at].getBoundingClientRect().top - head.bottom - 18;
 }
-const termsHtml = terms => terms?.length ? `<h4>Terms</h4><dl class="terms">${terms.map(t => `<dt>${fmt(t.term)}</dt><dd>${fmt(t.meaning)}</dd>`).join('')}</dl>` : '';
 function reachHtml(c) {
   const reaches = c.reaches ?? [], unaffected = c.unaffected ?? [];
   if (!reaches.length && !unaffected.length) return '';
@@ -816,7 +811,7 @@ function reachHtml(c) {
   const skipped = unaffected.reduce((sum, u) => sum + u.paths.length, 0);
   return `
     <h4>Also reaches</h4>
-    <p class="reach-count">Affected: ${affected} of ${c.checked} ${c.checked === 1 ? 'file' : 'files'} outside this PR</p>
+    <p class="reach-count">All of this ${c.files ? 'component' : 'file'}'s changes together affect ${affected} of ${c.checked} ${c.checked === 1 ? 'file' : 'files'} outside this PR</p>
     ${reaches.map(r => item(r.paths, r.effect)).join('')}
     ${skipped ? `<details class="reach"><summary>${skipped} unaffected</summary>${unaffected.map(u => item(u.paths, u.reason)).join('')}</details>` : ''}
     ${searchesHtml()}
@@ -839,7 +834,7 @@ function cardHtml(c) {
     <div class="path">${c.paths.map(p => codeLink(p, esc(p))).join('<br>')}</div>
     ${reviewButton(c)}
     ${section('What it is', c.summary)}
-    ${c.files ? filesHtml(c) : `${section('The problem', c.problem)}${termsHtml(c.terms)}`}
+    ${c.files ? filesHtml(c) : ''}
     ${changesHtml(c.changes)}
     ${reachHtml(c)}
     ${out.length || grid ? `<h4>Affects</h4><div class="links">${out.map(e => link(e, '→', e.to)).join('')}${gridLink}</div>` : ''}
@@ -849,7 +844,7 @@ function filesHtml(c) {
   const inside = VIEWS.files.edges.filter(e => componentOf[e.from] === c.id && componentOf[e.to] === c.id);
   return `<h4>Its files</h4>
     ${c.files.map(f => `<div class="part"><div class="links"><button data-card="${f.id}">${esc(f.title)}</button></div>
-      ${f.problem ? `<p>${fmt(f.problem)}</p>` : ''}</div>`).join('')}
+      <p>${fmt(f.summary)}</p></div>`).join('')}
     ${inside.length ? `<h4>Between its files</h4><div class="links">${inside.map(e => `<button data-edge="${e.id}">${esc(e.label)}</button>`).join('')}</div>` : ''}`;
 }
 function edgeHtml(e) {

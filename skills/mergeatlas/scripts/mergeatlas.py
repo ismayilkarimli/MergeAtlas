@@ -33,7 +33,7 @@ EDGE_KINDS = {"enables", "replaces", "verifies", "docs", "depends"}
 CARD_FIELDS = ("id", "kind", "title", "paths", "summary", "bullets", "changes")
 COMPONENT_FIELDS = ("id", "title", "summary", "cards")
 EDGE_FIELDS = ("from", "to", "kind", "label", "connection", "connection_code", "connection_at", "flow")
-CARD_TEXT = ("summary", "bullets", "problem")
+CARD_TEXT = ("summary", "bullets")
 CHANGE_TEXT = ("problem", "change", "result")
 EDGE_TEXT = ("connection", "flow", "effect")
 CARD_LINK = re.compile(r"\[[^\]]+\]\(([\w-]+)\)")
@@ -317,34 +317,30 @@ def problems_in(data, stats, read, rows, searches, together):
         name = c.get("id", "?")
         found += [f"card {name}: missing {k}" for k in CARD_FIELDS if not c.get(k)]
         shown = {}
+        has_lines = any(rows.get(path) for path in c.get("paths", []))
         for number, change in enumerate(c.get("changes", []), 1):
             where = f"card {name} change {number}"
-            found += [f"{where}: missing {k}" for k in ("title", "change") if not change.get(k)]
+            found += [f"{where}: missing {k}" for k in CHANGE_TEXT if not change.get(k)]
             check_links(where, change, CHANGE_TEXT)
             for field in CHANGE_TEXT:
                 found += open_whys(f"{where} {field}", change.get(field) or "")
             if not CODE_LINK.search(change.get("change", "")):
                 found.append(f"{where}: change has no code link")
-            if c.get("kind") == "core" and not change.get("result"):
-                found.append(f"{where}: missing result")
+            if has_lines and not change.get("snippets"):
+                found.append(f"{where}: has no key lines")
             for code in change.get("snippets", []):
                 shown.setdefault(code, []).append(change)
                 if not key_lines(c, code, rows):
                     found.append(f"{where}: a snippet is not in the diff of one of its files, in order")
+                if not any(line.startswith(("+", "-")) for line in code.splitlines()):
+                    found.append(f"{where}: its key lines change nothing, so this is no change of this PR")
         for code, changes in shown.items():
-            if len(changes) > 1 and len({change.get("problem") for change in changes}) < len(changes):
-                found.append(f"card {name}: changes {[change.get('title') for change in changes]} share lines, so each states its own problem")
-        for term in c.get("terms", []):
-            found += [f"card {name}: a term needs term and meaning" for k in ("term", "meaning") if not term.get(k)]
-            check_links(f"card {name} term", term, ("meaning",))
-            found += open_whys(f"card {name} term", term.get("meaning", ""))
+            if len({change.get("problem") for change in changes}) < len(changes):
+                found.append(f"card {name}: changes {[number for number, change in enumerate(c['changes'], 1) if change in changes]} share lines, so each states its own problem")
         if c.get("kind") in REACH_KINDS and len(c.get("paths", [])) > 1:
             found.append(f"card {name}: a {c['kind']} card holds one file")
-        if c.get("kind") == "core" and not c.get("problem"):
-            found.append(f"card {name}: missing problem")
         check_links(f"card {name}", c, CARD_TEXT)
-        for field in ("summary", "problem"):
-            found += open_whys(f"card {name} {field}", c.get(field) or "")
+        found += open_whys(f"card {name} summary", c.get("summary") or "")
         reaches, unaffected = c.get("reaches", []), c.get("unaffected", [])
         for entry in reaches:
             check_links(f"card {name}", entry, ("effect",))
@@ -443,16 +439,11 @@ def card_text(map_id, card_id):
         sys.exit(f"no card {card_id}: choose from story, {', '.join(cards)}")
     c = cards[card_id]
     print(f"# {', '.join(c['paths'])}")
-    for field in ("summary", "problem"):
-        if c.get(field):
-            print(f"\n{field}: {plain(c[field])}")
-    for term in c.get("terms", []):
-        print(f"\nterm {term['term']}: {plain(term['meaning'])}")
+    print(f"\nsummary: {plain(c['summary'])}")
     for number, change in enumerate(c["changes"], 1):
-        print(f"\nchange {number}: {change['title']}")
+        print(f"\nchange {number}")
         for field in CHANGE_TEXT:
-            if change.get(field):
-                print(f"{field}: {plain(change[field])}")
+            print(f"{field}: {plain(change[field])}")
         for code in change.get("snippets", []):
             print(f"key lines:\n{code}")
     for r in c.get("reaches", []):
