@@ -39,8 +39,10 @@ DECLARATION = re.compile(
     r"|const|let|var|val)"
     r"\s+([A-Za-z_]\w*)|([A-Za-z_]\w*)\s*(?:<[^>]*>)?\("
 )
+WRITTEN_FIELD = re.compile(r"\.([A-Za-z]\w*)\s*=(?![=>])|\b([A-Za-z]\w*):(?!:)\s*\S")
+COMMON_FIELD_USERS = 10
 COMMENT_STARTS = ("//", "/*", "#")
-QUOTED = re.compile(r"""'[^']*'|"[^"]*"|`[^`]*`""")
+QUOTED =re.compile(r"""'[^']*'|"[^"]*"|`[^`]*`""")
 LANGUAGE_FAMILIES = (
     (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte"),
     (".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp"),
@@ -108,6 +110,24 @@ def changed_names(diff):
     return names
 
 
+def is_comment(line):
+    return line.lstrip().startswith((*COMMENT_STARTS, "*"))
+
+
+def written_fields(diff):
+    """Maps each file to the fields its changed lines write, which reach readers no declaration names."""
+    fields, path = {}, None
+    for line in diff.splitlines():
+        header = FILE_HEADER.match(line)
+        if header:
+            path = header.group(1)
+        elif not TEST_PATH.search(path or "") and line[:1] in ("+", "-") and not line.startswith(("+++", "---")):
+            if not is_comment(line[1:]):
+                found = WRITTEN_FIELD.findall(QUOTED.sub("", line[1:]))
+                fields.setdefault(path, set()).update(name for pair in found for name in pair if name)
+    return fields
+
+
 def public_names(path, names, commit):
     """Changes inside a private declaration reach users through the file's public names."""
     public = {name for name in names if not name.startswith("_")}
@@ -125,18 +145,36 @@ def same_language(path):
     return [f"*{s}" for s in family]
 
 
-def users_of(names, commit, changed):
-    """Maps each changed file to the unchanged files of its language that use its names."""
+def uses_of(name, path, commit, changed):
+    """Maps the unchanged files of the path's language that use the name to their matching lines."""
+    uses = {}
+    search = ["git", "grep", "-n", "-w", "-F", "-e", name, commit, "--", *same_language(path)]
+    for match in subprocess.run(search, capture_output=True, text=True, errors="replace").stdout.splitlines():
+        _, user, line, text = match.split(":", 3)
+        if user not in changed and not is_comment(text) and re.search(rf"\b{re.escape(name)}\b", QUOTED.sub("", text)):
+            uses.setdefault(user, []).append({"name": name, "line": int(line), "text": text.strip()[:160]})
+    return uses
+
+
+def member_reads(uses, name):
+    """Keeps the non-test uses that reach the name through an object, since a bare name is likely an unrelated local."""
+    read = re.compile(rf"\.{re.escape(name)}\b")
+    found = {user: [hit for hit in hits if read.search(hit["text"])] for user, hits in uses.items()}
+    return {user: hits for user, hits in found.items() if hits and not TEST_PATH.search(user)}
+
+
+def users_of(names, fields, commit, changed):
+    """Maps each changed file to the unchanged files that use its names or read the fields it writes."""
     users = {}
-    for path, file_names in names.items():
-        for name in sorted(public_names(path, file_names, commit)):
-            search = ["git", "grep", "-n", "-w", "-F", "-e", name, commit, "--", *same_language(path)]
-            for match in subprocess.run(search, capture_output=True, text=True, errors="replace").stdout.splitlines():
-                _, user, line, text = match.split(":", 3)
-                is_comment = text.lstrip().startswith((*COMMENT_STARTS, "*"))
-                if user not in changed and not is_comment and re.search(rf"\b{re.escape(name)}\b", QUOTED.sub("", text)):
-                    hits = users.setdefault(path, {}).setdefault(user, [])
-                    hits.append({"name": name, "line": int(line), "text": text.strip()[:160]})
+    for path in names.keys() | fields.keys():
+        declared = public_names(path, names.get(path, set()), commit)
+        searches = [uses_of(name, path, commit, changed) for name in sorted(declared)]
+        written = sorted(fields.get(path, set()) - declared)
+        field_uses = [member_reads(uses_of(name, path, commit, changed), name) for name in written]
+        searches += [uses for uses in field_uses if len(uses) <= COMMON_FIELD_USERS]
+        for uses in searches:
+            for user, hits in uses.items():
+                users.setdefault(path, {}).setdefault(user, []).extend(hits)
     return users
 
 
@@ -162,7 +200,8 @@ def fetch(number):
     diff_path.write_text(text_only(gh("pr", "diff", str(pr["number"]), "--repo", repo)))
     subprocess.run(["git", "fetch", "origin", f"pull/{pr['number']}/head"], check=True, capture_output=True)
     changed = {f["path"] for f in pr["files"]}
-    users = users_of(changed_names(diff_path.read_text()), pr["headRefOid"], changed)
+    diff = diff_path.read_text()
+    users = users_of(changed_names(diff), written_fields(diff), pr["headRefOid"], changed)
     reach_path = WORK / f"{map_id}.reach.json"
     reach_path.write_text(json.dumps(users, indent=2))
     (WORK / f"{map_id}.pr.json").write_text(json.dumps(pr))
@@ -170,7 +209,7 @@ def fetch(number):
     print(f"work dir:    {WORK}")
     print(f"head commit: {pr['headRefOid']}")
     print(f"diff:        {diff_path} ({len(diff_path.read_text().splitlines())} lines, binary files omitted)")
-    print(f"reach:       {reach_path} ({len({u for file in users.values() for u in file})} unchanged files use changed names)")
+    print(f"reach:       {reach_path} ({len({u for file in users.values() for u in file})} unchanged files use changed names or fields)")
     print(f"title:       {pr['title']}")
     print(f"description: {pr['body'] or '(none)'}")
     for issue in pr["issues"]:

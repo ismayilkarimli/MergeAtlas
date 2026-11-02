@@ -13,7 +13,7 @@ The reader is a skilled engineer asked to review a change that reaches further t
 
 2. **Read.** Read every linked issue and every ticket, following Tickets below, then the whole diff file, then open the surrounding source with `git show <head-commit>:<path>`. Done when you can state the problem in the issue's terms, every changed file is accounted for, and every link you plan to draw is confirmed in source: the caller, the import, the test that exercises it.
 
-3. **Sort the reach.** The reach file maps each changed file to the unchanged files that use its names, with the matching lines. It holds candidates, so most will turn out unaffected. A matched line can mislead, so open the callers it leaves unclear. Done when every candidate of a `core` or `cleanup` card sits in `reaches` or `unaffected`, reasoned from what the changed code does and what that caller passes.
+3. **Sort the reach.** The reach file maps each changed file to the unchanged files that use its names or read the fields it writes, with the matching lines. It holds candidates, so most will turn out unaffected. A matched line can mislead, so open the callers it leaves unclear. Done when every candidate of a `core` or `cleanup` card sits in `reaches` or `unaffected`, reasoned from what the changed code does and what that caller passes.
 
 4. **Write the map** as JSON to `<work-dir>/<map-id>.input.json`, following the rules below.
 
