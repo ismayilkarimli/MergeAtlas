@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MergeAtlas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="MergeAtlas turns a pull request into a map of what changed, why, and what it reaches.">
+<link rel="icon" href="assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Hanken+Grotesk:wght@400;500;700&family=Martian+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one long instrument. The hero is the review itself; everything after it is quiet proof and install. */
+:root {
+  --bg: #edf5ec; --panel: #f9fcf6; --panel2: #e2eee2; --ink: #06291d; --muted: #466a5a; --line: #bdd6c6;
+  --green: #067f52; --blue: #1259c4; --orange: #a85f00; --del: #bb3226;
+  --add-bg: #d3f0dd; --del-bg: #fbdfd9; --flood: #03100b; --flood-ink: #fbf6e4; --cream: #fbf6e4;
+  --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --body: "Hanken Grotesk", system-ui, sans-serif;
+  --mono: "Martian Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #04130e; --panel: #081f18; --panel2: #0c2c22; --ink: #fbf6e4; --muted: #93b8a7; --line: #1a4a3b;
+  --green: #18dc8d; --blue: #6aa6ff; --orange: #ffb238; --del: #ff7a6b;
+  --add-bg: #0c3a29; --del-bg: #40191a; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #04130e; --panel: #081f18; --panel2: #0c2c22; --ink: #fbf6e4; --muted: #93b8a7; --line: #1a4a3b;
+  --green: #18dc8d; --blue: #6aa6ff; --orange: #ffb238; --del: #ff7a6b;
+  --add-bg: #0c3a29; --del-bg: #40191a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 17px/1.55 var(--body); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+a { color: var(--blue); }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+code, pre { font-family: var(--mono); }
+
+.nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 18px; }
+.brand { display: flex; align-items: center; gap: 10px; font: 800 26px/1 var(--display); letter-spacing: .01em; color: inherit; text-decoration: none; }
+.brand img { width: 40px; height: 40px; object-fit: contain; }
+.nav div { display: flex; align-items: center; gap: 16px; }
+.nav a.link { color: var(--ink); font-weight: 500; text-decoration: none; }
+.nav a.link:hover { text-decoration: underline; }
+.theme { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; font: 400 11px var(--mono); color: var(--muted); }
+
+.hero { padding-block: 4px 20px; display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 32px; align-items: end; }
+.hero h1 { margin: 0; font: 900 clamp(56px, 8vw, 104px)/.88 var(--display); letter-spacing: -.005em; }
+.hero p { margin: 0; max-width: 42ch; font-size: 18px; color: var(--muted); }
+
+/* The review */
+.stage { position: relative; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.steps { display: flex; gap: 3px; padding: 8px 12px; background: var(--panel2); align-items: center; }
+.steps i { flex: 1; height: 4px; background: var(--line); transition: background .3s; }
+.steps i.on { background: var(--del); }
+.stage.atlas .steps i.on { background: var(--green); }
+.skip { flex: none; margin-left: 10px; background: none; border: 0; padding: 0 2px; font: 400 11px var(--mono); color: var(--muted); text-decoration: underline; }
+.prbar { display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.prbar b { font-weight: 700; min-width: 0; }
+.prbar span { font: 400 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.prbar .plus { color: var(--green); }
+.prbar .minus { color: var(--del); }
+.prbar .sample { margin-left: auto; }
+
+.body { display: grid; grid-template-columns: 240px minmax(0, 1fr) 216px; height: 470px; }
+.stage.atlas .body { grid-template-columns: minmax(0, 1fr) 216px; }
+.stage.atlas .tree { display: none; }
+.tree { border-right: 1px solid var(--line); overflow: hidden; padding-block: 6px; }
+.row { display: flex; gap: 6px; align-items: center; padding: 0 10px; height: 37px; font: 400 10.5px var(--mono); color: var(--muted); }
+.row span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; direction: rtl; text-align: left; }
+.row .tick { flex: none; width: 13px; color: var(--green); }
+.row.cur { background: var(--panel2); color: var(--ink); }
+.row.flag { color: var(--orange); }
+
+.main { position: relative; min-width: 0; overflow: hidden; }
+.rail { border-left: 1px solid var(--line); padding: 12px; display: flex; flex-direction: column; gap: 14px; overflow: hidden; font-size: 14px; }
+.rail h3 { margin: 0 0 6px; font: 600 12px/1.3 var(--mono); color: var(--muted); }
+.chips { display: flex; flex-direction: column; gap: 4px; min-height: 92px; }
+.chip { font: 400 10.5px/1.4 var(--mono); padding: 3px 6px; background: var(--panel2); border-left: 2px solid var(--blue); animation: in .25s; }
+.chip.gone { animation: crumble .9s forwards; border-color: var(--del); }
+.lost { font: 400 11px var(--mono); color: var(--del); min-height: 16px; }
+.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.log li { line-height: 1.25; color: var(--del); animation: in .3s; padding-left: 16px; position: relative; font-size: 13.5px; }
+.log li::before { content: "×"; position: absolute; left: 0; font-weight: 700; }
+.log li.fixed { color: var(--green); }
+.log li.fixed::before { content: "✓"; }
+@keyframes in { from { opacity: 0; transform: translateX(-8px); } }
+@keyframes crumble { to { opacity: 0; transform: translateY(14px) rotate(-4deg); filter: blur(2px); height: 0; padding-block: 0; } }
+
+.narr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 28px; align-items: center; padding: 14px 18px; min-height: 124px; border-top: 1px solid var(--line); background: var(--panel2); }
+.narr h2 { margin: 0; font: 800 clamp(25px, 3vw, 34px)/1.02 var(--display); text-wrap: balance; }
+.narr p { margin: 4px 0 0; max-width: 68ch; color: var(--muted); font-size: 16px; line-height: 1.4; }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.go { background: var(--green); color: var(--flood); border: 0; border-radius: 6px; padding: 11px 18px; font-weight: 700; font-size: 16px; text-decoration: none; }
+.stage:not(.atlas) .go.danger { background: var(--del); color: var(--flood); }
+.go.alt { background: none; color: var(--ink); box-shadow: inset 0 0 0 1px var(--muted); }
+.go:hover { filter: brightness(1.1); }
+
+/* Files changed */
+.invite { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; }
+.invite div { max-width: 430px; padding: 18px 20px; border-left: 3px solid var(--orange); background: var(--panel2); }
+.invite b { display: block; font-size: 19px; line-height: 1.25; margin-bottom: 6px; }
+.invite small { color: var(--muted); font: 400 12px/1.6 var(--mono); display: block; }
+.wall { position: absolute; inset: 0; overflow: hidden; }
+.wall pre { margin: 0; animation: climb 16s linear infinite; }
+@keyframes climb { to { transform: translateY(-50%); } }
+.ln { display: flex; gap: 10px; padding: 0 10px; font: 400 11.5px/20px var(--mono); white-space: pre; width: 100%; text-align: left; background: none; border: 0; color: inherit; }
+.ln::before { content: attr(data-m); width: 10px; flex: none; color: var(--muted); }
+.ln.add { background: var(--add-bg); }
+.ln.del { background: var(--del-bg); }
+button.ln { cursor: pointer; }
+button.ln:hover { outline: 1px solid var(--blue); outline-offset: -1px; }
+.ln.pick { animation: pulse 1.3s infinite; }
+@keyframes pulse { 50% { box-shadow: inset 0 0 0 2px var(--orange); } }
+.diff { position: absolute; inset: 0; overflow: auto; }
+.diff h4 { position: sticky; top: 0; z-index: 1; margin: 0; padding: 8px 10px; font: 600 11.5px var(--mono); background: var(--panel2); border-bottom: 1px solid var(--line); }
+.note { position: absolute; left: 14px; right: 14px; bottom: 12px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--orange); font-size: 14.5px; line-height: 1.35; animation: in .25s; z-index: 2; }
+.ghosts { position: absolute; inset: 0; background: var(--panel); display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 18px; }
+.ghosts p { margin: 0; color: var(--muted); }
+.ghost { font: 400 12px/1.5 var(--mono); padding: 8px 10px; border: 1px dashed var(--orange); color: var(--orange); opacity: 0; animation: reveal .6s forwards; }
+.ghost:nth-of-type(2) { animation-delay: .5s; }
+.ghost:nth-of-type(3) { animation-delay: 1s; }
+@keyframes reveal { to { opacity: 1; } }
+
+.glitch .body, .glitch .prbar { animation: tear .55s steps(2) both; }
+@keyframes tear {
+  0% { clip-path: inset(0 0 60% 0); transform: translateX(-14px); }
+  25% { clip-path: inset(40% 0 20% 0); transform: translateX(18px) skewX(4deg); }
+  50% { clip-path: inset(10% 0 45% 0); transform: translateX(-22px); filter: hue-rotate(90deg); }
+  75% { clip-path: inset(70% 0 0 0); transform: translateX(10px); }
+  100% { clip-path: inset(0 0 100% 0); }
+}
+.flood { position: absolute; inset: 0; z-index: 9; background: var(--flood); color: var(--flood-ink); display: flex; flex-direction: column; justify-content: center; gap: 16px; padding: clamp(18px, 5vw, 64px); overflow: hidden; }
+.flood .wall { opacity: .13; color: #18dc8d; }
+.flood h2 { position: relative; margin: 0; font: 900 clamp(46px, 9.4vw, 118px)/.9 var(--display); max-width: 11em; text-wrap: balance; }
+.flood p { position: relative; margin: 0; max-width: 52ch; font-size: 19px; color: #b8d6c6; }
+.flood button { position: relative; align-self: flex-start; background: #18dc8d; color: var(--flood); }
+
+/* The map */
+.canvas { position: absolute; inset: 0; background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 20px 20px; }
+.canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#wires > path { fill: none; stroke: var(--green); stroke-width: 2; stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw .8s forwards; }
+#wires > path.reach { stroke: var(--orange); stroke-dasharray: 6 5; stroke-dashoffset: 0; animation: none; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.mark-green { fill: var(--green); }
+.mark-orange { fill: var(--orange); }
+.card { position: absolute; width: 150px; padding: 8px 10px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--blue); border-radius: 6px; animation: pop .35s backwards; }
+.card.test { border-top-color: var(--green); }
+.card b { display: block; padding-right: 14px; font-size: 15px; line-height: 1.2; }
+.card small { font: 400 10px var(--mono); color: var(--muted); }
+.card:hover, .card.on { border-color: var(--blue); }
+.card.done::after { content: "✓"; position: absolute; top: 5px; right: 8px; color: var(--green); font-weight: 700; }
+@keyframes pop { from { opacity: 0; transform: scale(.8); } }
+.pill { position: absolute; transform: translate(-50%, -50%); padding: 2px 8px; font: 400 10px var(--mono); white-space: nowrap; background: var(--panel); color: var(--green); border: 1px solid var(--green); border-radius: 99px; animation: pop .3s .5s backwards; z-index: 1; }
+.pill:hover { background: var(--panel2); }
+.stack { border-style: dashed; border-color: var(--orange); border-top: 1px dashed var(--orange); box-shadow: 4px 4px 0 -1px var(--panel), 4px 4px 0 0 var(--orange); }
+.fly { position: absolute; z-index: 8; font: 400 10px var(--mono); padding: 2px 6px; background: var(--panel2); color: var(--ink); white-space: nowrap; transition: transform .9s cubic-bezier(.6, 0, .2, 1), opacity .3s .8s; pointer-events: none; }
+.story { position: absolute; inset: 0; overflow: auto; padding: 18px clamp(16px, 4vw, 44px); display: flex; flex-direction: column; gap: 12px; justify-content: center; }
+.story div { animation: in .4s backwards; max-width: 66ch; }
+.story div:nth-child(2) { animation-delay: .5s; }
+.story div:nth-child(3) { animation-delay: 1s; }
+.story h3, .detail h4 { margin: 0 0 2px; font: 600 12px var(--mono); color: var(--green); }
+.story p { margin: 0; line-height: 1.42; }
+.detail { position: absolute; top: 0; right: 0; bottom: 0; width: min(440px, 100%); z-index: 3; overflow: auto; padding: 14px 16px; background: var(--panel); border-left: 1px solid var(--line); animation: slide .25s; font-size: 15px; line-height: 1.4; }
+@keyframes slide { from { transform: translateX(30px); opacity: 0; } }
+.detail h3 { margin: 0 26px 8px 0; font: 800 26px/1 var(--display); }
+.detail h4 { margin-top: 10px; }
+.detail p { margin: 0; }
+.detail code { font-size: .82em; }
+.detail pre { margin: 4px 0 0; padding: 8px; overflow-x: auto; font-size: 11px; background: var(--panel2); }
+.detail .x { position: absolute; top: 8px; right: 10px; background: none; border: 0; font-size: 20px; line-height: 1; color: var(--muted); }
+.key { margin-top: 4px; border-left: 3px solid var(--orange); padding-left: 8px; }
+.key .ln { padding: 0 6px; font-size: 10.5px; white-space: pre-wrap; }
+
+/* Proof and install */
+.band { padding-block: 72px 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 32px; align-items: start; }
+.band h2 { margin: 0 0 10px; font: 800 clamp(36px, 5vw, 58px)/.96 var(--display); text-wrap: balance; }
+.band p { margin: 0 0 10px; max-width: 60ch; color: var(--muted); }
+.shot { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; }
+.cmd { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 10px; padding: 10px 12px; background: var(--panel2); font: 400 12.5px/1.6 var(--mono); }
+.cmd code { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cmd button { flex: none; background: none; border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px; font: 400 11px var(--mono); color: var(--muted); }
+footer.end { margin-top: 72px; padding-block: 20px 28px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+
+@media (max-width: 900px) {
+  .hero { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .stage { display: flex; flex-direction: column; }
+  .narr { order: 1; border-top: 0; border-bottom: 1px solid var(--line); min-height: 172px; align-content: start; }
+  .body { order: 2; }
+  .tree { display: none; }
+  .body, .stage.atlas .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 310px auto; height: auto; }
+  .stage.atlas .body { grid-template-rows: 520px auto; }
+  .rail { border-left: 0; border-top: 1px solid var(--line); flex-direction: row; gap: 12px; height: 150px; }
+  .rail > div { flex: 1; min-width: 0; }
+  .chips { min-height: 0; }
+  .chip:nth-last-child(n + 3), .log li:nth-last-child(n + 4) { display: none; }
+  .log li { font-size: 12px; }
+  .narr { grid-template-columns: minmax(0, 1fr); }
+  .acts { justify-content: flex-start; }
+  .band { grid-template-columns: minmax(0, 1fr); padding-block: 48px 0; }
+  .prbar .sample { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .wall pre { animation: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav">
+    <a class="brand" href="#top"><img src="assets/logo.png" alt="">MergeAtlas</a>
+    <div>
+      <a class="link" href="#install">Install</a>
+      <button class="theme" id="theme" type="button" aria-label="Change theme">system</button>
+    </div>
+  </nav>
+  <header class="hero" id="top">
+    <h1>Review code you don't know</h1>
+    <p>MergeAtlas turns a pull request into a map of what changed, why, and what it reaches. Play through a review to feel the difference.</p>
+  </header>
+
+  <section class="stage" id="stage" aria-label="Interactive story of a code review">
+    <div class="steps"><span id="steps" style="display:contents"></span><button class="skip" id="skip" type="button">Skip to MergeAtlas</button></div>
+    <div class="prbar">
+      <b>Retry failed card payments #4127</b>
+      <span id="files">12 files</span><span><span class="plus">+847</span> <span class="minus">−312</span></span>
+      <span id="viewed">0 of 12 viewed</span><span id="clock">0 min</span>
+      <span class="sample">sample PR</span>
+    </div>
+    <div class="body">
+      <aside class="tree" id="tree" aria-label="Changed files"></aside>
+      <div class="main" id="main"></div>
+      <aside class="rail">
+        <div>
+          <h3 id="headTitle">In your head</h3>
+          <div class="chips" id="chips"></div>
+          <div class="lost" id="lost"></div>
+        </div>
+        <div>
+          <h3 id="logTitle">Stuck on</h3>
+          <ul class="log" id="log"></ul>
+        </div>
+      </aside>
+    </div>
+    <div class="narr" aria-live="polite">
+      <div><h2 id="nt"></h2><p id="nb"></p></div>
+      <div class="acts" id="acts"></div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div>
+      <h2>A real one</h2>
+      <p>This is MergeAtlas on <a href="https://github.com/excalidraw/excalidraw/pull/10903">excalidraw/excalidraw#10903</a>, which makes image exports follow the editor's theme.</p>
+      <p>The clipboard code never appears in that diff. It still changes, and the map shows it.</p>
+    </div>
+    <img class="shot" src="assets/map-view.png" width="3200" height="2000" alt="MergeAtlas showing cards for each changed component of the Excalidraw pull request, joined by arrows, with the story of the change beside them." loading="lazy">
+  </section>
+
+  <section class="band">
+    <div>
+      <h2>Made for blast radius</h2>
+    </div>
+    <div>
+      <p>MergeAtlas is for changes that reach further than their diff: several files, some of them affected only indirectly, in a project you don't know well.</p>
+      <p>A config tweak doesn't need a map. Your agent or the PR description can tell you what it touches.</p>
+      <p>The map stops at understanding. It doesn't find bugs, give verdicts, or tell you what to do. Those stay with you.</p>
+    </div>
+  </section>
+
+  <section class="band" id="install">
+    <div>
+      <h2>Map your next review</h2>
+      <p>You need an agent that runs skills, such as Claude Code, plus Python 3, git, and the GitHub CLI signed in.</p>
+    </div>
+    <div>
+      <div class="cmd"><code>git clone https://github.com/ismayilkarimli/MergeAtlas.git</code><button type="button" class="copy">Copy</button></div>
+      <div class="cmd"><code>ln -s "$PWD/MergeAtlas/skills/mergeatlas" ~/.claude/skills/mergeatlas</code><button type="button" class="copy">Copy</button></div>
+      <p>From inside the PR's repository, ask your agent to map it, or run <code>/mergeatlas</code> in Claude Code. Your maps stay on your machine.</p>
+    </div>
+  </section>
+
+  <footer class="end">MergeAtlas is open source under the MIT license.</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const stage = $('stage'), main = $('main');
+const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const FILES = [
+  ['api/webhooks/stripe.ts', 'charge'], ['config/payments.ts', 'policy'], ['db/migrations/0142_retry_state.sql', 'states'],
+  ['db/schema/payment.ts', 'states'], ['emails/templates/payment-failed.tsx', 'notices'], ['jobs/index.ts', 'job'],
+  ['jobs/retryPayment.ts', 'job'], ['payments/charge.ts', 'charge'], ['payments/retryPolicy.ts', 'policy'],
+  ['payments/states.ts', 'states'], ['tests/payments/retry.test.ts', 'tests'], ['ui/billing/PaymentBanner.tsx', 'notices'],
+];
+const LIMITS = {
+  wall: ['A wall of code', 'Story comes first'],
+  order: ['No reading order', 'Components, in cause order'],
+  why: ['No reason given', 'A why on every card'],
+  equal: ['Every line looks equal', 'Key lines picked out'],
+  links: ["Can't see what affects what", 'Arrows show the path'],
+  reach: ['Affected files out of sight', 'Affected files on the map'],
+  head: ['All of it in your head', 'All of it on the map'],
+};
+const NOISE = [
+  ['add', 'export async function charge(payment: Payment, opts: ChargeOpts) {'], ['del', '  const result = await stripe.charges.create(toCharge(payment));'],
+  ['add', '  const attempt = await beginAttempt(payment.id, opts.source);'], ['', '  if (!payment.customerId) throw new MissingCustomer(payment.id);'],
+  ['add', '  const intent = await stripe.paymentIntents.confirm(payment.intentId);'], ['del', '  await markFailed(payment.id, result.failure_code);'],
+  ['add', "  if (intent.status === 'requires_payment_method') {"], ['add', '    return schedule(payment, policy.next(payment.attempts));'],
+  ['', '  }'], ['del', '  notifyCustomer(payment.customerId, "payment_failed");'], ['add', '  await tx.update(payments).set({ status, nextRetryAt });'],
+  ['add', "ALTER TABLE payments ADD COLUMN next_retry_at timestamptz;"], ['del', "const showBanner = invoice.status === 'failed';"],
+  ['add', "const showBanner = ['failed', 'retrying'].includes(status);"], ['', 'export const jobs = [sendReceipt, syncLedger];'],
+  ['add', '  retryPayment,'], ['del', '    <FailedNotice amount={amount} onRetry={retryNow} />'], ['add', '    <RetryNotice nextRetryAt={payment.nextRetryAt} />'],
+  ['add', "it('stops after the last attempt', async () => {"], ['add', '  await expect(run(job)).resolves.toBe(FINAL_FAILURE);'],
+];
+const CARDS = {
+  policy: { t: 'Retry policy', n: '2 files', x: [.1, .2], m: [.27, .09], what: 'Decides whether a declined charge gets another try, and when.',
+    problem: 'Today every decline is final, including temporary ones such as insufficient funds. The customer has to pay again by hand.',
+    change: 'This PR adds <code>retryPolicy.ts</code>, with the list of retryable decline codes and a backoff schedule. <code>config/payments.ts</code> sets five attempts.',
+    fix: 'A temporary decline now gets more tries before the payment counts as failed.',
+    key: [['add', "const RETRYABLE = ['insufficient_funds', 'processor_declined'];"], ['add', 'if (attempts >= config.maxAttempts) return null;']],
+    keyWhy: 'These two lines decide which customers get charged again and how many times.' },
+  charge: { t: 'Charge flow', n: '2 files', x: [.365, .2], m: [.27, .37], what: 'Takes one payment attempt through Stripe and records the result.',
+    problem: 'Today a decline marks the payment failed straight away and emails the customer.',
+    change: 'This PR routes declines through the policy, and the Stripe webhook now reads <code>attempts</code>.',
+    fix: 'A retryable decline moves the payment to <code>retrying</code> and queues a job.',
+    key: [['add', '  const next = policy.next(err.code, payment.attempts);'], ['add', '  if (next) return schedule(payment, next);']],
+    keyWhy: 'Every declined charge in the product now passes through this branch.' },
+  job: { t: 'Retry job', n: '2 files', x: [.635, .2], m: [.27, .65], what: 'A background job that charges the card again at the scheduled time.',
+    change: 'This PR adds <code>retryPayment.ts</code> and registers it in <code>jobs/index.ts</code>.',
+    fix: 'Retries run without the customer doing anything.',
+    key: [['add', 'await charge(payment, { source: "retry" });']],
+    keyWhy: 'This calls the same charge path again, so anything it does runs once per attempt.' },
+  tests: { t: 'Retry tests', n: '1 file', cls: 'test', x: [.9, .2], m: [.27, .91], what: 'Tests for the schedule, the attempt limit and the final failure.',
+    change: 'This PR adds 402 lines of tests. They cover the job and the policy, and not the emails.',
+    key: [['add', "it('stops after the last attempt', async () => {"]], keyWhy: 'This is the only assertion on the attempt limit.' },
+  states: { t: 'Payment states', n: '3 files', x: [.365, .76], m: [.73, .09], what: 'The list of statuses a payment can be in, stored on each payment row.',
+    problem: 'Today a payment is pending, paid or failed. There is no way to say it will be tried again.',
+    change: 'This PR adds a <code>retrying</code> status and a <code>next_retry_at</code> column.',
+    fix: 'The rest of the app can tell a payment in progress from one that is finished.',
+    key: [['add', "export const STATES = ['pending', 'paid', 'retrying', 'failed'] as const;"]],
+    keyWhy: 'Code anywhere that switches on status now meets a value it has never seen.' },
+  notices: { t: 'Customer notices', n: '2 files', x: [.1, .76], m: [.73, .37], what: 'The email and billing banner that tell a customer a payment had a problem.',
+    change: 'This PR shows a retry date in place of the old failure message, because the payment is no longer failed.',
+    fix: 'Customers see that a retry is coming, and when.',
+    key: [['add', '<RetryNotice nextRetryAt={payment.nextRetryAt} />']], keyWhy: 'This renders only while the status is retrying.' },
+};
+const EDGES = [
+  { f: 'policy', t: 'charge', l: 'decides', how: '<code>charge()</code> asks the policy what to do with each decline.', code: 'const next = policy.next(err.code, payment.attempts);', flow: 'A change to the retryable codes changes what every charge does on a decline.' },
+  { f: 'charge', t: 'job', l: 'queues', how: '<code>schedule()</code> adds a <code>retryPayment</code> job for the time the policy returned.', code: 'if (next) return schedule(payment, next);', flow: 'The job then calls <code>charge()</code> again, so the two run in a loop until the policy returns nothing.' },
+  { f: 'job', t: 'tests', l: 'tested by', how: 'The tests run the job against a fake Stripe client.', code: 'await expect(run(job)).resolves.toBe(FINAL_FAILURE);', flow: 'They assert the attempt limit and the final state.' },
+  { f: 'states', t: 'charge', l: 'adds status', how: '<code>charge()</code> writes the new status on the payment.', code: "await tx.update(payments).set({ status: 'retrying', nextRetryAt });", flow: 'A declined payment now sits in <code>retrying</code> where it used to be <code>failed</code>.' },
+  { f: 'states', t: 'notices', l: 'drives', how: 'The banner picks its message from the status.', code: "const showBanner = ['failed', 'retrying'].includes(status);", flow: 'The new status is what makes the retry notice appear.' },
+];
+const REACH = [
+  ['reports/revenue.ts', 'Counts <code>failed</code> payments as lost revenue, so a <code>retrying</code> payment drops out of that total.'],
+  ['admin/RefundPanel.tsx', 'Shows the write-off action only for <code>failed</code>, so it stays hidden while a payment is retrying.'],
+  ['alerts/slack.ts', 'Posts on every <code>failed</code> event, so the alert now fires after the last attempt.'],
+];
+
+let run = 0, viewed = 0, head = [], forgot = 0, step = 0;
+
+function say(title, body, acts) {
+  $('nt').textContent = title; $('nb').innerHTML = body; $('acts').replaceChildren();
+  acts.forEach(([label, fn, cls], i) => {
+    const b = document.createElement(fn ? 'button' : 'a');
+    b.className = 'go ' + (cls ?? ''); b.textContent = label;
+    if (fn) { b.type = 'button'; b.onclick = fn; } else { b.href = '#install'; }
+    $('acts').append(b);
+    if (i === 0 && step) b.focus({ preventScroll: true });
+  });
+}
+const tree = () => { $('tree').innerHTML = FILES.map(([p], i) => `<div class="row" data-i="${i}"><i class="tick"></i><span>&lrm;${esc(p)}</span></div>`).join(''); };
+const row = i => $('tree').querySelector(`[data-i="${i}"]`);
+function open(i) { document.querySelectorAll('.row.cur').forEach(r => r.classList.remove('cur')); row(i).classList.add('cur'); }
+function view(i) { row(i).querySelector('.tick').textContent = '✓'; viewed++; $('viewed').textContent = `${viewed} of 12 viewed`; }
+const clock = m => { $('clock').textContent = `${m} min`; };
+function stuck(key) { const li = document.createElement('li'); li.dataset.k = key; li.textContent = LIMITS[key][0]; $('log').append(li); }
+function solve(key) { const li = $('log').querySelector(`[data-k="${key}"]`); li.textContent = LIMITS[key][1]; li.classList.add('fixed'); $('log').append(li); }
+function remember(text) {
+  const c = document.createElement('div'); c.className = 'chip'; c.textContent = text; $('chips').append(c); head.push(c);
+  if (head.length > 4) {
+    const old = head.shift(); old.classList.add('gone'); setTimeout(() => old.remove(), still ? 0 : 900);
+    forgot++; $('lost').textContent = `${forgot} forgotten`;
+  }
+}
+const lines = rows => rows.map(([k, t]) => `<div class="ln ${k}" data-m="${k === 'add' ? '+' : k === 'del' ? '-' : ' '}">${esc(t)}</div>`).join('');
+const pickable = rows => rows.map(([k, t]) => `<button type="button" class="ln ${k} pick" data-m="${k === 'add' ? '+' : '-'}">${esc(t)}</button>`).join('');
+const wall = () => `<div class="wall"><pre>${lines([...NOISE, ...NOISE.slice().reverse(), ...NOISE, ...NOISE.slice().reverse()].flatMap(l => [l]))}</pre></div>`;
+const note = text => { const n = document.createElement('div'); n.className = 'note'; n.innerHTML = text; main.append(n); };
+
+const ACT_ONE = [
+  () => {
+    main.innerHTML = `<div class="invite"><div><b>You've been asked to review #4127</b><small>Retry failed card payments<br>You've never opened the payments code.<br>Needed today.</small></div></div>`;
+    say('A review request lands.', "It's a big one, in a part of the project you don't know.", [['Open Files changed', next]]);
+  },
+  () => {
+    main.innerHTML = wall(); stuck('wall');
+    say('It is a wall of code.', '12 files, 847 lines added, 312 removed. Nothing tells you what the change is, or where to begin.', [['Start at the top', next]]);
+  },
+  () => {
+    open(0); stuck('order'); clock(4);
+    main.innerHTML = `<div class="diff"><h4>api/webhooks/stripe.ts</h4>${lines(NOISE.slice(1, 11))}</div>`;
+    row(8).classList.add('flag'); remember('webhook reads attempts');
+    say('You start with file 1. The file that explains this PR is number 9.', 'Files are sorted by path, so you read them in alphabetical order. The story of the change is scattered through it.', [['Mark viewed, next file', next]]);
+  },
+  () => {
+    view(0); open(1); clock(7);
+    main.innerHTML = `<div class="diff"><h4>config/payments.ts</h4>${lines([['', 'export const payments = {'], ['', "  currency: 'usd',"]])}<button type="button" class="ln add pick" data-m="+" id="five">  maxAttempts: 5,</button>${lines([['', '};']])}</div>`;
+    say('Why 5?', 'Click the line to find out.', [['Move on', next, 'alt']]);
+    $('five').onclick = () => {
+      $('five').classList.remove('pick'); stuck('why'); remember('maxAttempts 5, why?');
+      note("The diff shows what changed. It never shows why. The PR description says “adds retries”.");
+      say('The diff has no answer.', 'You could ask the author, or dig through the codebase. You make a note and keep going.', [['Next file', next]]);
+    };
+  },
+  () => {
+    view(1); open(7); clock(16);
+    const rows = [['add', 'const amount = toCents(payment.total);'], ['add', 'const next = policy.next(err.code, payment.attempts);'], ['del', 'const cents = toCents(payment.total);'], ['add', 'const label = describe(payment);'], ['add', 'if (next) return schedule(payment, next);']];
+    main.innerHTML = `<div class="diff"><h4>payments/charge.ts</h4>${pickable(rows)}</div>`;
+    say('One of these lines decides whether a customer is charged again.', 'Which one? Click your guess.', [['Move on', next, 'alt']]);
+    main.querySelectorAll('button.ln').forEach(b => { b.onclick = () => {
+      main.querySelectorAll('.pick').forEach(p => p.classList.remove('pick')); stuck('equal'); remember('charge() lost 87 lines');
+      note('Could be. A renamed variable and a billing rule get the same green.');
+      say('Every line looks the same.', 'The screen gives you no idea what deserves your attention. So everything gets the same tired attention.', [['Keep going', next]]);
+    }; });
+  },
+  () => {
+    clock(23); stuck('links');
+    main.innerHTML = `<div class="diff"><h4>jobs/retryPayment.ts</h4>${lines(NOISE.slice(4, 16))}</div>`;
+    remember('job calls charge again?'); view(2); view(3); open(6);
+    say('Who calls this job? What calls that?', "You can't see what affects what. The links between these files exist only in code you have to go and find.", [['Keep reading', next]]);
+  },
+  () => {
+    clock(31); stuck('head'); view(4); view(5); open(9);
+    main.innerHTML = `<div class="diff"><h4>payments/states.ts</h4>${lines([['', 'export const STATES = ['], ['', "  'pending',"], ['', "  'paid',"], ['add', "  'retrying',"], ['', "  'failed',"], ['', '] as const;']])}</div>`;
+    remember('new column next_retry_at'); remember('new status: retrying');
+    say('Your head is full.', 'You hold every file in memory to connect it to the next one. The first ones are already falling out.', [['One last check', next]]);
+  },
+  () => {
+    main.innerHTML = `<div class="diff"><h4>payments/states.ts</h4>${lines([['add', "  'retrying',"]])}</div>`;
+    const reveal = () => {
+      stuck('reach');
+      main.innerHTML = `<div class="ghosts"><p>Not in this PR. Not on this screen. They all read payment status.</p>${REACH.map(([p]) => `<div class="ghost">${p}</div>`).join('')}</div>`;
+      say('The diff only shows files that changed.', 'These three files have no diff, and nobody will review them. They behave differently after this merge anyway.', [['Back to the review', next]]);
+    };
+    say('A new status. What else reads it?', 'What else in the codebase cares about <code>retrying</code>?', [['Only files in this PR', reveal, 'alt'], ['Something outside it', reveal, 'alt'], ['No way to tell', reveal, 'alt']]);
+  },
+  () => {
+    clock(52); view(6); view(7); view(9);
+    main.innerHTML = wall();
+    say('52 minutes. 9 of 12 viewed.', 'The tests are collapsed, and someone is waiting. You could read it all again, or you could do what everyone does.', [['Approve: LGTM', next, 'danger']]);
+  },
+  () => {
+    stage.classList.add('glitch');
+    setTimeout(() => {
+      const f = document.createElement('div'); f.className = 'flood'; f.id = 'flood';
+      f.innerHTML = `${wall()}<h2>Is this really the best way to review a PR?</h2><p>You just approved 847 lines you couldn't explain. Three files you never saw changed with them.</p><button type="button" class="go" id="better">Review it again with MergeAtlas</button>`;
+      stage.append(f); $('better').onclick = next; $('better').focus({ preventScroll: true });
+    }, still ? 0 : 520);
+  },
+];
+
+const ACT_TWO = [
+  () => {
+    $('flood')?.remove(); stage.classList.remove('glitch'); stage.classList.add('atlasing'); document.querySelectorAll('.row.cur').forEach(r => r.classList.remove('cur'));
+    $('logTitle').textContent = 'Getting clearer'; $('clock').textContent = ''; $('viewed').textContent = '0 of 6 reviewed'; tree();
+    main.innerHTML = `<div class="story">
+      <div><h3>Background</h3><p>Checkout charges a card once through Stripe, and a webhook reports how it went.</p></div>
+      <div><h3>The problem</h3><p>A temporary decline, such as insufficient funds, marks a payment failed for good. The customer has to pay again by hand.</p></div>
+      <div><h3>What this PR does</h3><p>It adds a retry policy, a job that charges again on a schedule, and a <code>retrying</code> status for everything in between.</p></div></div>`;
+    solve('wall');
+    say('Same PR. This time it starts with the story.', 'Before any code: what this part of the project does, what went wrong, and what the PR does about it.', [['Break up the wall', next]]);
+  },
+  () => {
+    const from = FILES.map((_, i) => row(i).getBoundingClientRect()), box = stage.getBoundingClientRect();
+    stage.classList.add('atlas'); main.innerHTML = '<div class="canvas" id="canvas"><svg id="wires" aria-hidden="true"><defs><marker id="ag" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" class="mark-green" style="stroke:none;animation:none"/></marker><marker id="ao" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" class="mark-orange" style="stroke:none;animation:none"/></marker></defs></svg></div>';
+    Object.entries(CARDS).forEach(([id, c], i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'card ' + (c.cls ?? ''); b.dataset.id = id;
+      b.innerHTML = `<b>${c.t}</b><small>${c.n}</small>`; b.style.animationDelay = (still ? 0 : .75 + i * .06) + 's';
+      b.onclick = () => showCard(id); $('canvas').append(b);
+    });
+    place(); solve('order');
+    if (!still) FILES.forEach(([p, card], i) => {
+      if (!from[i].width) return;
+      const f = document.createElement('div'); f.className = 'fly'; f.textContent = p.split('/').pop();
+      f.style.left = from[i].left - box.left + 'px'; f.style.top = from[i].top - box.top + 'px'; stage.append(f);
+      const t = document.querySelector(`.card[data-id="${card}"]`).getBoundingClientRect();
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        f.style.transform = `translate(${t.left - from[i].left + 20}px, ${t.top - from[i].top + 20}px) scale(.8)`; f.style.opacity = 0;
+      }));
+      setTimeout(() => f.remove(), 1300);
+    });
+    say('12 files become 6 components.', 'Files that do one job share a card, so you read the change the way it was built. Click any card.', [['Connect them', next]]);
+  },
+  () => {
+    closeDetail(); wires(); solve('links');
+    say('Now you can see what affects what.', 'Each arrow runs from a cause to its effect. Click one to see the code that joins them.', [['Why does it exist?', next]]);
+  },
+  () => {
+    showCard('policy', false); solve('why');
+    say('Every card says why it is here.', 'What it does, what was wrong, what this PR changes, and how that helps. The “why 5?” question has a home now.', [['Which lines matter?', next]]);
+  },
+  () => {
+    showCard('policy', true); solve('equal');
+    say('2 lines out of 96.', 'Key lines point you to what deserves your attention, and say what rests on them. You read them yourself.', [['What about the rest of the codebase?', next]]);
+  },
+  () => {
+    closeDetail(); reach(); solve('reach');
+    say('Those three files are on the map now.', 'The dashed arrow leaves the PR. Click the stack to see what changes for each file, with no diff to read.', [['Put it all together', next]]);
+  },
+  () => {
+    closeDetail(); solve('head'); $('headTitle').textContent = 'In your head'; $('lost').textContent = '';
+    $('chips').innerHTML = '<div class="chip">Nothing. It is all on the map.</div>'; head = [];
+    document.querySelectorAll('.card:not(.stack)').forEach((c, i) => setTimeout(() => c.classList.add('done'), still ? 0 : i * 160));
+    $('viewed').textContent = '6 of 6 reviewed'; $('logTitle').textContent = 'Solved';
+    say('Now you can give a real review.', 'You know the problem, the path and the blast radius. The map stops at understanding. The bugs, the comments and the verdict are yours.', [['Install MergeAtlas', null], ['Play again', restart, 'alt']]);
+  },
+];
+const STEPS = [...ACT_ONE, ...ACT_TWO];
+
+function place() {
+  const c = $('canvas'), wide = c.clientWidth > 820;
+  c.querySelectorAll('.card').forEach(el => {
+    const at = el.dataset.id === 'reach' ? (wide ? [.635, .76] : [.73, .65]) : CARDS[el.dataset.id][wide ? 'x' : 'm'];
+    el.style.left = at[0] * c.clientWidth - el.offsetWidth / 2 + 'px'; el.style.top = at[1] * c.clientHeight - el.offsetHeight / 2 + 'px';
+  });
+  if (c.dataset.wired) { c.querySelectorAll('.pill').forEach(p => p.remove()); $('wires').querySelectorAll(':scope > path').forEach(p => p.remove()); wires(); if (c.querySelector('.stack')) line('states', 'reach'); }
+}
+function curve(a, b) {
+  const A = a.getBoundingClientRect(), B = b.getBoundingClientRect(), o = $('canvas').getBoundingClientRect();
+  const ax = A.left + A.width / 2 - o.left, ay = A.top + A.height / 2 - o.top, bx = B.left + B.width / 2 - o.left, by = B.top + B.height / 2 - o.top;
+  const side = Math.abs(bx - ax) > Math.abs(by - ay) * 1.1 && (bx - ax > 0 ? B.left >= A.right : B.right <= A.left);
+  if (side) {
+    const d = Math.sign(bx - ax), x1 = ax + d * A.width / 2, x2 = bx - d * B.width / 2, m = (x1 + x2) / 2;
+    return { d: `M${x1} ${ay}C${m} ${ay} ${m} ${by} ${x2} ${by}`, x: m, y: (ay + by) / 2 };
+  }
+  const d = Math.sign(by - ay), y1 = ay + d * A.height / 2, y2 = by - d * B.height / 2, m = (y1 + y2) / 2;
+  return { d: `M${ax} ${y1}C${ax} ${m} ${bx} ${m} ${bx} ${y2}`, x: (ax + bx) / 2, y: m };
+}
+const node = id => $('canvas').querySelector(`[data-id="${id}"]`);
+function around(a, b) {
+  const A = a.getBoundingClientRect(), B = b.getBoundingClientRect(), o = $('canvas').getBoundingClientRect();
+  const x1 = A.right - o.left, y1 = A.top + A.height / 2 - o.top, x2 = B.right + 4 - o.left, y2 = B.top + B.height / 2 - o.top, bow = o.width - 2;
+  return { d: `M${x1} ${y1}C${bow} ${y1} ${bow} ${y2} ${x2} ${y2}` };
+}
+function draw(from, to, cls) {
+  const narrow = $('canvas').clientWidth <= 820, shape = cls && narrow ? around : curve;
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'), g = shape(node(from), node(to));
+  p.setAttribute('d', g.d); p.setAttribute('pathLength', 1); p.setAttribute('marker-end', cls ? 'url(#ao)' : 'url(#ag)');
+  if (cls) { p.setAttribute('class', cls); p.setAttribute('stroke-dasharray', '6 5'); p.removeAttribute('pathLength'); }
+  $('wires').append(p); return g;
+}
+function wires() {
+  $('canvas').dataset.wired = 1;
+  EDGES.forEach((e, i) => {
+    const g = draw(e.f, e.t), b = document.createElement('button');
+    b.type = 'button'; b.className = 'pill'; b.textContent = e.l; b.style.left = g.x + 'px'; b.style.top = g.y + 'px';
+    b.onclick = () => showEdge(i); $('canvas').append(b);
+  });
+}
+const line = (f, t) => draw(f, t, 'reach');
+function reach() {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'card stack'; b.dataset.id = 'reach';
+  b.innerHTML = '<b>3 affected files</b><small>outside this PR</small>'; b.onclick = showReach; $('canvas').append(b);
+  place();
+}
+function detail(html) {
+  closeDetail(); const d = document.createElement('div'); d.className = 'detail'; d.id = 'detail';
+  d.innerHTML = `<button type="button" class="x" aria-label="Close">×</button>${html}`; d.querySelector('.x').onclick = closeDetail; main.append(d);
+}
+const closeDetail = () => { $('detail')?.remove(); document.querySelectorAll('.card.on').forEach(c => c.classList.remove('on')); };
+function showCard(id, keyOnly) {
+  const c = CARDS[id], section = (h, t) => t ? `<h4>${h}</h4><p>${t}</p>` : '';
+  const key = `<h4>Key lines</h4><p>${c.keyWhy}</p><div class="key">${lines(c.key)}</div>`;
+  detail(`<h3>${c.t}</h3>${keyOnly ? key : section('What it is', c.what) + section('The problem', c.problem) + section('What changes', c.change) + section('Why this fixes it', c.fix) + (keyOnly === undefined ? key : '')}`);
+  node(id).classList.add('on');
+}
+function showEdge(i) {
+  const e = EDGES[i];
+  detail(`<h3>${CARDS[e.f].t} to ${CARDS[e.t].t}</h3><h4>How they connect</h4><p>${e.how}</p><pre>${esc(e.code)}</pre><h4>What travels along it</h4><p>${e.flow}</p>`);
+}
+function showReach() {
+  detail(`<h3>Outside this PR</h3><p>Unchanged files that behave differently because of the new status.</p>${REACH.map(([p, t]) => `<h4>${p}</h4><p>${t}</p>`).join('')}`);
+}
+
+function go(i) { step = i; document.querySelectorAll('#steps i').forEach((s, n) => s.classList.toggle('on', n <= i)); $('skip').hidden = i >= ACT_ONE.length; STEPS[i](); }
+function next() { go(step + 1); }
+function restart() {
+  stage.className = 'stage'; viewed = 0; head = []; forgot = 0; $('log').textContent = ''; $('chips').textContent = ''; $('lost').textContent = '';
+  $('viewed').textContent = '0 of 12 viewed'; $('headTitle').textContent = 'In your head'; $('logTitle').textContent = 'Stuck on'; clock(0); tree(); go(0);
+  stage.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'center' });
+}
+$('skip').onclick = () => {
+  $('log').textContent = ''; Object.keys(LIMITS).forEach(stuck);
+  stage.classList.remove('glitch'); go(ACT_ONE.length);
+};
+$('steps').innerHTML = STEPS.map(() => '<i></i>').join('');
+addEventListener('resize', () => { if ($('canvas')) place(); });
+tree(); go(0);
+
+document.querySelectorAll('.copy').forEach(b => { b.onclick = () => {
+  const text = b.previousElementSibling.textContent;
+  navigator.clipboard?.writeText(text).then(() => { b.textContent = 'Copied'; }, () => getSelection().selectAllChildren(b.previousElementSibling));
+}; });
+
+const THEMES = ['system', 'light', 'dark'];
+function theme(name) {
+  if (name === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = name;
+  $('theme').textContent = name;
+  try { localStorage.setItem('theme', name); } catch {}
+}
+$('theme').onclick = () => theme(THEMES[(THEMES.indexOf($('theme').textContent) + 1) % 3]);
+try { const saved = localStorage.getItem('theme'); if (THEMES.includes(saved)) theme(saved); } catch {}
+</script>
+</body>
+</html>
