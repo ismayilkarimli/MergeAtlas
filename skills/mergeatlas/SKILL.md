@@ -5,7 +5,7 @@ description: "MergeAtlas: an interactive infinite-canvas diagram of a pull reque
 
 A **map** lets a reviewer understand a PR from the canvas alone: the problem it solves, which components change, how they relate, what each one is and why it needs changing, and how a change in A reaches B through the code that connects them. The analysis is yours; `scripts/mergeatlas.py` (next to this file) fetches the PR, lists the candidates for reach, checks the map, and publishes it.
 
-The reader is a skilled engineer asked to review a large change in a project they don't know. A map gives them the context to do that review and ends at comprehension: it states what is there, and every judgement stays with them. So the map holds facts and their stakes, with no bug reports, no verdicts on whether the PR is right or meets its issue, and no advice on what to do next.
+The reader is a skilled engineer asked to review a change that reaches further than its diff, in a project they don't know. A map gives them the context to do that review and ends at comprehension: it states what is there, and every judgement stays with them. So the map holds facts and their stakes, with no bug reports, no verdicts on whether the PR is right or meets its issue, and no advice on what to do next.
 
 ## Steps
 

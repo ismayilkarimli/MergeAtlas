@@ -6,13 +6,17 @@
 
 <p align="center"><a href="https://mergeatlas.dev">mergeatlas.dev</a></p>
 
-![Map view of a pull request](docs/map-view.svg)
+![Map view of a pull request](docs/map-view.png)
 
-![Tree view of a pull request](docs/tree-view.svg)
+![Tree view of a pull request](docs/tree-view.png)
+
+<p align="center"><sub>MergeAtlas mapping <a href="https://github.com/excalidraw/excalidraw/pull/10903">excalidraw/excalidraw#10903</a>, which makes image exports follow the editor's theme.</sub></p>
 
 ## What is MergeAtlas?
 
-When you're asked to review a large change in a project you don't know well, MergeAtlas helps you quickly build the mental model you're missing. You can give a real review without having to reconstruct the change and hold it all in your head.
+When you're asked to review a change that reaches further than its diff, in a project you don't know well, MergeAtlas helps you quickly build the mental model you're missing. You can give a real review without having to reconstruct the change and hold it all in your head.
+
+It's made for changes with a medium to large blast radius: several files, some of them affected only indirectly. A config tweak doesn't need a map. Your agent or the PR description can tell you what it touches.
 
 It's an agent skill that turns a pull request into an interactive map on localhost. The story of the change comes first: what this part of the project does, the problem, and what the PR does about it. Each changed component is a card, and arrows show how a change in one reaches another, including through files the PR never touches. The map stops at understanding, so it doesn't find bugs, give verdicts, or tell you what to do. Those stay with you.
 
