@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="Tree view screenshot placeholder">
+  <rect width="1280" height="720" rx="16" fill="#f4f1ea"/>
+  <rect x="8" y="8" width="1264" height="704" rx="12" fill="none" stroke="#cfc9bb" stroke-width="3" stroke-dasharray="14 12"/>
+  <text x="640" y="350" text-anchor="middle" font-family="system-ui, sans-serif" font-size="44" font-weight="600" fill="#1f1d1a">Tree view</text>
+  <text x="640" y="400" text-anchor="middle" font-family="system-ui, sans-serif" font-size="26" fill="#6b665c">Screenshot coming soon</text>
+</svg>
