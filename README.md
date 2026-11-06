@@ -2,7 +2,7 @@
 
 <h1 align="center">MergeAtlas</h1>
 
-<p align="center"><strong>Know what you're approving</strong></p>
+<p align="center"><strong>Know what you're approving for real</strong></p>
 
 <p align="center"><a href="https://mergeatlas.dev">mergeatlas.dev</a></p>
 

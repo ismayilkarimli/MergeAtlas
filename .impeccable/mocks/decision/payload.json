@@ -1,0 +1,40 @@
+{
+  "title": "Choose the landing page's structure",
+  "question": "Colours, fonts and the game stay. Which structure should the page around them take?",
+  "options": [
+    {
+      "id": "two-stages",
+      "label": "Two stages",
+      "kicker": "THE ROLL",
+      "thesis": "The page is two playable stages: the review you live through, then the real map of it.",
+      "palette": ["#eef1f5", "#ffffff", "#0b1220", "#0f7a48"],
+      "materials": ["dot-grid ground", "viewer hoods"],
+      "viewport": "Headline left and subhead with Play a review right, then the game in a full-width hood with its green progress bar.",
+      "risk": "Little text between stages, so each surviving sentence must be set large to carry its weight.",
+      "html": ".impeccable/mocks/decision/a-two-stages.html"
+    },
+    {
+      "id": "story-panel",
+      "label": "Story panel",
+      "thesis": "The page takes the viewer's own layout: a story panel on the left, the canvas on the right.",
+      "palette": ["#ffffff", "#eef1f5", "#0b1220", "#0f7a48"],
+      "materials": ["story panel", "dot-grid canvas"],
+      "viewport": "A white panel holds the headline, subhead, action and the page's section list; the game fills the canvas beside it, later swapped for the live map.",
+      "risk": "A sticky two-pane page is the most engineering, and on phones it stacks into a plain column.",
+      "html": ".impeccable/mocks/decision/b-story-panel.html"
+    },
+    {
+      "id": "diff-wall",
+      "label": "Diff wall",
+      "thesis": "A muted wall of the real #8613 diff runs down the page's edge and ends where the live map begins.",
+      "palette": ["#f2f5f9", "#eef1f5", "#0b1220", "#0f7a48"],
+      "materials": ["diff gutter", "viewer hood"],
+      "viewport": "A pale diff gutter on the left, the headline and action beside it, and the top of the game below.",
+      "risk": "The gutter can read as decoration or noise if it is not kept quiet.",
+      "html": ".impeccable/mocks/decision/c-diff-wall.html"
+    }
+  ],
+  "reroll": true,
+  "steer": true,
+  "buildPath": { "value": "code" }
+}

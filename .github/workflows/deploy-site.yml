@@ -1,0 +1,30 @@
+name: Deploy site
+
+# Every push to main publishes site/ to Cloudflare Pages, unless the push changes only the README.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - README.md
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Runs from site/ so Pages finds functions/ and resolves map/index.html's link to the skill's viewer.
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.151.3"
+          workingDirectory: site
+          command: pages deploy . --project-name=mergeatlas --branch=main

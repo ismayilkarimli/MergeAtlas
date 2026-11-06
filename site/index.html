@@ -3,106 +3,255 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>MergeAtlas</title>
+<title>MergeAtlas: know what you're approving for real</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="MergeAtlas turns a pull request into a map of what changed, why, and what it reaches.">
+<meta name="description" content="A diff shows what changed, not why or what it reaches. MergeAtlas maps both, so you can approve with confidence.">
 <link rel="icon" href="assets/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Hanken+Grotesk:wght@400;500;700&family=Martian+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Atkinson+Hyperlegible+Mono:wght@400;600&family=Atkinson+Hyperlegible+Next:wght@400..700&display=swap">
 <style>
-/* Layout: one long instrument. The hero is the review itself; everything after it is quiet proof and install. */
+/* Dailies: the page screens the review like rushes off a film scanner. The opening sits on the scanner's light table (light) or in the screening room (dark); the game frame and the end card are always black film. The game keeps its own tokens; the page draws from the --pg and --film ones. */
 :root {
-  --bg: #edf5ec; --panel: #f9fcf6; --panel2: #e2eee2; --ink: #06291d; --muted: #466a5a; --line: #bdd6c6;
-  --green: #067f52; --blue: #1259c4; --orange: #a85f00; --del: #bb3226;
-  --add-bg: #d3f0dd; --del-bg: #fbdfd9; --flood: #03100b; --flood-ink: #fbf6e4; --cream: #fbf6e4;
-  --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
-  --body: "Hanken Grotesk", system-ui, sans-serif;
-  --mono: "Martian Mono", ui-monospace, Menlo, monospace;
+  --bg: #eef1f5; --dot: #c5cdd8; --card: #fff; --code-bg: #f2f5f9; --ink: #0b1220; --muted: #56667c; --line: #d6dde6;
+  --core: #2f6fdb; --cleanup: #b4580f; --add: #0f7a48; --del: #c9303a;
+  --add-bg: color-mix(in srgb, var(--add) 11%, transparent); --del-bg: color-mix(in srgb, var(--del) 10%, transparent);
+  --shadow: 0 1px 2px rgba(11, 18, 32, .08), 0 8px 24px rgba(11, 18, 32, .08);
+  --flood: #0d1420; --flood-ink: #f4f6f9; --cream: #f4f6f9;
+  --sans: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --mono: "Atkinson Hyperlegible Mono", ui-monospace, Menlo, monospace;
+  --title: "Archivo", "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --pg: #f3f3ef; --pg-ink: #0b0b0a; --pg-muted: #55534d; --pg-line: #d3d2ca; --strip: #0b0b0a; --shot: #0f7a48;
+  --film: #000; --film-ink: #f2efe7; --film-muted: #a7a399; --film-line: #262624; --go: #2fd07f;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #04130e; --panel: #081f18; --panel2: #0c2c22; --ink: #fbf6e4; --muted: #93b8a7; --line: #1a4a3b;
-  --green: #18dc8d; --blue: #6aa6ff; --orange: #ffb238; --del: #ff7a6b;
-  --add-bg: #0c3a29; --del-bg: #40191a; color-scheme: dark;
+  --bg: #0d1420; --dot: #263142; --card: #172030; --code-bg: #111927; --ink: #e6ecf4; --muted: #a9b6c8; --line: #2c3644;
+  --core: #6b9bff; --cleanup: #f0944a; --add: #3fd68a; --del: #ff8a85;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .4); color-scheme: dark;
+  --pg: #000; --pg-ink: #f2efe7; --pg-muted: #a7a399; --pg-line: #262624; --strip: #262624; --shot: var(--go);
 } }
 :root[data-theme="dark"] {
-  --bg: #04130e; --panel: #081f18; --panel2: #0c2c22; --ink: #fbf6e4; --muted: #93b8a7; --line: #1a4a3b;
-  --green: #18dc8d; --blue: #6aa6ff; --orange: #ffb238; --del: #ff7a6b;
-  --add-bg: #0c3a29; --del-bg: #40191a; color-scheme: dark;
+  --bg: #0d1420; --dot: #263142; --card: #172030; --code-bg: #111927; --ink: #e6ecf4; --muted: #a9b6c8; --line: #2c3644;
+  --core: #6b9bff; --cleanup: #f0944a; --add: #3fd68a; --del: #ff8a85;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .4); color-scheme: dark;
+  --pg: #000; --pg-ink: #f2efe7; --pg-muted: #a7a399; --pg-line: #262624; --strip: #262624; --shot: var(--go);
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 400 17px/1.55 var(--body); }
+html { background: var(--pg); scrollbar-color: color-mix(in srgb, var(--pg-ink) 30%, transparent) transparent; }
+body { margin: 0; background: var(--pg); color: var(--pg-ink); font: 400 17px/1.55 var(--sans); caret-color: var(--go); }
+::selection { background: color-mix(in srgb, var(--go) 35%, transparent); }
 .wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-a { color: var(--blue); }
+a { color: var(--core); text-underline-offset: .2em; text-decoration-thickness: 1px; }
 button { font: inherit; color: inherit; cursor: pointer; }
-:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--go); outline-offset: 3px; }
 code, pre { font-family: var(--mono); }
 
-.nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 18px; }
-.brand { display: flex; align-items: center; gap: 10px; font: 800 26px/1 var(--display); letter-spacing: .01em; color: inherit; text-decoration: none; }
-.brand img { width: 40px; height: 40px; object-fit: contain; }
-.nav div { display: flex; align-items: center; gap: 16px; }
-.nav a.link { color: var(--ink); font-weight: 500; text-decoration: none; }
-.nav a.link:hover { text-decoration: underline; }
-.theme { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; font: 400 11px var(--mono); color: var(--muted); }
-
-.hero { padding-block: 4px 20px; display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 32px; align-items: end; }
-.hero h1 { margin: 0; font: 900 clamp(56px, 8vw, 104px)/.88 var(--display); letter-spacing: -.005em; }
-.hero p { margin: 0; max-width: 42ch; font-size: 18px; color: var(--muted); }
+/* The opening: one frame between letterbox bars. The shot is the real #8613 diff, out of focus and drifting; the headline is its title card. */
+.opening { --film: var(--pg); --film-ink: var(--pg-ink); --film-muted: var(--pg-muted); --film-line: var(--pg-line); position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 100svh; background: var(--film); color: var(--film-ink); }
+.nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 22px; }
+.brand { display: flex; align-items: center; gap: 12px; font: 750 26px/1 var(--title); font-stretch: 112%; letter-spacing: -.01em; color: inherit; text-decoration: none; }
+.brand img { width: 44px; height: 44px; object-fit: contain; }
+.nav div { display: flex; align-items: center; gap: 12px; }
+.theme { display: flex; gap: 2px; padding: 3px; border: 1px solid color-mix(in srgb, currentColor 40%, transparent); border-radius: 4px; }
+.theme button { display: grid; place-items: center; width: 40px; height: 36px; padding: 0; background: none; border: 0; border-radius: 2px; color: var(--film-muted); }
+.theme button:hover { color: var(--film-ink); }
+.theme button[aria-pressed="true"] { background: var(--film-ink); color: var(--film); }
+.theme svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.gh { display: grid; place-items: center; width: 44px; height: 44px; color: var(--film-muted); }
+.gh:hover { color: var(--film-ink); }
+.gh svg { width: 26px; height: 26px; fill: currentColor; }
+.hero { position: relative; display: grid; align-items: end; min-height: min(56.25vw, 640px); overflow: hidden; background: var(--film); animation: aperture 1.4s cubic-bezier(.16, 1, .3, 1) both; }
+.shot { position: absolute; inset: -20% -6% 0; perspective: 900px; pointer-events: none; }
+.shot pre { margin: 0; font: 500 20px/1.7 var(--mono); color: var(--shot); white-space: pre; transform: rotateX(24deg) rotateZ(-4deg) scale(1.08); transform-origin: 50% 0; filter: blur(3px); opacity: .7; animation: roll 90s linear infinite; }
+.hero::before { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(to top, var(--film) 0%, color-mix(in srgb, var(--film) 80%, transparent) 42%, transparent 78%); }
+.hero::after { content: ""; position: absolute; inset: -50%; z-index: 1; opacity: .16; pointer-events: none; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"); animation: grain .5s steps(4) infinite; }
+.titlecard { position: relative; z-index: 2; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 24px 56px; align-items: end; width: 100%; padding-block: 48px clamp(32px, 4vw, 56px); }
+.titlecard h1 { margin: 0; font: 820 clamp(42px, 5.6vw, 88px)/.96 var(--title); font-stretch: 118%; letter-spacing: -.035em; text-wrap: balance; animation: focus-pull 1.6s .35s cubic-bezier(.16, 1, .3, 1) both; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .hero::after { filter: invert(1); opacity: .1; } }
+:root[data-theme="light"] .hero::after { filter: invert(1); opacity: .1; }
+.titlecard p { margin: 0; max-width: 40ch; font-size: clamp(19px, 1.6vw, 23px); line-height: 1.5; color: var(--film-ink); text-wrap: pretty; }
+.opening .wrap { box-sizing: border-box; width: 100%; }
+@media (min-width: 901px) {
+  .opening { grid-template-rows: minmax(auto, 1fr) auto minmax(auto, 1fr); }
+  .nav { align-self: center; }
+  .hero { aspect-ratio: 2.39; min-height: 0; }
+}
+@keyframes aperture { from { clip-path: inset(50% 0); } to { clip-path: inset(0 0); } }
+@keyframes focus-pull { from { filter: blur(14px); opacity: .15; } to { filter: blur(0); opacity: 1; } }
+@keyframes roll { to { transform: rotateX(24deg) rotateZ(-4deg) scale(1.08) translateY(-50%); } }
+@keyframes grain { 25% { transform: translate(-8%, 5%); } 50% { transform: translate(6%, -9%); } 75% { transform: translate(-4%, 8%); } }
 
 /* The review */
-.stage { position: relative; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
-.steps { display: flex; gap: 3px; padding: 8px 12px; background: var(--panel2); align-items: center; }
-.steps i { flex: 1; height: 4px; background: var(--line); transition: background .3s; }
-.steps i.on { background: var(--del); }
-.stage.local .steps i.on { background: var(--green); }
-.skip { flex: none; margin-left: 10px; background: none; border: 0; padding: 0 2px; font: 400 11px var(--mono); color: var(--muted); text-decoration: underline; }
+.stage { position: relative; overflow: hidden; background: var(--film); color: var(--ink); border: 1px solid var(--film-line); border-radius: 3px; }
+/* The progress bar is a strip of film: one frame per beat, exposed once played, the beat on screen lit green. */
+.steps { display: flex; gap: 3px; padding: 11px 14px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='4'%3E%3Crect x='4' width='6' height='4' rx='1' fill='%2333332f'/%3E%3C/svg%3E") 0 3px / 14px 4px repeat-x, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='4'%3E%3Crect x='4' width='6' height='4' rx='1' fill='%2333332f'/%3E%3C/svg%3E") 0 calc(100% - 3px) / 14px 4px repeat-x, var(--film); border-bottom: 1px solid var(--film-line); align-items: center; }
+.steps i { flex: 1; height: 14px; border-radius: 1px; background: #1a1a18; transition: background .3s; }
+.steps i.on { background: color-mix(in srgb, var(--film-ink) 30%, #1a1a18); }
+.steps i.now { background: var(--go); }
 .prbar { display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--line); }
 .prbar b { font-weight: 700; min-width: 0; }
-.prbar span { font: 400 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
-.prbar .plus { color: var(--green); }
+.prbar span { font: 400 calc(12.5px + var(--up)) var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.prbar .plus { color: var(--add); }
 .prbar .minus { color: var(--del); }
-.prbar .sample { margin-left: auto; }
 
-.screen { position: relative; padding: 32px 10px 10px; background-color: var(--flood); background-image: repeating-radial-gradient(ellipse at 72% 38%, transparent 0 26px, rgba(24, 220, 141, .14) 26px 27px); }
-.menubar { position: absolute; inset: 0 0 auto; height: 24px; display: flex; align-items: center; gap: 14px; padding: 0 12px; font: 400 11px var(--mono); color: var(--cream); background: rgba(3, 16, 11, .7); }
-.menubar b { margin-left: auto; font-weight: 400; font-variant-numeric: tabular-nums; }
-.icons { position: absolute; top: 44px; left: 20px; display: flex; flex-direction: column; gap: 22px; width: 130px; font: 400 11px/1.35 var(--mono); color: var(--cream); }
-.icons span::before { content: ""; display: block; width: 34px; height: 40px; margin-bottom: 4px; background: var(--cream); border-radius: 3px; opacity: .85; }
-.dock { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; gap: 10px; padding: 8px 12px; background: rgba(251, 246, 228, .12); border-radius: 12px; }
-.dock i { width: 34px; height: 34px; border-radius: 8px; background: #1469dc; }
-.dock i:nth-child(2) { background: #0fbf7a; }
-.dock i:nth-child(3) { background: #f59e1b; }
-.dock i:nth-child(4) { background: var(--cream); }
-.dock i:nth-child(5) { background: #bb3226; }
-.body { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) 216px; gap: 10px; height: 560px; }
-.win { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr); overflow: hidden; background: var(--panel); border-radius: 8px; box-shadow: 0 12px 40px rgba(0, 0, 0, .5); transform-origin: top right; animation: open .35s cubic-bezier(.2, .8, .2, 1); }
+/* The desktop: a small OS whose windows all drag, close and go full screen the same way */
+/* Text inside the game, its overlays included, runs 4px larger on desktop. */
+.stage { --up: 0px; }
+.screen { position: relative; height: 640px; font-size: calc(17px + var(--up)); overflow: hidden; background: #000; -webkit-user-select: none; user-select: none; }
+/* The fake OS selects nothing; only its text fields take a caret and a selection. */
+.screen input { -webkit-user-select: text; user-select: text; }
+.screen img, .screen a { -webkit-user-drag: none; }
+/* Scrollbars in the fake OS: a thin thumb in each element's own text colour, no track. */
+.screen * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, currentColor 35%, transparent) transparent; }
+@supports not (scrollbar-color: auto) {
+  .screen ::-webkit-scrollbar { width: 8px; height: 8px; }
+  .screen ::-webkit-scrollbar-track { background: transparent; }
+  .screen ::-webkit-scrollbar-thumb { background: rgba(169, 182, 200, .45); background-clip: padding-box; border: 2px solid transparent; border-radius: 8px; }
+}
+.stage.local .screen { height: 800px; }
+.os { position: absolute; inset: 0; background: var(--flood) radial-gradient(#263142 1.2px, transparent 1.3px) 0 0 / 28px 28px; }
+.os.off { animation: crt-off .7s ease-in forwards; }
+.os.boot { animation: crt-on 1.1s ease-out; }
+@keyframes crt-off { 40% { transform: scale(1, .004); filter: brightness(4); } 75% { transform: scale(.004, .004); filter: brightness(6); opacity: 1; } 100% { transform: scale(0); opacity: 0; } }
+@keyframes crt-on { from { opacity: 0; filter: brightness(0); } 30% { opacity: 1; filter: brightness(.3); } }
+.restarting { position: absolute; inset: 0; z-index: 1; display: grid; place-content: center; justify-items: center; gap: 14px; font: 400 calc(14px + var(--up)) var(--sans); color: var(--muted); }
+.restarting[hidden] { display: none; }
+.booting { z-index: 6000; background: #000; transition: opacity .5s ease-out; }
+.booting.leaving { opacity: 0; }
+.login { position: absolute; inset: 0; z-index: 5000; display: grid; place-content: center; justify-items: center; gap: 14px; background: rgba(13, 20, 32, .62); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); animation: fade-in .35s ease-out; }
+.login[hidden] { display: none; }
+.login.leaving { opacity: 0; transition: opacity .3s ease-in; }
+@keyframes fade-in { from { opacity: 0; } }
+.avatar { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; font-size: calc(34px + var(--up)); background: var(--cream); box-shadow: 0 6px 20px rgba(0, 0, 0, .4); }
+.login button { padding: 6px 18px; background: rgba(244, 246, 249, .14); border: 1px solid rgba(244, 246, 249, .3); border-radius: 999px; font: 600 calc(14px + var(--up)) var(--sans); color: var(--cream); }
+.login button:hover, .login button:focus-visible { background: rgba(244, 246, 249, .26); outline: 0; }
+.restarting i { width: 26px; height: 26px; border: 2px solid rgba(244, 246, 249, .18); border-top-color: var(--cream); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(1turn); } }
+.menubar { position: absolute; z-index: 3000; inset: 0 0 auto; height: 24px; display: flex; align-items: center; padding: 0 12px 0 4px; font: 600 calc(12px + var(--up)) var(--sans); color: var(--cream); background: rgba(13, 20, 32, .85); }
+.when { position: relative; margin-left: auto; }
+.when > button { padding: 2px 6px; background: none; border: 0; border-radius: 4px; font: inherit; font-variant-numeric: tabular-nums; color: inherit; }
+.when > button:hover, .when > button[aria-expanded="true"] { background: rgba(244, 246, 249, .18); }
+.menu.today { left: auto; right: 0; padding: 12px 14px; white-space: nowrap; color: #0b1220; }
+.today strong { display: block; font: 700 calc(20px + var(--up))/1.15 var(--sans); letter-spacing: -.01em; }
+.today small { display: block; margin-top: 4px; font: 400 calc(12px + var(--up)) var(--sans); color: #56667c; }
+.today small[hidden] { display: none; }
+.power { position: relative; }
+.power > button { display: grid; place-items: center; width: 26px; height: 20px; padding: 0; background: none; border: 0; border-radius: 4px; color: var(--cream); }
+.power > button:hover, .power > button[aria-expanded="true"] { background: rgba(244, 246, 249, .18); }
+.power svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.menu { position: absolute; top: calc(100% + 4px); left: 0; min-width: 140px; padding: 4px; background: var(--cream); border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); transform-origin: top left; animation: menu-in .18s cubic-bezier(.2, .8, .2, 1); }
+.menu.today { transform-origin: top right; }
+@keyframes menu-in { from { opacity: 0; transform: translateY(-4px) scale(.96); } }
+.menu svg { flex: none; width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 10px; text-align: left; background: none; border: 0; border-radius: 6px; font: 400 calc(13px + var(--up)) var(--sans); color: #0b1220; }
+.menu button:hover, .menu button:focus-visible { background: #2f6fdb; color: #fff; outline: 0; }
+.icons { position: absolute; z-index: 1; top: 36px; left: 10px; display: flex; flex-direction: column; gap: 6px; width: 120px; }
+.file { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 6px 4px; background: none; border: 0; border-radius: 6px; font: 400 calc(12px + var(--up))/1.3 var(--sans); color: var(--cream); text-align: center; overflow-wrap: anywhere; }
+.file:hover { background: rgba(244, 246, 249, .1); }
+.icons .file.sel { background: rgba(244, 246, 249, .16); }
+.icons .file.sel span { background: #2f6fdb; color: #fff; border-radius: 3px; }
+.glyph { position: relative; flex: none; width: 34px; height: 40px; background: var(--cream); border-radius: 3px; }
+.glyph.txt::after { content: ""; position: absolute; inset: 10px 7px 12px; background: repeating-linear-gradient(#a9b6c8 0 2px, transparent 2px 6px); }
+.glyph.png::after { content: ""; position: absolute; inset: 14px 5px 6px; background: #3fd68a; clip-path: polygon(0 100%, 35% 25%, 58% 70%, 78% 45%, 100% 100%); }
+.glyph.folder { width: 42px; height: 30px; margin-top: 10px; background: #f59e1b; border-radius: 2px 4px 4px; }
+.glyph.folder::before { content: ""; position: absolute; left: 0; top: -6px; width: 16px; height: 7px; background: #f59e1b; border-radius: 3px 3px 0 0; }
+.dock { position: absolute; z-index: 5; left: 50%; bottom: 10px; transform: translateX(-50%); display: flex; gap: 10px; padding: 7px 10px; background: rgba(244, 246, 249, .12); border-radius: 14px; }
+.app { position: relative; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 9px; color: var(--cream); }
+.app svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.app[data-app="slick"] { background: #2f6fdb; }
+.app[data-app="githob"] { background: var(--cream); color: #0b1220; }
+.app[data-app="terminal"] { background: #0d1420; color: #3fd68a; box-shadow: inset 0 0 0 1px #2c3644; }
+.app[data-app="codix"] { background: #f59e1b; color: #0d1420; }
+.app[data-app="runner"] { background: #c9303a; }
+.app::after { content: attr(aria-label); position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); padding: 3px 8px; border-radius: 6px; background: var(--cream); color: #0b1220; font: 600 calc(12px + var(--up)) var(--sans); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .15s; }
+.app:hover::after, .app:focus-visible::after { opacity: 1; }
+.app.running::before { content: ""; position: absolute; bottom: -5px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--cream); }
+.app .badge { position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 99px; background: #ff8a85; color: #0d1420; font: 700 calc(10px + var(--up))/17px var(--sans); }
+.app .badge:empty { display: none; }
+.app.bounce { animation: hop .5s cubic-bezier(.3, 0, .5, 1) infinite alternate; }
+@keyframes hop { to { transform: translateY(-9px); } }
+.rail { position: absolute; z-index: 2; top: 32px; right: 10px; bottom: 64px; width: 216px; }
+.window { position: absolute; z-index: 10; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; background: var(--card); border-radius: 10px; box-shadow: 0 12px 40px rgba(0, 0, 0, .5); animation: pop .22s cubic-bezier(.2, .8, .2, 1); }
+.window[hidden] { display: none; }
+.window:focus { outline: 0; }
+.window.max { inset: 24px 0 0 !important; width: auto !important; height: auto !important; border-radius: 0; }
+.grip { position: absolute; z-index: 2; width: 14px; height: 14px; touch-action: none; }
+.grip.nw { top: 0; left: 0; cursor: nwse-resize; }
+.grip.se { right: 0; bottom: 0; cursor: nwse-resize; }
+.grip.ne { top: 0; right: 0; cursor: nesw-resize; }
+.grip.sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.window.max .grip { display: none; }
+/* From the first story step until the last, the browser is all there is: no other windows, no dock, no power menu, no way to close it. */
+.os.story .window:not(#w-githob), .os.story .icons, .os.story .dock, .os.story .ctl, .os.story .power { display: none; }
+@keyframes pop { from { opacity: 0; transform: scale(.94); } }
+.window.closing { animation: unpop .18s cubic-bezier(.4, 0, 1, 1) forwards; pointer-events: none; }
+@keyframes unpop { to { opacity: 0; transform: scale(.94); } }
+.wbody { min-height: 0; overflow: auto; }
+.win { left: 10px; top: 32px; right: 236px; bottom: 64px; grid-template-rows: auto auto auto minmax(0, 1fr); transform-origin: top right; animation: open .35s cubic-bezier(.2, .8, .2, 1); }
 @keyframes open { from { opacity: 0; transform: scale(.25); } }
-.stage.idle .win { display: none; }
+.stage.idle .win { grid-template-rows: auto auto minmax(0, 1fr); }
 .stage.idle .rail { visibility: hidden; }
-.chrome { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; background: var(--panel2); font: 400 11px var(--mono); color: var(--muted); }
-.chrome i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
-.chrome b { flex: none; margin-left: 8px; font-weight: 400; color: var(--ink); }
-.chrome span { flex: 1; min-width: 0; margin-left: 8px; padding: 3px 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; background: var(--panel); border-radius: 99px; }
-.site { display: flex; align-items: center; gap: 18px; height: 36px; padding: 0 14px; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; }
-.site b { color: var(--ink); font: 800 21px/1 var(--display); }
-.site .active { align-self: stretch; display: flex; align-items: center; color: var(--ink); font-weight: 700; box-shadow: inset 0 -2px var(--orange); }
+.chrome { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; background: var(--code-bg); border-bottom: 1px solid var(--line); font: 400 calc(12px + var(--up)) var(--sans); color: var(--muted); cursor: grab; user-select: none; touch-action: none; }
+.ctl { flex: none; display: grid; place-items: center; width: 14px; height: 14px; padding: 0; border: 0; border-radius: 50%; color: rgba(13, 20, 32, .75); }
+.ctl.close { background: #ff6b5e; }
+.ctl.max { background: #2bc66b; }
+.ctl svg { width: 8px; height: 8px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.ctl .exit, .window.max .ctl .enter { display: none; }
+.window.max .ctl .exit { display: block; }
+.chrome span { flex: 1; min-width: 0; margin-left: 8px; padding: 3px 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; background: var(--card); border-radius: 99px; }
+.site { display: flex; align-items: center; gap: 18px; height: 36px; padding: 0 14px; border-bottom: 1px solid var(--line); font-size: calc(14px + var(--up)); color: var(--muted); white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+.site button { align-self: stretch; padding: 0; background: none; border: 0; color: inherit; }
+.site button:hover { color: var(--ink); }
+.site b { color: var(--ink); font: 700 calc(19px + var(--up))/1 var(--sans); letter-spacing: -.02em; }
+.site .active { align-self: stretch; display: flex; align-items: center; color: var(--ink); font-weight: 700; box-shadow: inset 0 -2px var(--cleanup); }
 .stage.local .site, .stage.local .prbar { display: none; }
 .stage.local .win { grid-template-rows: auto minmax(0, 1fr); }
-.stage.local .body { height: 720px; }
-.content { min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); }
-.stage.atlas .content { grid-template-columns: minmax(0, 1fr); }
-.stage.atlas .tree { display: none; }
-.ping { position: absolute; z-index: 6; top: 34px; right: 14px; width: 310px; display: flex; gap: 10px; padding: 10px 12px; text-align: left; font-size: 14.5px; line-height: 1.35; color: #06291d; background: var(--cream); border: 0; border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); animation: drop .4s cubic-bezier(.2, 1.3, .4, 1); }
-.ping small { display: block; color: #466a5a; font-size: 12px; }
-.ping .face { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; font-weight: 700; color: var(--cream); background: #1469dc; }
-button.ping:hover { outline: 2px solid #ffb238; }
+.stage.idle .win .site button, .stage.idle .win .prbar, .stage.idle .win .content { display: none; }
+.gh-empty { display: none; place-content: center; gap: 4px; padding: 20px; text-align: center; color: var(--muted); }
+.gh-empty b { font: 700 calc(28px + var(--up))/1.1 var(--sans); letter-spacing: -.02em; color: var(--ink); }
+.stage.idle .gh-empty { display: grid; }
+.ghpanel { position: absolute; inset: 0; z-index: 3; overflow: auto; padding: 18px 20px; background: var(--card); font-size: calc(15px + var(--up)); }
+.ghpanel[hidden] { display: none; }
+.ghpanel > * { margin-inline: auto; }
+.gh-post { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.gh-post div { padding: 8px 12px; background: var(--code-bg); border-bottom: 1px solid var(--line); color: var(--muted); }
+.gh-post b { color: var(--ink); }
+.gh-post p { margin: 0; padding: 12px; }
+/* The PR's own page states its title and size, so the bar that repeats them over Files changed stays out of the way. */
+.stage.overview .prbar { display: none; }
+.pr-over { display: grid; gap: 14px; justify-items: start; max-width: 640px; }
+.pr-over h3 { margin: 0; font-size: calc(22px + var(--up)); line-height: 1.2; }
+.pr-over h3 span { color: var(--muted); font-weight: 400; }
+.pr-over .gh-meta { margin: 0; }
+.pr-over .gh-post { justify-self: stretch; }
+.size { display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 6px 0; }
+.size div { display: flex; flex-direction: column-reverse; }
+.size dt { color: var(--muted); font: 400 calc(13px + var(--up)) var(--sans); }
+.size dd { margin: 0; font: 700 clamp(calc(44px + var(--up)), 7vw, calc(80px + var(--up)))/.95 var(--sans); letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.size .plus dd { color: var(--add); }
+.size .minus dd { color: var(--del); }
+.gh-meta { margin: 12px 0 0; color: var(--muted); font-size: calc(14px + var(--up)); }
+.gh-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 10px; }
+.gh-list li { padding: 9px 12px; font: 400 calc(12.5px + var(--up)) var(--mono); }
+.gh-list li + li { border-top: 1px solid var(--line); }
+.gh-check { margin: 0; font-weight: 700; }
+.gh-check span { color: var(--add); }
+.content { position: relative; min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); }
+.stage.local .content { grid-template-columns: minmax(0, 1fr); }
+.stage.local .tree { display: none; }
+.ping { position: absolute; z-index: 2000; top: 34px; right: 14px; width: 310px; display: flex; gap: 10px; padding: 10px 12px; text-align: left; font-size: calc(14.5px + var(--up)); line-height: 1.35; color: #0b1220; background: #fff; border: 0; border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); animation: drop .4s cubic-bezier(.2, 1.3, .4, 1); }
+.ping .said { white-space: pre-line; }
+.ping .link { color: #2f6fdb; text-decoration: underline; overflow-wrap: anywhere; }
+.ping small { display: block; color: #56667c; font-size: calc(12px + var(--up)); }
+.ping .face { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; font-weight: 700; color: #fff; background: #2f6fdb; }
+button.ping:hover { outline: 2px solid #f0944a; }
+.ping.stay { animation: crt-on 1.1s ease-out; }
 @keyframes drop { from { opacity: 0; transform: translateY(-30px); } }
-.hint { position: absolute; right: calc(100% + 10px); top: 14px; width: 92px; font: 800 22px/1 var(--display); color: #ffb238; text-align: center; animation: nudge .8s ease-in-out infinite alternate; pointer-events: none; }
-.hint svg { display: block; width: 76px; margin: 2px auto 0; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.hint { position: absolute; right: 100%; top: calc(50% - 9.5px); width: 92px; color: #f0944a; animation: nudge .8s ease-in-out infinite alternate; pointer-events: none; }
+.hint svg { display: block; width: 76px; margin: 0 auto; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 @keyframes nudge { to { transform: translateX(10px); } }
 @keyframes bob { to { transform: translateY(-10px); } }
-.term { position: absolute; z-index: 5; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 24px)); padding: 14px 16px; font: 400 12.5px/1.8 var(--mono); color: #18dc8d; background: #03100b; border: 1px solid #1a4a3b; border-radius: 8px; box-shadow: 0 12px 40px rgba(0, 0, 0, .6); }
+.term { position: absolute; z-index: 2000; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 24px)); padding: 14px 16px; font: 400 calc(12.5px + var(--up))/1.8 var(--mono); color: #3fd68a; background: #0d1420; border: 1px solid #2c3644; border-radius: 8px; box-shadow: 0 12px 40px rgba(0, 0, 0, .6); }
 .term div { opacity: 0; overflow-wrap: anywhere; animation: reveal .15s forwards; }
 .term div:nth-child(2) { animation-delay: .5s; }
 .term div:nth-child(3) { animation-delay: 1s; }
@@ -110,56 +259,84 @@ button.ping:hover { outline: 2px solid #ffb238; }
 .term div:nth-child(5) { animation-delay: 2s; color: var(--cream); }
 
 .tree { border-right: 1px solid var(--line); overflow: hidden; padding-block: 6px; }
-.row { display: flex; gap: 6px; align-items: center; padding: 0 10px; height: 35px; font: 400 10.5px var(--mono); color: var(--muted); }
+.row { display: flex; gap: 6px; align-items: center; padding: 0 10px; height: 35px; font: 400 calc(10.5px + var(--up)) var(--mono); color: var(--muted); }
 .row span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; direction: rtl; text-align: left; }
-.row .tick { flex: none; width: 13px; color: var(--green); }
-.row.cur { background: var(--panel2); color: var(--ink); }
-.row.flag { color: var(--orange); }
+.row .tick { flex: none; width: 13px; color: var(--add); }
+.row.cur { background: var(--code-bg); color: var(--ink); }
 
 .main { position: relative; min-width: 0; overflow: hidden; }
-.rail { background: var(--panel); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 14px; overflow: hidden; font-size: 14px; }
-.rail h3 { margin: 0 0 6px; font: 600 12px/1.3 var(--mono); color: var(--muted); }
+.rail { background: var(--card); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 14px; overflow: hidden; font-size: calc(14px + var(--up)); }
+.rail h2 { margin: 0 0 8px; font: 700 calc(13px + var(--up))/1.3 var(--sans); color: var(--muted); }
 .chips { display: flex; flex-direction: column; gap: 4px; min-height: 92px; }
-.chip { font: 400 10.5px/1.4 var(--mono); padding: 3px 6px; background: var(--panel2); border-left: 2px solid var(--blue); animation: in .25s; }
+.chip { font: 400 calc(11px + var(--up))/1.4 var(--mono); padding: 3px 7px; background: var(--code-bg); border: 1px solid var(--line); border-top: 2px solid var(--core); border-radius: 6px; animation: in .25s; }
 .chip.gone { animation: crumble .9s forwards; border-color: var(--del); }
-.lost { font: 400 11px var(--mono); color: var(--del); min-height: 16px; }
+.lost { font: 600 calc(12px + var(--up)) var(--sans); color: var(--del); min-height: 16px; }
 .log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
-.log li { line-height: 1.25; color: var(--del); animation: in .3s; padding-left: 16px; position: relative; font-size: 13.5px; }
+.log li { line-height: 1.25; color: var(--del); animation: in .3s; padding-left: 16px; position: relative; font-size: calc(13.5px + var(--up)); }
 .log li::before { content: "×"; position: absolute; left: 0; font-weight: 700; }
-.log li.fixed { color: var(--green); }
+.log li.fixed { color: var(--add); }
 .log li.fixed::before { content: "✓"; }
 @keyframes in { from { opacity: 0; transform: translateX(-8px); } }
 @keyframes crumble { to { opacity: 0; transform: translateY(14px) rotate(-4deg); filter: blur(2px); height: 0; padding-block: 0; } }
 
-.narr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 28px; align-items: center; padding: 14px 18px; min-height: 124px; border-top: 1px solid var(--line); background: var(--panel2); }
-.narr h2 { margin: 0; font: 800 clamp(25px, 3vw, 34px)/1.02 var(--display); text-wrap: balance; }
-.narr p { margin: 4px 0 0; max-width: 68ch; color: var(--muted); font-size: 16px; line-height: 1.4; }
+.narr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 28px; align-items: center; padding: 14px 18px; min-height: 124px; border-top: 1px solid var(--film-line); background: var(--film); color: var(--film-ink); color-scheme: dark; }
+.narr h2 { margin: 0; font: 800 clamp(22px, 2.3vw, 27px)/1.08 var(--title); font-stretch: 112%; letter-spacing: -.02em; text-wrap: balance; }
+.narr h2.cut { animation: focus-pull .8s cubic-bezier(.16, 1, .3, 1) both; }
+.narr p { margin: 4px 0 0; max-width: 68ch; color: var(--film-muted); font-size: 16px; line-height: 1.4; }
 .acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-.go { background: var(--green); color: var(--flood); border: 0; border-radius: 6px; padding: 11px 18px; font-weight: 700; font-size: 16px; text-decoration: none; }
-.stage:not(.atlas) .go.danger { background: var(--del); color: var(--flood); }
-.go.alt { background: none; color: var(--ink); box-shadow: inset 0 0 0 1px var(--muted); }
-.go:hover { filter: brightness(1.1); }
+@media (min-width: 901px) {
+  .stage { --up: 4px; }
+  .flood button { padding: 14px 28px; font-size: 24px; }
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) clamp(360px, 33.6vw, 480px); }
+  .steps { grid-column: 1 / -1; }
+  .narr { grid-template-columns: minmax(0, 1fr); align-content: start; gap: 24px; min-height: 0; padding: 38px 34px; border-top: 0; border-left: 1px solid var(--film-line); }
+  .narr h2 { font-size: clamp(29px, 2.9vw, 38px); }
+  .narr p { margin-top: 14px; font-size: 22px; line-height: 1.5; }
+  .narr .go { font-size: 20px; }
+  .acts { justify-content: flex-start; }
+}
+.go { display: inline-block; background: var(--add); color: var(--card); border: 1.5px solid var(--add); border-radius: 10px; padding: 9px 18px; font-weight: 650; font-size: 16px; line-height: 1.4; text-decoration: none; transition: filter .15s; }
+.stage:not(.atlas) .go.danger { background: var(--del); border-color: var(--del); color: var(--card); }
+.go.alt { background: var(--card); color: var(--ink); border-color: var(--line); }
+.go.alt:hover { border-color: var(--muted); filter: none; }
+.go:hover { filter: brightness(1.08); }
+:is(.opening, .narr, .after) .go { background: var(--go); color: #000; border-color: var(--go); border-radius: 3px; font-weight: 700; }
+:is(.opening, .narr, .after) .go.alt { background: transparent; color: inherit; border: 1px solid color-mix(in srgb, currentColor 40%, transparent); }
+:is(.opening, .narr, .after) .go.alt:hover { border-color: currentColor; }
 
 /* Files changed */
 .wall { position: absolute; inset: 0; overflow: hidden; }
 .wall pre { margin: 0; animation: climb 16s linear infinite; }
 @keyframes climb { to { transform: translateY(-50%); } }
-.ln { display: flex; gap: 10px; padding: 0 10px; font: 400 11.5px/20px var(--mono); white-space: pre; width: 100%; text-align: left; background: none; border: 0; color: inherit; }
+.ln { display: flex; gap: 10px; padding: 0 10px; font: 400 calc(11.5px + var(--up))/20px var(--mono); white-space: pre; width: 100%; text-align: left; background: none; border: 0; color: inherit; }
 .ln::before { content: attr(data-m); width: 10px; flex: none; color: var(--muted); }
 .ln.add { background: var(--add-bg); }
 .ln.del { background: var(--del-bg); }
+.ln.hunk { color: var(--muted); background: color-mix(in srgb, var(--core) 9%, transparent); }
 button.ln { cursor: pointer; }
-button.ln:hover { outline: 1px solid var(--blue); outline-offset: -1px; }
+button.ln:hover { outline: 1px solid var(--core); outline-offset: -1px; }
 .ln.pick { animation: pulse 1.3s infinite; }
-@keyframes pulse { 50% { box-shadow: inset 0 0 0 2px var(--orange); } }
+@keyframes pulse { 50% { box-shadow: inset 0 0 0 2px var(--cleanup); } }
 .diff { position: absolute; inset: 0; overflow: auto; }
-.diff h4 { position: sticky; top: 0; z-index: 1; margin: 0; padding: 8px 10px; font: 600 11.5px var(--mono); background: var(--panel2); border-bottom: 1px solid var(--line); }
-.note { position: absolute; left: 14px; right: 14px; bottom: 12px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--orange); font-size: 14.5px; line-height: 1.35; animation: in .25s; z-index: 2; }
-.ghosts { position: absolute; inset: 0; background: var(--panel); display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 18px; }
+.diff h4 { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; margin: 0; padding: 9px 12px; font: 600 calc(12.5px + var(--up)) var(--mono); color: var(--ink); background: color-mix(in srgb, var(--ink) 9%, var(--card)); border-bottom: 1px solid var(--line); }
+.diff h4::before { content: ''; flex: none; width: 11px; height: 14px; background: currentColor; opacity: .55; clip-path: polygon(0 0, 65% 0, 100% 28%, 100% 100%, 0 100%); }
+.diff.read { padding: 12px; }
+.diff.read section { margin-bottom: 14px; border: 1px solid var(--line); border-radius: 10px; overflow: clip; }
+.diff.read h4 { top: -12px; }
+.diff.read { overscroll-behavior: contain; }
+.diff.back { z-index: 4; background: var(--card); }
+.diff.back .ln.here { box-shadow: inset 0 0 0 1px var(--cleanup); background: color-mix(in srgb, var(--cleanup) 24%, var(--card)); }
+.diff.read .big { margin: 0; padding: 14px 10px; color: var(--muted); font: 400 calc(12px + var(--up)) var(--mono); }
+.cue { position: sticky; bottom: 12px; display: flex; align-items: center; gap: 4px; width: max-content; margin: 0 auto; padding: 6px 12px 6px 14px; border-radius: 99px; background: var(--ink); color: var(--card); border: 0; font: 600 calc(13px + var(--up)) var(--sans); cursor: pointer; animation: bob .9s ease-in-out infinite alternate; transition: opacity .2s; }
+.cue svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.diff.read.moved .cue { opacity: 0; pointer-events: none; }
+.ghosts { position: absolute; inset: 0; background: var(--card); display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 18px; }
 .ghosts p { margin: 0; color: var(--muted); }
-.ghost { font: 400 12px/1.5 var(--mono); padding: 8px 10px; border: 1px dashed var(--orange); color: var(--orange); opacity: 0; animation: reveal .6s forwards; }
+.ghost { font: 400 calc(12px + var(--up))/1.5 var(--mono); padding: 8px 10px; border: 1px dashed var(--cleanup); border-radius: 10px; color: var(--cleanup); opacity: 0; animation: reveal .6s forwards; }
 .ghost:nth-of-type(2) { animation-delay: .5s; }
 .ghost:nth-of-type(3) { animation-delay: 1s; }
+.ghost:nth-of-type(4) { animation-delay: 1.5s; }
+.ghost:nth-of-type(5) { animation-delay: 2s; }
 @keyframes reveal { to { opacity: 1; } }
 
 .glitch .screen { animation: tear .55s steps(2) both; }
@@ -170,106 +347,277 @@ button.ln:hover { outline: 1px solid var(--blue); outline-offset: -1px; }
   75% { clip-path: inset(70% 0 0 0); transform: translateX(10px); }
   100% { clip-path: inset(0 0 100% 0); }
 }
-.flood { position: absolute; inset: 0; z-index: 9; background: var(--flood); color: var(--flood-ink); display: flex; flex-direction: column; justify-content: center; gap: 16px; padding: clamp(18px, 5vw, 64px); overflow: hidden; }
-.flood .wall { opacity: .13; color: #18dc8d; }
-.flood h2 { position: relative; margin: 0; font: 900 clamp(46px, 9.4vw, 118px)/.9 var(--display); max-width: 11em; text-wrap: balance; }
-.flood p { position: relative; margin: 0; max-width: 52ch; font-size: 19px; color: #b8d6c6; }
-.flood button { position: relative; align-self: flex-start; background: #18dc8d; color: var(--flood); }
+.flood { position: absolute; inset: 0; z-index: 2100; background: var(--flood); color: var(--flood-ink); display: flex; flex-direction: column; justify-content: center; gap: 16px; padding: clamp(18px, 5vw, 64px); overflow: hidden; }
+.flood .wall { opacity: .13; color: #3fd68a; }
+.flood h2 { position: relative; margin: 0; font: 700 clamp(calc(40px + var(--up)), 7.6vw, calc(96px + var(--up)))/.98 var(--sans); letter-spacing: -.035em; max-width: 11em; text-wrap: balance; }
+.flood p { position: relative; margin: 0; max-width: 52ch; font-size: calc(19px + var(--up)); color: #a9b6c8; }
+.flood button { position: relative; align-self: flex-start; background: #3fd68a; border-color: #3fd68a; color: var(--flood); }
 
 /* The real viewer, loaded from map/ */
 .viewer { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-.fly { position: absolute; z-index: 8; font: 400 10px var(--mono); padding: 2px 6px; background: var(--panel2); color: var(--ink); white-space: nowrap; transition: transform .9s cubic-bezier(.6, 0, .2, 1), opacity .3s .8s; pointer-events: none; }
+.fly { position: absolute; z-index: 2200; font: 400 calc(10px + var(--up)) var(--mono); padding: 2px 6px; border-radius: 6px; background: var(--code-bg); color: var(--ink); white-space: nowrap; transition: transform .9s cubic-bezier(.6, 0, .2, 1), opacity .3s .8s; pointer-events: none; }
 
-/* Proof and install */
-.band { padding-block: 72px 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 32px; align-items: start; }
-.band h2 { margin: 0 0 10px; font: 800 clamp(36px, 5vw, 58px)/.96 var(--display); text-wrap: balance; }
-.band p { margin: 0 0 10px; max-width: 60ch; color: var(--muted); }
-.shot { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; }
-.cmd { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 10px; padding: 10px 12px; background: var(--panel2); font: 400 12.5px/1.6 var(--mono); }
-.cmd code { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.cmd button { flex: none; background: none; border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px; font: 400 11px var(--mono); color: var(--muted); }
-footer.end { margin-top: 72px; padding-block: 20px 28px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+/* Apps */
+.slick, .codix { display: grid; grid-template-columns: 170px minmax(0, 1fr); height: 100%; min-height: 0; }
+.slick aside { padding: 10px 6px; background: #141c2b; color: #d6dde6; font-size: calc(13.5px + var(--up)); overflow: auto; }
+.slick h5, .codix h5 { margin: 12px 8px 4px; font: 700 calc(12px + var(--up)) var(--sans); color: #a9b6c8; }
+.codix h5 { color: var(--muted); }
+.chan { display: block; width: 100%; padding: 4px 8px; text-align: left; background: none; border: 0; border-radius: 5px; color: inherit; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.chan:hover { background: rgba(244, 246, 249, .08); }
+.chan.cur { background: #2f6fdb; color: #fff; }
+.chan.unread { font-weight: 700; color: var(--cream); }
+.dm { display: flex; align-items: center; }
+.dm .chan { flex: 1; min-width: 0; }
+.status { position: relative; flex: none; padding: 0 4px; background: none; border: 0; font-size: calc(13px + var(--up)); line-height: 1; cursor: default; }
+.status::after { content: attr(data-tip); position: absolute; z-index: 2; top: calc(100% + 6px); right: 0; padding: 3px 8px; border-radius: 6px; background: var(--cream); color: #0b1220; font: 600 calc(12px + var(--up)) var(--sans); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s; }
+.status:hover::after, .status:focus::after { opacity: 1; }
+.slick main, .codix main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.codix main { grid-template-rows: minmax(0, 1fr) auto; }
+.slick header { display: flex; align-items: center; gap: 2px; padding: 9px 14px; border-bottom: 1px solid var(--line); font-weight: 700; }
+.msgs { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; overflow: auto; }
+.msg { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 9px; font-size: calc(14.5px + var(--up)); line-height: 1.4; }
+.av { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; font-weight: 700; color: var(--cream); }
+.msg time { margin-left: 6px; font: 400 calc(12px + var(--up)) var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; }
+.msg p { margin: 0; overflow-wrap: anywhere; white-space: pre-line; }
+.msg a { color: var(--core); }
+.msg img { display: block; width: 100%; max-width: 320px; height: auto; margin-top: 6px; border-radius: 6px; }
+.composer { padding: 8px 14px 12px; }
+.composer.send { display: flex; gap: 8px; }
+.composer.send button { flex: none; display: grid; place-items: center; width: 38px; border: 0; border-radius: 10px; background: var(--add); color: var(--card); transition: opacity .12s; }
+.composer.send button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+.composer.send input:placeholder-shown + button { opacity: .4; }
+.composer input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); font: inherit; font-size: calc(14.5px + var(--up)); }
+.tty { height: 100%; padding: 10px 12px; overflow: auto; background: #0d1420; color: #3fd68a; font: 400 calc(12.5px + var(--up))/1.7 var(--mono); cursor: text; }
+.tty div { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tty .typed span { color: var(--cream); }
+.prompt { display: flex; gap: 8px; }
+.prompt input { flex: 1; min-width: 0; padding: 0; background: none; border: 0; outline: 0; color: var(--cream); font: inherit; caret-color: #3fd68a; }
+.codix aside { display: flex; flex-direction: column; gap: 2px; padding: 10px 8px; overflow: auto; background: var(--code-bg); border-right: 1px solid var(--line); font-size: calc(13.5px + var(--up)); }
+.newchat { padding: 7px 10px; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-weight: 700; }
+.codix .chan { color: var(--muted); }
+.codix .chan:hover { background: var(--card); }
+.codix .chan.cur { background: var(--card); color: var(--ink); }
+.thread { display: flex; flex-direction: column; gap: 10px; padding: 16px; overflow: auto; font-size: calc(14.5px + var(--up)); line-height: 1.5; }
+.bubble { max-width: 85%; padding: 8px 12px; border-radius: 14px; background: var(--code-bg); overflow-wrap: anywhere; }
+.bubble.me { align-self: flex-end; background: var(--add); color: var(--card); }
+.bubble code { font-size: .88em; }
+.err { align-self: flex-start; padding: 8px 12px; border: 1px solid var(--del); border-radius: 10px; color: var(--del); }
+.thread .empty { margin: auto; font: 700 calc(26px + var(--up))/1.15 var(--sans); letter-spacing: -.02em; color: var(--muted); text-align: center; }
+.runner { height: 100%; background: #0d1420; }
+.runner canvas { display: block; width: 100%; height: 100%; object-fit: contain; outline: 0; touch-action: manipulation; }
+.txt { margin: 0; padding: 14px 16px; font: 400 calc(13px + var(--up))/1.75 var(--mono); white-space: pre-wrap; }
+.folder { padding: 12px 14px; }
+.crumb { margin: 0 0 10px; font: 400 calc(11px + var(--up)) var(--mono); color: var(--muted); direction: rtl; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.folder .row2 { display: flex; align-items: flex-start; gap: 8px; }
+.folder .file { width: 140px; color: var(--ink); }
+.folder .file:hover { background: var(--code-bg); }
+.up { padding: 4px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; font: 600 calc(12px + var(--up)) var(--sans); color: var(--muted); }
+.deep { margin: 12px 0 0; color: var(--muted); font-size: calc(14.5px + var(--up)); }
+.pic { display: grid; place-items: center; height: 100%; padding: 8px; background: #fff; }
+.pic img { width: auto; height: auto; max-width: 100%; max-height: 100%; }
+
+/* After the screening: set type on the room's own ground, each section cut from the next by a strip of perforated film. */
+.after > section::before { content: ""; display: block; height: 40px; margin: 0 calc(50% - 50vw) clamp(56px, 7vw, 104px); background: var(--strip); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='40'%3E%3Cpath fill-rule='evenodd' d='M0 0h24v40H0z M8 5h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 8 5z M8 24h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 8 24z'/%3E%3C/svg%3E") 0 0 / 24px 40px repeat-x; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='40'%3E%3Cpath fill-rule='evenodd' d='M0 0h24v40H0z M8 5h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 8 5z M8 24h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 8 24z'/%3E%3C/svg%3E") 0 0 / 24px 40px repeat-x; }
+.after a:not(.go) { color: inherit; text-decoration-color: var(--go); text-decoration-thickness: 2px; }
+.credit { margin: 16px 2px 0; color: var(--pg-muted); font-size: 14px; }
+.pass { padding-top: clamp(64px, 8vw, 112px); }
+.pass > div + div { margin-top: 56px; }
+.pass h2, .bridge h2, .rate h2, .install h2 { margin: 0 0 20px; font: 820 clamp(32px, 3.6vw, 54px)/1 var(--title); font-stretch: 115%; letter-spacing: -.03em; text-wrap: balance; }
+.pass p, .bridge p { margin: 0 0 14px; max-width: 62ch; font-size: clamp(18px, 1.5vw, 20px); line-height: 1.55; text-wrap: pretty; }
+.pass p:last-child, .bridge p:last-child { margin-bottom: 0; }
+@media (min-width: 901px) {
+  .pass.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; }
+  .pass.pair::before { grid-column: 1 / -1; }
+  .pass.pair > div + div { margin-top: 0; padding-top: clamp(80px, 10vw, 160px); }
+}
+.proof { padding-top: clamp(64px, 8vw, 112px); }
+.bridge { max-width: 860px; margin-bottom: 40px; }
+.bridge p { max-width: 60ch; }
+.proof .stage { display: block; height: auto; padding-block: clamp(20px, 3vw, 44px); background: var(--film); border: 0; border-radius: 0; margin-inline: calc(50% - 50vw); padding-inline: max(16px, calc(50vw - 620px)); }
+.proof .bar { display: flex; justify-content: flex-end; padding: 0 0 12px; color: var(--film-ink); }
+.proof .open { padding: 6px 14px; font-size: 14px; }
+.proof .canvas { position: relative; height: 640px; background: var(--bg); }
+.proof iframe { display: block; width: 100%; height: 100%; border: 0; }
+.proof .plate { display: none; }
+.proof .plate img { display: block; width: 100%; height: auto; }
+/* The close is the end title card: a full-bleed black frame below its strip. */
+.install { margin: clamp(64px, 8vw, 112px) calc(50% - 50vw) 0; padding: 0 max(16px, calc(50vw - 620px)) clamp(72px, 9vw, 128px); background: linear-gradient(var(--film), var(--film)) 0 40px / 100% 100% no-repeat; color: var(--film-ink); }
+.install::before { margin-inline: 0; }
+.install > p { margin: 0; max-width: 52ch; font-size: clamp(18px, 1.5vw, 20px); }
+.install .plan { margin-top: 40px; }
+.install .close { margin-top: 48px; }
+.install .star { padding: 14px 26px; font-size: 18px; }
+.star { display: inline-flex; align-items: center; gap: .5em; }
+.star svg { width: 1.15em; height: 1.15em; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linejoin: round; }
+.star:is(:hover, :focus-visible) svg { fill: currentColor; }
+/* The star ask gets its own frame on the room: one large drawn star that lights Go Green while its button is under the pointer or focused. */
+.rate { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0 clamp(32px, 5vw, 72px); padding-top: clamp(64px, 8vw, 112px); }
+.rate::before { grid-column: 1 / -1; }
+.rate h2 { max-width: 18ch; margin-bottom: 32px; font-size: clamp(36px, 5.6vw, 84px); font-stretch: 118%; line-height: .96; letter-spacing: -.035em; }
+.rate .star { padding: 18px 32px 18px 28px; font-size: 20px; }
+.mark { width: clamp(140px, 18vw, 260px); height: auto; fill: transparent; stroke: currentColor; stroke-width: 1.1; stroke-linejoin: round; transition: fill .5s cubic-bezier(.16, 1, .3, 1), stroke .5s cubic-bezier(.16, 1, .3, 1), transform .5s cubic-bezier(.16, 1, .3, 1); }
+.rate:has(.star:is(:hover, :focus-visible)) .mark { fill: var(--go); stroke: var(--go); transform: rotate(-8deg); }
+@media (max-width: 600px) {
+  .rate { grid-template-columns: minmax(0, 1fr); }
+  .mark { width: 88px; margin-bottom: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { .mark { transition: none; } }
+.cmd { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 12px 14px; background: var(--film); color: var(--film-ink); border: 1px solid var(--film-line); border-radius: 3px; font: 400 14px/1.6 var(--mono); }
+.cmd code { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmd button { flex: none; background: none; border: 1px solid var(--film-line); border-radius: 2px; padding: 2px 10px; font: 600 12px/1.6 var(--sans); color: var(--film-muted); }
+.cmd button:hover { color: var(--film-ink); border-color: var(--film-muted); }
+.nav a.go { padding: 10px 18px; font-size: 17px; }
+.cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; margin-top: 22px; }
+.cta .skip { color: var(--film-ink); font-weight: 500; text-decoration-color: var(--go); text-decoration-thickness: 2px; }
+.cta :is(.go, .skip) { font-size: clamp(18px, 1.4vw, 20px); }
+.cta .go { padding: 12px 24px; }
+.plan { list-style: none; counter-reset: step; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 32px; margin: 0; padding: 0; }
+.plan li { counter-increment: step; min-width: 0; }
+.plan li > :last-child { margin-bottom: 0; }
+.plan h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 12px; font: 750 20px/1.2 var(--title); font-stretch: 108%; letter-spacing: -.01em; }
+.plan h3::before { content: counter(step); flex: none; padding: 1px 6px; background: var(--film-ink); color: var(--film); font: 600 13px/1.4 var(--mono); font-variant-numeric: tabular-nums; }
+.plan p { margin: 0 0 10px; color: var(--film-muted); }
+.plan p code { color: var(--film-ink); }
+.nav a.go { white-space: nowrap; }
+@media (max-width: 700px) {
+  .proof .stage .canvas { height: auto; }
+  .proof .stage { padding-block: 16px; }
+  .proof iframe { display: none; }
+  .proof .plate { display: block; }
+}
+@media (max-width: 480px) {
+  /* On phones the logo stands in for the name, which the headline below opens with. */
+  .brand span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .brand img { width: 32px; height: 32px; }
+  .gh { width: 36px; }
+  .nav div { gap: 8px; }
+  .nav a.go { padding: 8px 12px; font-size: 15px; }
+}
 
 @media (max-width: 900px) {
-  .hero { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .titlecard { grid-template-columns: minmax(0, 1fr); gap: 16px; padding-top: 96px; }
+  .hero { min-height: 0; }
   .stage { display: flex; flex-direction: column; }
-  .narr { order: 1; border-top: 0; border-bottom: 1px solid var(--line); min-height: 172px; align-content: start; }
+  .narr { order: 1; border-top: 0; border-bottom: 1px solid var(--film-line); min-height: 172px; align-content: start; }
   .screen { order: 2; }
   .tree { display: none; }
-  .content, .stage.atlas .content { grid-template-columns: minmax(0, 1fr); height: 310px; }
-  .stage.local .content { height: 520px; }
-  .body { grid-template-columns: minmax(0, 1fr); height: auto; }
-  .stage.idle .body { height: 340px; }
-  .stage.local .body { height: auto; }
+  .content, .stage.local .content { grid-template-columns: minmax(0, 1fr); }
+  .screen { height: 420px; }
+  .stage:not(.idle) .screen { height: 640px; --below: 170px; }
+  .stage.local .screen { height: 760px; }
+  .window { inset: 24px 0 var(--below, 0px) !important; width: auto !important; height: auto !important; border-radius: 0; }
+  .window.max { bottom: 0 !important; }
+  .grip { display: none; }
+  .chrome { cursor: default; }
+  .ctl { width: 20px; height: 20px; }
+  .ctl svg { width: 10px; height: 10px; }
+  .dock { bottom: calc(var(--below, 0px) + 10px); }
+  .slick, .codix { grid-template-columns: 112px minmax(0, 1fr); }
   .stage.idle .rail { display: none; }
-  .site span:not(.active) { display: none; }
   .ping { left: 10px; right: 10px; width: auto; }
-  .hint { right: auto; left: 50%; top: calc(100% + 8px); margin-left: -46px; animation-name: bob; display: flex; flex-direction: column-reverse; }
+  .hint { right: auto; left: 50%; top: calc(100% + 8px); margin-left: -46px; animation-name: bob; }
   .hint svg { transform: rotate(-130deg); }
-  .icons { top: 180px; flex-direction: row; width: auto; }
-  .icons span { width: 92px; }
-  .rail { flex-direction: row; gap: 12px; height: 150px; }
+  .icons { top: 128px; right: 10px; width: auto; flex-direction: row; flex-wrap: wrap; }
+  .icons .file { width: 96px; }
+  .rail { top: auto; left: 10px; bottom: 10px; width: auto; flex-direction: row; gap: 12px; height: 150px; }
   .rail > div { flex: 1; min-width: 0; }
   .chips { min-height: 0; }
   .chip:nth-last-child(n + 3), .log li:nth-last-child(n + 4) { display: none; }
   .log li { font-size: 12px; }
   .narr { grid-template-columns: minmax(0, 1fr); }
   .acts { justify-content: flex-start; }
-  .band { grid-template-columns: minmax(0, 1fr); padding-block: 48px 0; }
-  .prbar .sample { margin-left: 0; }
+  .proof .canvas { height: 592px; }
+  .cmd button, .nav a.go, .proof .open { min-height: 44px; }
+  .theme button { width: 40px; height: 38px; }
+  .nav a.go, .proof .open { display: inline-flex; align-items: center; }
+}
+@media (max-width: 480px) {
+  .theme button { width: 36px; }
+}
+/* Desktop: the hero states the mission; scrolling on lands on the story, which holds the screen until the system shuts down. */
+@media (min-width: 901px) {
+  .play { max-width: none; padding: 0; }
+  .stage { height: 100svh; grid-template-rows: auto minmax(0, 1fr); border: 0; border-radius: 0; box-shadow: none; transition: opacity .6s ease-in; }
+  .play .stage .screen { height: auto; }
+  .stage.down { opacity: 0; }
+  .stage:has(.login:not([hidden])) .narr > * { visibility: hidden; }
+  html.played .play { display: none; }
+  html.ending .wrap { animation: fade-in .9s ease-out both; }
 }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
-  .wall pre { animation: none; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .wall pre, .shot pre, .hero::after, .narr h2.cut { animation: none; }
+  .app.bounce { outline: 2px solid #f0944a; outline-offset: 3px; }
 }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <nav class="nav">
-    <a class="brand" href="#top"><img src="assets/logo.png" alt="">MergeAtlas</a>
+<div class="opening" id="top">
+  <nav class="nav wrap">
+    <a class="brand" href="#top"><img src="assets/logo.png" alt=""><span>MergeAtlas</span></a>
     <div>
-      <a class="link" href="#install">Install</a>
-      <button class="theme" id="theme" type="button" aria-label="Change theme">system</button>
+      <a class="go alt" href="#install">Install</a>
+      <div class="theme" role="group" aria-label="Theme"><button type="button" data-pick="light" aria-label="Light" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.3M8 13.2v1.3M1.5 8h1.3M13.2 8h1.3M3.4 3.4l.9.9M11.7 11.7l.9.9M3.4 12.6l.9-.9M11.7 4.3l.9-.9"/></svg></button><button type="button" data-pick="dark" aria-label="Dark" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 9.6A5.8 5.8 0 0 1 6.4 2.5a5.8 5.8 0 1 0 7.1 7.1z"/></svg></button></div>
+      <a class="gh" href="https://github.com/ismayilkarimli/MergeAtlas" aria-label="MergeAtlas on GitHub"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
     </div>
   </nav>
-  <header class="hero" id="top">
-    <h1>Review code you don't know</h1>
-    <p>MergeAtlas turns a pull request into a map of what changed, why, and what it reaches. Play through a review to feel the difference.</p>
+  <header class="hero">
+    <div class="shot" aria-hidden="true"><pre id="wallShot"></pre></div>
+    <div class="titlecard wrap">
+      <h1>MergeAtlas: Know what you're approving for real</h1>
+      <div>
+        <p>A pull request arrives as a wall of lines, all the same green. Start from what it's for and what it reaches, before you read a single change line.</p>
+        <div class="cta"><a class="go" href="#stage">Play a review</a><a class="skip" href="#install">Skip to install</a></div>
+      </div>
+    </div>
   </header>
-
+</div>
+<div class="wrap play">
   <section class="stage idle" id="stage" aria-label="Interactive story of a code review">
-    <div class="steps"><span id="steps" style="display:contents"></span><button class="skip" id="skip" type="button">Skip to MergeAtlas</button></div>
+    <div class="steps"><span id="steps" style="display:contents"></span></div>
     <div class="screen" id="screen">
-      <div class="menubar"><span>File</span><span>Edit</span><span>View</span><span>Go</span><span>Help</span><b id="clock">4:12 PM</b></div>
-      <div class="icons" aria-hidden="true"><span>todo.txt</span><span>roadmap final (3).pdf</span><span>definitely-not-node_modules</span></div>
-      <div class="dock" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
-      <div class="body">
-        <div class="win">
-          <div class="chrome"><i></i><i></i><i></i><b id="tab"></b><span id="addr"></span></div>
-          <div class="site"><b>GitHob</b><span>Conversation</span><span>Commits</span><span>Checks</span><span class="active">Files changed 12</span></div>
-          <div class="prbar">
-            <b>Retry failed card payments #4127</b>
-            <span><span class="plus">+847</span> <span class="minus">−312</span></span>
-            <span id="viewed">0 of 12 viewed</span>
-            <span class="sample">sample PR</span>
+      <div class="restarting" id="restarting" role="status" hidden><i></i>Restarting…</div>
+      <div class="restarting booting" id="booting" role="status" hidden><i></i>Booting up…</div>
+      <div class="login" id="login" hidden><span class="avatar" aria-hidden="true">🐧</span><button type="button" id="loginBtn">Log in</button></div>
+      <div class="os" id="os">
+        <div class="menubar">
+          <div class="power">
+            <button type="button" id="power" aria-label="Power" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 16 16"><path d="M8 1.5v6"/><path d="M4.4 3.8a5.5 5.5 0 1 0 7.2 0"/></svg></button>
+            <div class="menu" id="powerMenu" role="menu" hidden><button type="button" role="menuitem" id="logout"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 2.5h-3v11h3M10 5l3 3-3 3M13 8H6.5"/></svg>Log out</button><button type="button" role="menuitem" id="reboot"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3"/></svg>Reboot</button></div>
           </div>
-          <div class="content">
-            <aside class="tree" id="tree" aria-label="Changed files"></aside>
-            <div class="main" id="main"></div>
+          <div class="when">
+            <button type="button" id="clock" aria-haspopup="dialog" aria-expanded="false" aria-controls="today">4:12 PM</button>
+            <div class="menu today" id="today" role="dialog" aria-label="Today" hidden><strong id="date"></strong><small id="where" hidden></small></div>
           </div>
         </div>
+        <div class="icons" id="icons"></div>
         <aside class="rail">
           <div>
-            <h3 id="headTitle">In your head</h3>
+            <h2 id="headTitle">In your head</h2>
             <div class="chips" id="chips"></div>
             <div class="lost" id="lost"></div>
           </div>
           <div>
-            <h3 id="logTitle">Stuck on</h3>
+            <h2 id="logTitle">Stuck on</h2>
             <ul class="log" id="log"></ul>
           </div>
         </aside>
+        <section class="window win" id="w-githob" data-win="githob" aria-label="GitHob" hidden>
+          <div class="chrome"><span id="addr"></span></div>
+          <div class="site"><b>GitHob</b><button type="button" data-tab="conv">Conversation</button><button type="button" data-tab="commits">Commits</button><button type="button" data-tab="checks">Checks</button><button type="button" data-tab="files" class="active">Files changed 36</button></div>
+          <div class="prbar">
+            <b>feat: image cropping #8613</b>
+            <span><span class="plus">+2,199</span> <span class="minus">−92</span></span>
+            <span id="viewed">0 of 36 viewed</span>
+          </div>
+          <div class="content">
+            <aside class="tree" id="tree" aria-label="Changed files"></aside>
+            <div class="main" id="main"></div>
+            <div class="ghpanel" id="ghpanel" hidden></div>
+          </div>
+          <div class="gh-empty"><b>No review requests</b><span>Enjoy it while it lasts.</span></div>
+        </section>
+        <nav class="dock" id="dock" aria-label="Apps"></nav>
       </div>
     </div>
     <div class="narr" aria-live="polite">
@@ -277,40 +625,69 @@ footer.end { margin-top: 72px; padding-block: 20px 28px; border-top: 1px solid v
       <div class="acts" id="acts"></div>
     </div>
   </section>
+</div>
+<div class="wrap after">
+  <p class="credit">The pull request is <a href="https://github.com/excalidraw/excalidraw/pull/8613">excalidraw/excalidraw#8613</a>. The people and chat around it are made up.</p>
 
-  <section class="band">
+  <section class="pass pair">
     <div>
-      <h2>A real one</h2>
-      <p>This is MergeAtlas on <a href="https://github.com/excalidraw/excalidraw/pull/10903">excalidraw/excalidraw#10903</a>, which makes image exports follow the editor's theme.</p>
-      <p>The clipboard code never appears in that diff. It still changes, and the map shows it.</p>
-    </div>
-    <img class="shot" src="assets/map-view.png" width="3200" height="2000" alt="MergeAtlas showing cards for each changed component of the Excalidraw pull request, joined by arrows, with the story of the change beside them." loading="lazy">
-  </section>
-
-  <section class="band">
-    <div>
-      <h2>Made for blast radius</h2>
+      <h2>Next time a review request lands</h2>
+      <p>You start from what the change is for, not from the top of the file list. By the time you read a line, you know why it's there and what else it touches.</p>
+      <p>And when you approve, you can tell your colleague why.</p>
     </div>
     <div>
-      <p>MergeAtlas is for changes that reach further than their diff: several files, some of them affected only indirectly, in a project you don't know well.</p>
-      <p>A config tweak doesn't need a map. Your agent or the PR description can tell you what it touches.</p>
-      <p>The map stops at understanding. It doesn't find bugs, give verdicts, or tell you what to do. Those stay with you.</p>
+      <h2>Dedicate your focus to what's important</h2>
+      <p>You don't need to read all lines when agents are writing the code.</p>
+      <p>An agent writes more in an hour than you can read in an afternoon, and most of it is wiring. You go straight to the lines that change how things behave.</p>
+      <p>The rest is there when you want it.</p>
     </div>
   </section>
 
-  <section class="band" id="install">
+  <section class="rate" aria-labelledby="rate-title">
+    <svg class="mark" viewBox="2 2 20 19" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3-4.6-4.4 6.3-.9z"/></svg>
     <div>
-      <h2>Map your next review</h2>
-      <p>You need an agent that runs skills, such as Claude Code, plus Python 3, git, and the GitHub CLI signed in.</p>
-    </div>
-    <div>
-      <div class="cmd"><code>git clone https://github.com/ismayilkarimli/MergeAtlas.git</code><button type="button" class="copy">Copy</button></div>
-      <div class="cmd"><code>ln -s "$PWD/MergeAtlas/skills/mergeatlas" ~/.claude/skills/mergeatlas</code><button type="button" class="copy">Copy</button></div>
-      <p>From inside the PR's repository, ask your agent to map it, or run <code>/mergeatlas</code> in Claude Code. Your maps stay on your machine.</p>
+      <h2 id="rate-title">Liked the review? Give MergeAtlas a star.</h2>
+      <a class="go star" href="https://github.com/ismayilkarimli/MergeAtlas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3-4.6-4.4 6.3-.9z"/></svg>Star on GitHub</a>
     </div>
   </section>
 
-  <footer class="end">MergeAtlas is open source under the MIT license.</footer>
+  <section class="proof" aria-labelledby="proof-title">
+    <div class="bridge">
+      <h2 id="proof-title">What the diff never showed</h2>
+      <p>This is MergeAtlas on <a href="https://github.com/excalidraw/excalidraw/pull/8613">excalidraw/excalidraw#8613</a>, which adds image cropping to the editor.</p>
+      <p>Exported images now come out cropped, yet no export code is in that diff. Here it sits right below the code that causes it.</p>
+    </div>
+    <div class="stage">
+      <div class="bar"><a class="go alt open" id="mapOpen" href="map/index.html?map=pr-8613" target="_blank" rel="noopener">Open the map</a></div>
+      <div class="canvas" id="mapCanvas">
+        <iframe id="mapFrame" title="MergeAtlas map of excalidraw/excalidraw#8613" loading="lazy"></iframe>
+        <a class="plate" href="map/index.html?map=pr-8613"><img src="assets/map-export.png" width="528" height="681" alt="The map's renderElement.ts card, changed in this pull request, with export.ts below it marked not changed but affected."></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="install" id="install">
+    <h2>Map your next review</h2>
+    <p>Open source, MIT. Your maps stay on your machine.</p>
+    <ol class="plan">
+      <li>
+        <h3>Clone it</h3>
+        <div class="cmd"><code>git clone https://github.com/ismayilkarimli/MergeAtlas.git</code><button type="button" class="copy">Copy</button></div>
+      </li>
+      <li>
+        <h3>Link it as a skill</h3>
+        <div class="cmd"><code>ln -s "$PWD/MergeAtlas/skills/mergeatlas" ~/.claude/skills/mergeatlas</code><button type="button" class="copy">Copy</button></div>
+      </li>
+      <li>
+        <h3>Ask your agent to map the pull request</h3>
+        <p>From inside the pull request's repository, ask your agent to map it, or run <code>/mergeatlas</code> in Claude Code.</p>
+      </li>
+    </ol>
+    <div class="close">
+      <a class="go star" href="https://github.com/ismayilkarimli/MergeAtlas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3-4.6-4.4 6.3-.9z"/></svg>Star on GitHub</a>
+    </div>
+  </section>
+
 </div>
 
 <script>
@@ -320,42 +697,622 @@ const stage = $('stage'), main = $('main');
 const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const FILES = [
-  ['api/webhooks/stripe.ts', 'charge'], ['config/payments.ts', 'policy'], ['db/migrations/0142_retry_state.sql', 'states'],
-  ['db/schema/payment.ts', 'states'], ['emails/templates/payment-failed.tsx', 'notices'], ['jobs/index.ts', 'job'],
-  ['jobs/retryPayment.ts', 'job'], ['payments/charge.ts', 'charge'], ['payments/retryPolicy.ts', 'policy'],
-  ['payments/states.ts', 'states'], ['tests/payments/retry.test.ts', 'tests'], ['ui/billing/PaymentBanner.tsx', 'notices'],
+  "packages/excalidraw/actions/actionCropEditor.tsx",
+  "packages/excalidraw/actions/index.ts",
+  "packages/excalidraw/actions/types.ts",
+  "packages/excalidraw/appState.ts",
+  "packages/excalidraw/change.ts",
+  "packages/excalidraw/components/Actions.tsx",
+  "packages/excalidraw/components/App.tsx",
+  "packages/excalidraw/components/CommandPalette/CommandPalette.tsx",
+  "packages/excalidraw/components/HelpDialog.tsx",
+  "packages/excalidraw/components/HintViewer.tsx",
+  "packages/excalidraw/components/canvases/InteractiveCanvas.tsx",
+  "packages/excalidraw/components/canvases/StaticCanvas.tsx",
+  "packages/excalidraw/components/icons.tsx",
+  "packages/excalidraw/data/restore.ts",
+  "packages/excalidraw/element/cropElement.ts",
+  "packages/excalidraw/element/dragElements.ts",
+  "packages/excalidraw/element/newElement.ts",
+  "packages/excalidraw/element/resizeTest.ts",
+  "packages/excalidraw/element/transformHandles.ts",
+  "packages/excalidraw/element/types.ts",
+  "packages/excalidraw/locales/en.json",
+  "packages/excalidraw/renderer/interactiveScene.ts",
+  "packages/excalidraw/renderer/renderElement.ts",
+  "packages/excalidraw/renderer/staticSvgScene.ts",
+  "packages/excalidraw/store.ts",
+  "packages/excalidraw/tests/__snapshots__/contextmenu.test.tsx.snap",
+  "packages/excalidraw/tests/__snapshots__/export.test.tsx.snap",
+  "packages/excalidraw/tests/__snapshots__/history.test.tsx.snap",
+  "packages/excalidraw/tests/__snapshots__/regressionTests.test.tsx.snap",
+  "packages/excalidraw/tests/cropElement.test.tsx",
+  "packages/excalidraw/tests/helpers/ui.ts",
+  "packages/excalidraw/types.ts",
+  "packages/math/utils.ts",
+  "packages/math/vector.ts",
+  "packages/utils/__snapshots__/export.test.ts.snap",
+  "setupTests.ts",
 ];
 const LIMITS = {
-  wall: ['A wall of code', 'Story comes first'],
-  order: ['No reading order', 'Components, in cause order'],
-  why: ['No reason given', 'A why on every card'],
-  equal: ['Every line looks equal', 'Key lines picked out'],
-  links: ["Can't see what affects what", 'Arrows show the path'],
-  reach: ['Affected files out of sight', 'Affected files on the map'],
-  head: ['All of it in your head', 'All of it on the map'],
+  wall: ['Nothing says what each file is for', 'You know what each file is for'],
+  order: ['No reading order', 'You know where to start'],
+  why: ['No reason given', 'You know why each part changes'],
+  equal: ['Every line looks equal', 'You know which lines matter'],
+  links: ["Can't see what affects what", 'You can see what affects what'],
+  reach: ['Affected files out of sight', 'You can see what else it touches'],
+  head: ['All of it in your head', 'Nothing to hold in your head'],
 };
-const NOISE = [
-  ['add', 'export async function charge(payment: Payment, opts: ChargeOpts) {'], ['del', '  const result = await stripe.charges.create(toCharge(payment));'],
-  ['add', '  const attempt = await beginAttempt(payment.id, opts.source);'], ['', '  if (!payment.customerId) throw new MissingCustomer(payment.id);'],
-  ['add', '  const intent = await stripe.paymentIntents.confirm(payment.intentId);'], ['del', '  await markFailed(payment.id, result.failure_code);'],
-  ['add', "  if (intent.status === 'requires_payment_method') {"], ['add', '    return schedule(payment, policy.next(payment.attempts));'],
-  ['', '  }'], ['del', '  notifyCustomer(payment.customerId, "payment_failed");'], ['add', '  await tx.update(payments).set({ status, nextRetryAt });'],
-  ['add', "ALTER TABLE payments ADD COLUMN next_retry_at timestamptz;"], ['del', "const showBanner = invoice.status === 'failed';"],
-  ['add', "const showBanner = ['failed', 'retrying'].includes(status);"], ['', 'export const jobs = [sendReceipt, syncLedger];'],
-  ['add', '  retryPayment,'], ['del', '    <FailedNotice amount={amount} onRetry={retryNow} />'], ['add', '    <RetryNotice nextRetryAt={payment.nextRetryAt} />'],
-  ['add', "it('stops after the last attempt', async () => {"], ['add', '  await expect(run(job)).resolves.toBe(FINAL_FAILURE);'],
-];
-const REACH = ['reports/revenue.ts', 'admin/RefundPanel.tsx', 'alerts/slack.ts'];
-const MAP_ID = 'acme-checkout-4127';
-const REVEAL = `body:not(.list):not(.s-cards) .card { visibility: hidden; }
+// A real excerpt of each changed file's diff in #8613. Snapshot files have none: they render collapsed, as large diffs do.
+const DIFFS = {
+  "packages/excalidraw/actions/actionCropEditor.tsx": [
+    ["hunk", "@@ -0,0 +1,55 @@"],
+    ["add", "import { register } from \"./register\";"],
+    ["add", "import { cropIcon } from \"../components/icons\";"],
+    ["add", "import { StoreAction } from \"../store\";"],
+    ["add", "import { ToolButton } from \"../components/ToolButton\";"],
+    ["add", "import { t } from \"../i18n\";"],
+    ["add", "import { isImageElement } from \"../element/typeChecks\";"],
+    ["add", "import type { ExcalidrawImageElement } from \"../element/types\";"],
+    ["add", ""],
+    ["add", "export const actionToggleCropEditor = register({"],
+    ["add", "  name: \"cropEditor\","],
+    ["add", "  label: \"helpDialog.cropStart\","],
+    ["add", "  icon: cropIcon,"],
+    ["add", "  viewMode: true,"],
+    ["add", "  trackEvent: { category: \"menu\" },"],
+    ["add", "  keywords: [\"image\", \"crop\"],"],
+    ["add", "  perform(elements, appState, _, app) {"],
+    ["add", "    const selectedElement = app.scene.getSelectedElements({"],
+    ["add", "      selectedElementIds: appState.selectedElementIds,"],
+    ["add", "      includeBoundTextElement: true,"],
+    ["add", "    })[0] as ExcalidrawImageElement;"],
+    ["add", ""],
+    ["add", "    return {"],
+    ["add", "      appState: {"],
+    ["add", "        ...appState,"],
+    ["add", "        isCropping: false,"],
+    ["add", "        croppingElementId: selectedElement.id,"],
+    ["add", "      },"],
+  ],
+  "packages/excalidraw/actions/index.ts": [
+    ["hunk", "@@ -88,3 +88,5 @@ export { actionToggleElementLock } from \"./actionElementLock\";"],
+    ["", "export { actionToggleLinearEditor } from \"./actionLinearEditor\";"],
+    ["", ""],
+    ["", "export { actionToggleSearchMenu } from \"./actionToggleSearchMenu\";"],
+    ["add", ""],
+    ["add", "export { actionToggleCropEditor } from \"./actionCropEditor\";"],
+  ],
+  "packages/excalidraw/actions/types.ts": [
+    ["hunk", "@@ -138,7 +138,8 @@ export type ActionName ="],
+    ["", "  | \"commandPalette\""],
+    ["", "  | \"autoResize\""],
+    ["", "  | \"elementStats\""],
+    ["del", "  | \"searchMenu\";"],
+    ["add", "  | \"searchMenu\""],
+    ["add", "  | \"cropEditor\";"],
+    ["", ""],
+    ["", "export type PanelComponentProps = {"],
+    ["", "  elements: readonly ExcalidrawElement[];"],
+  ],
+  "packages/excalidraw/appState.ts": [
+    ["hunk", "@@ -116,6 +116,8 @@ export const getDefaultAppState = (): Omit<"],
+    ["", "    objectsSnapModeEnabled: false,"],
+    ["", "    userToFollow: null,"],
+    ["", "    followedBy: new Set(),"],
+    ["add", "    isCropping: false,"],
+    ["add", "    croppingElementId: null,"],
+    ["", "    searchMatches: [],"],
+    ["", "  };"],
+    ["", "};"],
+  ],
+  "packages/excalidraw/change.ts": [
+    ["hunk", "@@ -626,6 +629,18 @@ export class AppStateChange implements Change<AppState> {"],
+    ["", "            );"],
+    ["", ""],
+    ["", "            break;"],
+    ["add", "          case \"croppingElementId\": {"],
+    ["add", "            const croppingElementId = nextAppState[key];"],
+    ["add", "            const element ="],
+    ["add", "              croppingElementId && nextElements.get(croppingElementId);"],
+    ["add", ""],
+    ["add", "            if (element && !element.isDeleted) {"],
+    ["add", "              visibleDifferenceFlag.value = true;"],
+    ["add", "            } else {"],
+    ["add", "              nextAppState[key] = null;"],
+    ["add", "            }"],
+    ["add", "            break;"],
+    ["add", "          }"],
+    ["", "          case \"editingGroupId\":"],
+    ["", "            const editingGroupId = nextAppState[key];"],
+  ],
+  "packages/excalidraw/components/Actions.tsx": [
+    ["hunk", "@@ -127,6 +128,11 @@ export const SelectedShapeActions = ({"],
+    ["", "    isLinearElement(targetElements[0]) &&"],
+    ["", "    !isElbowArrow(targetElements[0]);"],
+    ["", ""],
+    ["add", "  const showCropEditorAction ="],
+    ["add", "    !appState.croppingElementId &&"],
+    ["add", "    targetElements.length === 1 &&"],
+    ["add", "    isImageElement(targetElements[0]);"],
+    ["add", ""],
+    ["", "  return ("],
+    ["", "    <div className=\"panelColumn\">"],
+    ["", "      <div>"],
+  ],
+  "packages/excalidraw/components/App.tsx": [
+    ["hunk", "@@ -4907,7 +4943,7 @@ class App extends React.Component<AppProps, AppState> {"],
+    ["", "      const selectionShape = getSelectionBoxShape("],
+    ["", "        element,"],
+    ["", "        this.scene.getNonDeletedElementsMap(),"],
+    ["del", "        this.getElementHitThreshold(),"],
+    ["add", "        isImageElement(element) ? 0 : this.getElementHitThreshold(),"],
+    ["", "      );"],
+    ["", ""],
+    ["", "      return isPointInShape(pointFrom(x, y), selectionShape);"],
+  ],
+  "packages/excalidraw/components/CommandPalette/CommandPalette.tsx": [
+    ["hunk", "@@ -279,6 +279,7 @@ function CommandPaletteInner({"],
+    ["", "        actionManager.actions.increaseFontSize,"],
+    ["", "        actionManager.actions.decreaseFontSize,"],
+    ["", "        actionManager.actions.toggleLinearEditor,"],
+    ["add", "        actionManager.actions.cropEditor,"],
+    ["", "        actionLink,"],
+    ["", "      ].map((action: Action) =>"],
+    ["", "        actionToCommand("],
+  ],
+  "packages/excalidraw/components/HelpDialog.tsx": [
+    ["hunk", "@@ -222,6 +222,16 @@ export const HelpDialog = ({ onClose }: { onClose?: () => void }) => {"],
+    ["", "              ]}"],
+    ["", "              isOr={false}"],
+    ["", "            />"],
+    ["add", "            <Shortcut"],
+    ["add", "              label={t(\"helpDialog.cropStart\")}"],
+    ["add", "              shortcuts={[t(\"helpDialog.doubleClick\"), getShortcutKey(\"Enter\")]}"],
+    ["add", "              isOr={true}"],
+    ["add", "            />"],
+    ["add", "            <Shortcut"],
+    ["add", "              label={t(\"helpDialog.cropFinish\")}"],
+    ["add", "              shortcuts={[getShortcutKey(\"Enter\"), getShortcutKey(\"Escape\")]}"],
+    ["add", "              isOr={true}"],
+    ["add", "            />"],
+    ["", "            <Shortcut label={t(\"toolBar.lock\")} shortcuts={[KEYS.Q]} />"],
+    ["", "            <Shortcut"],
+    ["", "              label={t(\"helpDialog.preventBinding\")}"],
+  ],
+  "packages/excalidraw/components/HintViewer.tsx": [
+    ["hunk", "@@ -100,6 +100,14 @@ const getHints = ({"],
+    ["", "    return t(\"hints.text_editing\");"],
+    ["", "  }"],
+    ["", ""],
+    ["add", "  if (appState.croppingElementId) {"],
+    ["add", "    return t(\"hints.leaveCropEditor\");"],
+    ["add", "  }"],
+    ["add", ""],
+    ["add", "  if (selectedElements.length === 1 && isImageElement(selectedElements[0])) {"],
+    ["add", "    return t(\"hints.enterCropEditor\");"],
+    ["add", "  }"],
+    ["add", ""],
+    ["", "  if (activeTool.type === \"selection\") {"],
+    ["", "    if ("],
+    ["", "      appState.selectionElement &&"],
+  ],
+  "packages/excalidraw/components/canvases/InteractiveCanvas.tsx": [
+    ["hunk", "@@ -203,6 +203,8 @@ const getRelevantAppStateProps = ("],
+    ["", "  snapLines: appState.snapLines,"],
+    ["", "  zenModeEnabled: appState.zenModeEnabled,"],
+    ["", "  editingTextElement: appState.editingTextElement,"],
+    ["add", "  isCropping: appState.isCropping,"],
+    ["add", "  croppingElementId: appState.croppingElementId,"],
+    ["", "  searchMatches: appState.searchMatches,"],
+    ["", "});"],
+  ],
+  "packages/excalidraw/components/canvases/StaticCanvas.tsx": [
+    ["hunk", "@@ -107,6 +107,7 @@ const getRelevantAppStateProps = ("],
+    ["", "  frameToHighlight: appState.frameToHighlight,"],
+    ["", "  editingGroupId: appState.editingGroupId,"],
+    ["", "  currentHoveredFontFamily: appState.currentHoveredFontFamily,"],
+    ["add", "  croppingElementId: appState.croppingElementId,"],
+    ["", "});"],
+    ["", ""],
+    ["", "const areEqual = ("],
+  ],
+  "packages/excalidraw/components/icons.tsx": [
+    ["hunk", "@@ -2147,3 +2147,12 @@ export const upIcon = createIcon("],
+    ["", "  </g>,"],
+    ["", "  tablerIconProps,"],
+    ["", ");"],
+    ["add", ""],
+    ["add", "export const cropIcon = createIcon("],
+    ["add", "  <g strokeWidth=\"1.25\">"],
+    ["add", "    <path stroke=\"none\" d=\"M0 0h24v24H0z\" fill=\"none\" />"],
+    ["add", "    <path d=\"M8 5v10a1 1 0 0 0 1 1h10\" />"],
+    ["add", "    <path d=\"M5 8h10a1 1 0 0 1 1 1v10\" />"],
+    ["add", "  </g>,"],
+    ["add", "  tablerIconProps,"],
+    ["add", ");"],
+  ],
+  "packages/excalidraw/data/restore.ts": [
+    ["hunk", "@@ -258,6 +258,7 @@ const restoreElement = ("],
+    ["", "        status: element.status || \"pending\","],
+    ["", "        fileId: element.fileId,"],
+    ["", "        scale: element.scale || [1, 1],"],
+    ["add", "        crop: element.crop ?? null,"],
+    ["", "      });"],
+    ["", "    case \"line\":"],
+    ["", "    // @ts-ignore LEGACY type"],
+  ],
+  "packages/excalidraw/element/cropElement.ts": [
+    ["hunk", "@@ -0,0 +1,587 @@"],
+    ["add", "import { type Point } from \"points-on-curve\";"],
+    ["add", "import {"],
+    ["add", "  type Radians,"],
+    ["add", "  pointFrom,"],
+    ["add", "  pointCenter,"],
+    ["add", "  pointRotateRads,"],
+    ["add", "  vectorFromPoint,"],
+    ["add", "  vectorNormalize,"],
+    ["add", "  vectorSubtract,"],
+    ["add", "  vectorAdd,"],
+    ["add", "  vectorScale,"],
+    ["add", "  pointFromVector,"],
+    ["add", "  clamp,"],
+    ["add", "  isCloseTo,"],
+    ["add", "} from \"../../math\";"],
+    ["add", "import type { TransformHandleType } from \"./transformHandles\";"],
+    ["add", "import type {"],
+    ["add", "  ElementsMap,"],
+    ["add", "  ExcalidrawElement,"],
+    ["add", "  ExcalidrawImageElement,"],
+    ["add", "  ImageCrop,"],
+    ["add", "  NonDeleted,"],
+    ["add", "} from \"./types\";"],
+    ["add", "import {"],
+  ],
+  "packages/excalidraw/element/dragElements.ts": [
+    ["hunk", "@@ -251,6 +252,14 @@ export const dragNewElement = ({"],
+    ["", "  }"],
+    ["", ""],
+    ["", "  if (width !== 0 && height !== 0) {"],
+    ["add", "    let imageInitialDimension = null;"],
+    ["add", "    if (isImageElement(newElement)) {"],
+    ["add", "      imageInitialDimension = {"],
+    ["add", "        initialWidth: width,"],
+    ["add", "        initialHeight: height,"],
+    ["add", "      };"],
+    ["add", "    }"],
+    ["add", ""],
+    ["", "    mutateElement("],
+    ["", "      newElement,"],
+    ["", "      {"],
+  ],
+  "packages/excalidraw/element/newElement.ts": [
+    ["hunk", "@@ -477,6 +477,7 @@ export const newImageElement = ("],
+    ["", "    status?: ExcalidrawImageElement[\"status\"];"],
+    ["", "    fileId?: ExcalidrawImageElement[\"fileId\"];"],
+    ["", "    scale?: ExcalidrawImageElement[\"scale\"];"],
+    ["add", "    crop?: ExcalidrawImageElement[\"crop\"];"],
+    ["", "  } & ElementConstructorOpts,"],
+    ["", "): NonDeleted<ExcalidrawImageElement> => {"],
+    ["", "  return {"],
+  ],
+  "packages/excalidraw/element/resizeTest.ts": [
+    ["hunk", "@@ -90,7 +90,11 @@ export const resizeTest = <Point extends GlobalPoint | LocalPoint>("],
+    ["", ""],
+    ["", "    // do not resize from the sides for linear elements with only two points"],
+    ["", "    if (!(isLinearElement(element) && element.points.length <= 2)) {"],
+    ["del", "      const SPACING = SIDE_RESIZING_THRESHOLD / zoom.value;"],
+    ["add", "      const SPACING = isImageElement(element)"],
+    ["add", "        ? 0"],
+    ["add", "        : SIDE_RESIZING_THRESHOLD / zoom.value;"],
+    ["add", "      const ZOOMED_SIDE_RESIZING_THRESHOLD ="],
+    ["add", "        SIDE_RESIZING_THRESHOLD / zoom.value;"],
+    ["", "      const sides = getSelectionBorders("],
+    ["", "        pointFrom(x1 - SPACING, y1 - SPACING),"],
+    ["", "        pointFrom(x2 + SPACING, y2 + SPACING),"],
+  ],
+  "packages/excalidraw/element/transformHandles.ts": [
+    ["hunk", "@@ -301,8 +302,10 @@ export const getTransformHandles = ("],
+    ["", "      rotation: true,"],
+    ["", "    };"],
+    ["", "  }"],
+    ["del", "  const dashedLineMargin = isLinearElement(element)"],
+    ["add", "  const margin = isLinearElement(element)"],
+    ["", "    ? DEFAULT_TRANSFORM_HANDLE_SPACING + 8"],
+    ["add", "    : isImageElement(element)"],
+    ["add", "    ? 0"],
+    ["", "    : DEFAULT_TRANSFORM_HANDLE_SPACING;"],
+    ["", "  return getTransformHandlesFromCoords("],
+    ["", "    getElementAbsoluteCoords(element, elementsMap, true),"],
+  ],
+  "packages/excalidraw/element/types.ts": [
+    ["hunk", "@@ -140,6 +149,8 @@ export type ExcalidrawImageElement = _ExcalidrawElementBase &"],
+    ["", "    status: \"pending\" | \"saved\" | \"error\";"],
+    ["", "    /** X and Y scale factors <-1, 1>, used for image axis flipping */"],
+    ["", "    scale: [number, number];"],
+    ["add", "    /** whether an element is cropped */"],
+    ["add", "    crop: ImageCrop | null;"],
+    ["", "  }>;"],
+    ["", ""],
+    ["", "export type InitializedExcalidrawImageElement = MarkNonNullable<"],
+  ],
+  "packages/excalidraw/locales/en.json": [
+    ["hunk", "@@ -328,7 +328,9 @@"],
+    ["", "    \"deepBoxSelect\": \"Hold CtrlOrCmd to deep select, and to prevent dragging\","],
+    ["", "    \"eraserRevert\": \"Hold Alt to revert the elements marked for deletion\","],
+    ["", "    \"firefox_clipboard_write\": \"This feature can likely be enabled by setting the \\\"dom.events.asyncClipboard.clipboardItem\\\" flag to \\\"true\\\". To change the browser flags in Firefox, visit the \\\"about:config\\\" page.\","],
+    ["del", "    \"disableSnapping\": \"Hold CtrlOrCmd to disable snapping\""],
+    ["add", "    \"disableSnapping\": \"Hold CtrlOrCmd to disable snapping\","],
+    ["add", "    \"enterCropEditor\": \"Double click the image or press ENTER to crop the image\","],
+    ["add", "    \"leaveCropEditor\": \"Click outside the image or press ENTER or ESCAPE to finish cropping\""],
+    ["", "  },"],
+    ["", "  \"canvasError\": {"],
+    ["", "    \"cannotShowPreview\": \"Cannot show preview\","],
+  ],
+  "packages/excalidraw/renderer/interactiveScene.ts": [
+    ["hunk", "@@ -594,6 +599,111 @@ const renderTransformHandles = ("],
+    ["", "  });"],
+    ["", "};"],
+    ["", ""],
+    ["add", "const renderCropHandles = ("],
+    ["add", "  context: CanvasRenderingContext2D,"],
+    ["add", "  renderConfig: InteractiveCanvasRenderConfig,"],
+    ["add", "  appState: InteractiveCanvasAppState,"],
+    ["add", "  croppingElement: ExcalidrawImageElement,"],
+    ["add", "  elementsMap: ElementsMap,"],
+    ["add", "): void => {"],
+    ["add", "  const [x1, y1, , , cx, cy] = getElementAbsoluteCoords("],
+    ["add", "    croppingElement,"],
+    ["add", "    elementsMap,"],
+    ["add", "  );"],
+    ["add", ""],
+    ["add", "  const LINE_WIDTH = 3;"],
+    ["add", "  const LINE_LENGTH = 20;"],
+    ["add", ""],
+    ["add", "  const ZOOMED_LINE_WIDTH = LINE_WIDTH / appState.zoom.value;"],
+    ["add", "  const ZOOMED_HALF_LINE_WIDTH = ZOOMED_LINE_WIDTH / 2;"],
+    ["add", ""],
+    ["add", "  const HALF_WIDTH = cx - x1 + ZOOMED_LINE_WIDTH;"],
+    ["add", "  const HALF_HEIGHT = cy - y1 + ZOOMED_LINE_WIDTH;"],
+  ],
+  "packages/excalidraw/renderer/renderElement.ts": [
+    ["hunk", "@@ -17,6 +17,7 @@ import {"],
+    ["", "  isArrowElement,"],
+    ["", "  hasBoundTextElement,"],
+    ["", "  isMagicFrameElement,"],
+    ["add", "  isImageElement,"],
+    ["", "} from \"../element/typeChecks\";"],
+    ["", "import { getElementAbsoluteCoords } from \"../element/bounds\";"],
+    ["", "import type { RoughCanvas } from \"roughjs/bin/canvas\";"],
+    ["hunk", "@@ -921,14 +937,53 @@ export const renderElement = ("],
+    ["", "          context.imageSmoothingEnabled = false;"],
+    ["", "        }"],
+    ["", ""],
+    ["del", "        drawElementFromCanvas("],
+    ["del", "          elementWithCanvas,"],
+    ["del", "          context,"],
+    ["add", "        if ("],
+    ["add", "          element.id === appState.croppingElementId &&"],
+    ["add", "          isImageElement(elementWithCanvas.element) &&"],
+    ["add", "          elementWithCanvas.element.crop !== null"],
+    ["add", "        ) {"],
+    ["add", "          context.save();"],
+    ["add", "          context.globalAlpha = 0.1;"],
+    ["add", ""],
+    ["add", "          const uncroppedElementCanvas = generateElementCanvas("],
+    ["add", "            getUncroppedImageElement(elementWithCanvas.element, elementsMap),"],
+    ["add", "            allElementsMap,"],
+    ["add", "            appState.zoom,"],
+    ["add", "            renderConfig,"],
+    ["add", "            appState,"],
+    ["add", "          );"],
+    ["add", ""],
+    ["add", "          if (uncroppedElementCanvas) {"],
+    ["add", "            drawElementFromCanvas("],
+    ["add", "              uncroppedElementCanvas,"],
+    ["add", "              context,"],
+    ["add", "              renderConfig,"],
+    ["add", "              appState,"],
+    ["add", "              allElementsMap,"],
+    ["add", "            );"],
+    ["add", "          }"],
+    ["add", ""],
+    ["add", "          context.restore();"],
+    ["add", "        }"],
+    ["add", ""],
+    ["add", "        const _elementWithCanvas = generateElementCanvas("],
+    ["add", "          elementWithCanvas.element,"],
+    ["add", "          allElementsMap,"],
+    ["add", "          appState.zoom,"],
+    ["", "          renderConfig,"],
+    ["", "          appState,"],
+    ["del", "          allElementsMap,"],
+    ["", "        );"],
+    ["", ""],
+    ["add", "        if (_elementWithCanvas) {"],
+    ["add", "          drawElementFromCanvas("],
+    ["add", "            _elementWithCanvas,"],
+    ["add", "            context,"],
+    ["add", "            renderConfig,"],
+    ["add", "            appState,"],
+    ["add", "            allElementsMap,"],
+    ["add", "          );"],
+    ["add", "        }"],
+    ["add", ""],
+    ["", "        // reset"],
+    ["", "        context.imageSmoothingEnabled = currentImageSmoothingStatus;"],
+    ["", "      }"],
+  ],
+  "packages/excalidraw/renderer/staticSvgScene.ts": [
+    ["hunk", "@@ -417,12 +418,28 @@ const renderElementToSvg = ("],
+    ["", "          symbol.id = symbolId;"],
+    ["", ""],
+    ["", "          const image = svgRoot.ownerDocument!.createElementNS(SVG_NS, \"image\");"],
+    ["del", ""],
+    ["del", "          image.setAttribute(\"width\", \"100%\");"],
+    ["del", "          image.setAttribute(\"height\", \"100%\");"],
+    ["", "          image.setAttribute(\"href\", fileData.dataURL);"],
+    ["", "          image.setAttribute(\"preserveAspectRatio\", \"none\");"],
+    ["", ""],
+    ["add", "          if (element.crop) {"],
+    ["add", "            const { width: uncroppedWidth, height: uncroppedHeight } ="],
+    ["add", "              getUncroppedWidthAndHeight(element);"],
+    ["add", ""],
+    ["add", "            symbol.setAttribute("],
+    ["add", "              \"viewBox\","],
+    ["add", "              `${"],
+    ["add", "                element.crop.x / (element.crop.naturalWidth / uncroppedWidth)"],
+    ["add", "              } ${"],
+    ["add", "                element.crop.y / (element.crop.naturalHeight / uncroppedHeight)"],
+    ["add", "              } ${width} ${height}`,"],
+    ["add", "            );"],
+    ["add", "            image.setAttribute(\"width\", `${uncroppedWidth}`);"],
+    ["add", "            image.setAttribute(\"height\", `${uncroppedHeight}`);"],
+    ["add", "          } else {"],
+  ],
+  "packages/excalidraw/store.ts": [
+    ["hunk", "@@ -21,6 +21,7 @@ export const getObservedAppState = (appState: AppState): ObservedAppState => {"],
+    ["", "    selectedGroupIds: appState.selectedGroupIds,"],
+    ["", "    editingLinearElementId: appState.editingLinearElement?.elementId || null,"],
+    ["", "    selectedLinearElementId: appState.selectedLinearElement?.elementId || null,"],
+    ["add", "    croppingElementId: appState.croppingElementId,"],
+    ["", "  };"],
+    ["", ""],
+    ["", "  Reflect.defineProperty(observedAppState, hiddenObservedAppStateProp, {"],
+  ],
+  "packages/excalidraw/tests/cropElement.test.tsx": [
+    ["hunk", "@@ -0,0 +1,342 @@"],
+    ["add", "import React from \"react\";"],
+    ["add", "import ReactDOM from \"react-dom\";"],
+    ["add", "import { vi } from \"vitest\";"],
+    ["add", "import { Keyboard, Pointer, UI } from \"./helpers/ui\";"],
+    ["add", "import type { ExcalidrawImageElement, ImageCrop } from \"../element/types\";"],
+    ["add", "import { act, GlobalTestState, render } from \"./test-utils\";"],
+    ["add", "import { Excalidraw, exportToCanvas, exportToSvg } from \"..\";"],
+    ["add", "import { API } from \"./helpers/api\";"],
+    ["add", "import type { NormalizedZoomValue } from \"../types\";"],
+    ["add", "import { KEYS } from \"../keys\";"],
+    ["add", "import { duplicateElement } from \"../element\";"],
+    ["add", "import { cloneJSON } from \"../utils\";"],
+    ["add", "import { actionFlipHorizontal, actionFlipVertical } from \"../actions\";"],
+    ["add", ""],
+    ["add", "const { h } = window;"],
+    ["add", "const mouse = new Pointer(\"mouse\");"],
+    ["add", ""],
+    ["add", "beforeEach(async () => {"],
+    ["add", "  // Unmount ReactDOM from root"],
+    ["add", "  ReactDOM.unmountComponentAtNode(document.getElementById(\"root\")!);"],
+    ["add", ""],
+    ["add", "  mouse.reset();"],
+    ["add", "  localStorage.clear();"],
+    ["add", "  sessionStorage.clear();"],
+  ],
+  "packages/excalidraw/tests/helpers/ui.ts": [
+    ["hunk", "@@ -561,6 +563,38 @@ export class UI {"],
+    ["", "    return transform(element, handle, mouseMove, keyboardModifiers);"],
+    ["", "  }"],
+    ["", ""],
+    ["add", "  static crop("],
+    ["add", "    element: ExcalidrawImageElement,"],
+    ["add", "    handle: TransformHandleDirection,"],
+    ["add", "    naturalWidth: number,"],
+    ["add", "    naturalHeight: number,"],
+    ["add", "    mouseMove: [deltaX: number, deltaY: number],"],
+    ["add", "    keepAspectRatio = false,"],
+    ["add", "  ) {"],
+    ["add", "    const handleCoords = getTransformHandles("],
+    ["add", "      element,"],
+    ["add", "      h.state.zoom,"],
+    ["add", "      arrayToMap(h.elements),"],
+    ["add", "      \"mouse\","],
+    ["add", "      {},"],
+    ["add", "    )[handle]!;"],
+    ["add", ""],
+    ["add", "    const clientX = handleCoords[0] + handleCoords[2] / 2;"],
+    ["add", "    const clientY = handleCoords[1] + handleCoords[3] / 2;"],
+    ["add", ""],
+    ["add", "    const mutations = cropElement("],
+    ["add", "      element,"],
+  ],
+  "packages/excalidraw/types.ts": [
+    ["hunk", "@@ -386,6 +392,11 @@ export interface AppState {"],
+    ["", "  userToFollow: UserToFollow | null;"],
+    ["", "  /** the socket ids of the users following the current user */"],
+    ["", "  followedBy: Set<SocketId>;"],
+    ["add", ""],
+    ["add", "  /** image cropping */"],
+    ["add", "  isCropping: boolean;"],
+    ["add", "  croppingElementId: ExcalidrawElement[\"id\"] | null;"],
+    ["add", ""],
+    ["", "  searchMatches: readonly SearchMatch[];"],
+    ["", "}"],
+  ],
+  "packages/math/utils.ts": [
+    ["hunk", "@@ -28,3 +28,6 @@ export const average = (a: number, b: number) => (a + b) / 2;"],
+    ["", "export const isFiniteNumber = (value: any): value is number => {"],
+    ["", "  return typeof value === \"number\" && Number.isFinite(value);"],
+    ["", "};"],
+    ["add", ""],
+    ["add", "export const isCloseTo = (a: number, b: number, precision = PRECISION) =>"],
+    ["add", "  Math.abs(a - b) < precision;"],
+  ],
+  "packages/math/vector.ts": [
+    ["hunk", "@@ -139,3 +139,10 @@ export const vectorNormalize = (v: Vector): Vector => {"],
+    ["", ""],
+    ["", "  return vector(v[0] / m, v[1] / m);"],
+    ["", "};"],
+    ["add", ""],
+    ["add", "/**"],
+    ["add", " * Project the first vector onto the second vector"],
+    ["add", " */"],
+    ["add", "export const vectorProjection = (a: Vector, b: Vector) => {"],
+    ["add", "  return vectorScale(b, vectorDot(a, b) / vectorDot(b, b));"],
+    ["add", "};"],
+  ],
+  "setupTests.ts": [
+    ["hunk", "@@ -104,7 +104,7 @@ console.error = (...args) => {"],
+    ["", "  // the react's act() warning usually doesn't contain any useful stack trace"],
+    ["", "  // so we're catching the log and re-logging the message with the test name,"],
+    ["", "  // also stripping the actual component stack trace as it's not useful"],
+    ["del", "  if (args[0]?.includes(\"act(\")) {"],
+    ["add", "  if (args[0]?.includes?.(\"act(\")) {"],
+    ["", "    _consoleError("],
+    ["", "      yellow("],
+    ["", "        `<<< WARNING: test \"${"],
+  ],
+};
+const diff = path => `<div class="diff"><h4>${esc(path)}</h4>${lines(DIFFS[path])}</div>`;
+// Centres a line inside its own scroll box only; scrollIntoView would also scroll the page around the game.
+function centerIn(el) {
+  const view = el.ownerDocument.defaultView;
+  let box = el.parentElement;
+  while (box && !/auto|scroll/.test(view.getComputedStyle(box).overflowY)) box = box.parentElement;
+  if (!box) return;
+  box.scrollTop += el.getBoundingClientRect().top - box.getBoundingClientRect().top - (box.clientHeight - el.offsetHeight) / 2;
+}
+// A key line on the map opens in GitHob's Files changed, over the map, with that line marked.
+let checking = false;
+function toGithob(path, text) {
+  checking = false; $('back')?.remove();
+  main.insertAdjacentHTML('beforeend', diff(path).replace('class="diff"', 'class="diff back" id="back"'));
+  const here = [...$('back').querySelectorAll('.ln')].find(l => l.textContent.trim() === text.trim());
+  if (here) { here.classList.add('here'); centerIn(here); }
+  $('addr').textContent = 'githob.com/pull/8613/files';
+  say('The same line, in the diff.', 'Read it here as long as you need.', [['What else does it affect?', next]]);
+}
+const REACH = ['packages/excalidraw/scene/export.ts', 'packages/excalidraw/element/resizeElements.ts', 'packages/excalidraw/components/Stats/Dimension.tsx', 'packages/excalidraw/components/LayerUI.tsx', '53 language files'];
+const MAP_ID = 'pr-8613';
+const APP = 'packages/excalidraw/components/App.tsx', RENDER = 'packages/excalidraw/renderer/renderElement.ts';
+const STORE = 'packages/excalidraw/store.ts', TYPES = 'packages/excalidraw/element/types.ts';
+const REVEAL = `body:not(.list):not(.s-cards) .card, body:not(.list):not(.s-cards) .hood { visibility: hidden; }
 #hint { display: none; }
 body:not(.list):not(.s-links) .pill, body:not(.list):not(.s-links) .grp { visibility: hidden; }
-body:not(.list):not(.s-reach) .stack, body:not(.list):not(.s-reach) .grp.reach { visibility: hidden; }`;
+body:not(.list):not(.s-reach) .stack, body:not(.list):not(.s-reach) .reach-card, body:not(.list):not(.s-reach) .grp.reach { visibility: hidden; }`;
 
-let frame, shown = [], viewed = 0, head = [], forgot = 0, step = 0;
+let frame, shown = [], viewed = 0, head = [], forgot = 0, step = 0, pingTimer, booted = false;
 
 function say(title, body, acts) {
-  $('nt').textContent = title; $('nb').innerHTML = body; $('acts').replaceChildren();
+  $('nt').textContent = title; $('nt').classList.remove('cut'); void $('nt').offsetWidth; $('nt').classList.add('cut'); $('nb').innerHTML = body; $('acts').replaceChildren();
   acts.forEach(([label, fn, cls], i) => {
     const b = document.createElement(fn ? 'button' : 'a');
     b.className = 'go ' + (cls ?? ''); b.textContent = label;
@@ -364,30 +1321,34 @@ function say(title, body, acts) {
     if (i === 0 && step) b.focus({ preventScroll: true });
   });
 }
-const tree = () => { $('tree').innerHTML = FILES.map(([p], i) => `<div class="row" data-i="${i}"><i class="tick"></i><span>&lrm;${esc(p)}</span></div>`).join(''); };
+const tree = () => { $('tree').innerHTML = FILES.map((p, i) => `<div class="row" data-i="${i}"><i class="tick"></i><span>&lrm;${esc(p)}</span></div>`).join(''); };
 const row = i => $('tree').querySelector(`[data-i="${i}"]`);
 function open(i) { document.querySelectorAll('.row.cur').forEach(r => r.classList.remove('cur')); row(i).classList.add('cur'); }
-function view(i) { row(i).querySelector('.tick').textContent = '✓'; viewed++; $('viewed').textContent = `${viewed} of 12 viewed`; }
+function view(i) { const t = row(i).querySelector('.tick'); if (t.textContent) return; t.textContent = '✓'; viewed++; $('viewed').textContent = `${viewed} of 36 viewed`; }
+const viewUpTo = end => { for (let i = 0; i < end; i++) view(i); };
 const clock = m => { const t = 12 + m; $('clock').textContent = `${4 + Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')} PM`; };
 function site(local) {
   stage.classList.toggle('local', local);
-  $('tab').textContent = local ? 'MergeAtlas' : '#4127 Files changed';
-  $('addr').textContent = local ? '127.0.0.1:8765/?map=acme-checkout-4127' : 'githob.example/acme/checkout/pull/4127/files';
+  const idle = stage.classList.contains('idle');
+  const idleOrOver = idle ? 'idle' : stage.classList.contains('overview') ? 'over' : 'files';
+  $('addr').textContent = local ? '127.0.0.1:8765/?map=pr-8613' : { idle: 'githob.com/pulls/review-requested', over: 'githob.com/pull/8613', files: 'githob.com/pull/8613/files' }[idleOrOver];
 }
+const PR_URL = 'https://githob.com/pull/8613', URL_RE = /https?:\/\/[^\s<]+/g;
 function ping(text, onclick) {
   $('ping')?.remove();
   const p = document.createElement(onclick ? 'button' : 'div'); p.className = 'ping'; p.id = 'ping';
-  p.innerHTML = `<span class="face" aria-hidden="true">S</span><span><b>Sam</b><small>#checkout in Slick</small>${text}</span>`;
-  $('screen').append(p);
+  p.innerHTML = `<span class="face" aria-hidden="true">S</span><span><b>Sam</b><small>Direct message in Slick</small><span class="said">${esc(text).replace(URL_RE, url => `<span class="link">${url.replace(/^https?:\/\//, '')}</span>`)}</span></span>`;
+  if (os.classList.contains('boot')) p.classList.add('stay');
+  $('screen').append(p); slickPost('sam', 'Sam', text);
   if (onclick) {
     p.type = 'button'; p.onclick = onclick;
-    p.insertAdjacentHTML('beforeend', '<span class="hint" aria-hidden="true">Click it<svg viewBox="0 0 80 30"><path d="M4 24C24 28 48 22 72 10M72 10L58 8M72 10L64 22"/></svg></span>');
+    p.insertAdjacentHTML('beforeend', '<span class="hint" aria-hidden="true"><svg viewBox="0 0 80 30"><path d="M4 24C24 28 48 22 72 10M72 10L58 8M72 10L64 22"/></svg></span>');
   } else {
     setTimeout(() => { if ($('ping') === p) p.remove(); }, 5000);
   }
 }
 function stuck(key) { const li = document.createElement('li'); li.dataset.k = key; li.textContent = LIMITS[key][0]; $('log').append(li); }
-function solve(key) { const li = $('log').querySelector(`[data-k="${key}"]`); li.textContent = LIMITS[key][1]; li.classList.add('fixed'); $('log').append(li); }
+function solve(key) { const li = $('log').querySelector(`[data-k="${key}"]`); if (!li) return; li.textContent = LIMITS[key][1]; li.classList.add('fixed'); $('log').append(li); }
 function remember(text) {
   const c = document.createElement('div'); c.className = 'chip'; c.textContent = text; $('chips').append(c); head.push(c);
   if (head.length > 4) {
@@ -396,74 +1357,89 @@ function remember(text) {
   }
 }
 const lines = rows => rows.map(([k, t]) => `<div class="ln ${k}" data-m="${k === 'add' ? '+' : k === 'del' ? '-' : ' '}">${esc(t)}</div>`).join('');
-const pickable = rows => rows.map(([k, t]) => `<button type="button" class="ln ${k} pick" data-m="${k === 'add' ? '+' : '-'}">${esc(t)}</button>`).join('');
-const wall = () => `<div class="wall"><pre>${lines([...NOISE, ...NOISE.slice().reverse(), ...NOISE, ...NOISE.slice().reverse()].flatMap(l => [l]))}</pre></div>`;
-const note = text => { const n = document.createElement('div'); n.className = 'note'; n.innerHTML = text; main.append(n); };
+const pickable = rows => rows.map(([k, t]) => k === 'add' || k === 'del' ? `<button type="button" class="ln ${k} pick" data-m="${k === 'add' ? '+' : '-'}">${esc(t)}</button>` : lines([[k, t]])).join('');
+const wall = () => { const all = Object.values(DIFFS).flat(); return `<div class="wall"><pre>${lines([...all, ...all])}</pre></div>`; };
 
 const ACT_ONE = [
   () => {
-    say('Tuesday afternoon. A message lands.', "You've never opened the payments code. Click the notification.", []);
-    const arrive = () => ping('hey, can you review this PR? it touches payments, needs to go out today', () => {
-      $('ping').remove(); stage.classList.remove('idle'); stage.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'nearest' }); next();
+    say('Tuesday afternoon. A message lands.', 'Click the notification.', []);
+    const arrive = () => ping(`hey, can you review this PR? it adds image cropping, needs to go out today\n${PR_URL}`, () => {
+      $('ping').remove(); stage.classList.remove('idle'); site(false); stage.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'nearest' }); next();
     });
-    if (still) arrive(); else setTimeout(() => { if (!step) arrive(); }, 900);
+    const wait = () => { pingTimer = setTimeout(() => { if (!step) arrive(); }, 2000); };
+    if (!$('login').hidden) $('loginBtn').addEventListener('click', wait, { once: true });
+    else if (still || booted) arrive(); else wait();
   },
   () => {
-    main.innerHTML = wall(); stuck('wall');
-    say('It is a wall of code.', '12 files, 847 lines added, 312 removed. Nothing tells you what the change is, or where to begin.', [['Start at the top', next]]);
+    stage.classList.add('overview'); site(false); ghTab('conv'); countUp();
+    say('How long will this one take?', "Begin the review when you're ready.", []);
+  },
+  () => {
+    stage.classList.remove('overview'); site(false);
+    const body = p => DIFFS[p] ? lines(DIFFS[p]) : '<p class="big">Large diffs are not rendered by default.</p>';
+    main.innerHTML = `<div class="diff read" id="read" tabindex="0" aria-label="Files changed">${FILES.map(p => `<section><h4>${esc(p)}</h4>${body(p)}</section>`).join('')}<button class="cue" type="button" id="cue" aria-label="Scroll to the end">Scroll<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3"/></svg></button></div>`;
+    say('36 files. What is each one for?', 'Scroll through all of them to find out.', []);
+    const read = $('read'); read.focus({ preventScroll: true });
+    $('cue').onclick = () => read.scrollTo({ top: read.scrollHeight, behavior: still ? 'auto' : 'smooth' });
+    read.onscroll = () => {
+      if (!read.isConnected) return;
+      const p = read.scrollTop / (read.scrollHeight - read.clientHeight);
+      clock(Math.round(p * 3));
+      if (p < .98 || read.dataset.done) return;
+      read.classList.add('moved'); read.dataset.done = '1'; stuck('wall');
+      say("That's all 36.", "Some don't look related to cropping at all. The paths don't say why they're here.", [['Start at the top', next]]);
+    };
   },
   () => {
     open(0); stuck('order'); clock(4);
-    main.innerHTML = `<div class="diff"><h4>api/webhooks/stripe.ts</h4>${lines(NOISE.slice(1, 11))}</div>`;
-    row(8).classList.add('flag'); remember('webhook reads attempts');
-    say('You start with file 1. The file that explains this PR is number 9.', 'Files are sorted by path, so you read them in alphabetical order. The story of the change is scattered through it.', [['Mark viewed, next file', next]]);
+    main.innerHTML = diff(FILES[0]);
+    remember('crop action sets croppingElementId');
+    say('Where do you start?', 'Files come A to Z by path, not in the order the change was built.', [['Mark viewed, next file', next]]);
   },
   () => {
-    view(0); open(1); clock(7);
-    main.innerHTML = `<div class="diff"><h4>config/payments.ts</h4>${lines([['', 'export const payments = {'], ['', "  currency: 'usd',"]])}<button type="button" class="ln add pick" data-m="+" id="five">  maxAttempts: 5,</button>${lines([['', '};']])}</div>`;
-    say('Why 5?', 'Click the line to find out.', [['Move on', next, 'alt']]);
-    $('five').onclick = () => {
-      $('five').classList.remove('pick'); stuck('why'); remember('maxAttempts 5, why?');
-      note("The diff shows what changed. It never shows why. The PR description says “adds retries”.");
-      say('The diff has no answer.', 'You could ask the author, or dig through the codebase. You make a note and keep going.', [['Next file', next]]);
+    viewUpTo(FILES.indexOf(APP)); open(FILES.indexOf(APP)); clock(7);
+    const rows = DIFFS[APP], at = rows.findIndex(([k]) => k === 'add');
+    main.innerHTML = `<div class="diff"><h4>${esc(APP)}</h4>${lines(rows.slice(0, at))}<button type="button" class="ln add pick" data-m="+" id="zero">${esc(rows[at][1])}</button>${lines(rows.slice(at + 1))}</div>`;
+    say('A zero, only for images. Why zero?', 'Click the line to find out.', [['Move on', next, 'alt']]);
+    $('zero').onclick = () => {
+      $('zero').classList.remove('pick'); stuck('why'); remember('hit threshold 0, why?');
+      say('Nothing here says why.', 'Not the diff, not the description. You could ask your colleague and wait, or make a note and keep going.', [['Next file', next]]);
     };
   },
   () => {
-    view(1); open(7); clock(16);
-    const rows = [['add', 'const amount = toCents(payment.total);'], ['add', 'const next = policy.next(err.code, payment.attempts);'], ['del', 'const cents = toCents(payment.total);'], ['add', 'const label = describe(payment);'], ['add', 'if (next) return schedule(payment, next);']];
-    main.innerHTML = `<div class="diff"><h4>payments/charge.ts</h4>${pickable(rows)}</div>`;
-    say('One of these lines decides whether a customer is charged again.', 'Which one? Click your guess.', [['Move on', next, 'alt']]);
+    viewUpTo(FILES.indexOf(RENDER)); open(FILES.indexOf(RENDER)); clock(18);
+    main.innerHTML = `<div class="diff"><h4>${esc(RENDER)}</h4>${pickable(DIFFS[RENDER])}</div>`;
+    say('Which lines matter most?', 'One of them changes how every element is drawn, not just images. Click your guess.', [['Move on', next, 'alt']]);
     main.querySelectorAll('button.ln').forEach(b => { b.onclick = () => {
-      main.querySelectorAll('.pick').forEach(p => p.classList.remove('pick')); stuck('equal'); remember('charge() lost 87 lines');
-      note('Could be. A renamed variable and a billing rule get the same green.');
-      say('Every line looks the same.', 'The screen gives you no idea what deserves your attention. So everything gets the same tired attention.', [['Keep going', next]]);
+      main.querySelectorAll('.pick').forEach(p => p.classList.remove('pick')); stuck('equal'); remember('which line redraws everything?');
+      say('Every line looks the same.', 'An import and the line that redraws every element get the same green. So every line gets the same limited attention.', [['Keep going', next]]);
     }; });
   },
   () => {
-    clock(23); stuck('links');
-    main.innerHTML = `<div class="diff"><h4>jobs/retryPayment.ts</h4>${lines(NOISE.slice(4, 16))}</div>`;
-    remember('job calls charge again?'); view(2); view(3); open(6);
-    say('Who calls this job? What calls that?', "You can't see what affects what. The links between these files exist only in code you have to go and find.", [['Keep reading', next]]);
+    clock(26); stuck('links');
+    main.innerHTML = diff(STORE);
+    remember('store watches croppingElementId'); viewUpTo(FILES.indexOf(STORE)); open(FILES.indexOf(STORE));
+    say('What uses this?', "store.ts now watches croppingElementId, but nothing here says who reads it. You'd have to trace it through the codebase.", [['Keep reading', next]]);
   },
   () => {
-    clock(31); stuck('head'); view(4); view(5); open(9);
-    main.innerHTML = `<div class="diff"><h4>payments/states.ts</h4>${lines([['', 'export const STATES = ['], ['', "  'pending',"], ['', "  'paid',"], ['add', "  'retrying',"], ['', "  'failed',"], ['', '] as const;']])}</div>`;
-    remember('new column next_retry_at'); remember('new status: retrying');
-    say('Your head is full.', 'You hold every file in memory to connect it to the next one. The first ones are already falling out.', [['One last check', next]]);
+    clock(31); stuck('head'); view(FILES.indexOf(STORE)); open(FILES.indexOf(TYPES));
+    main.innerHTML = diff(TYPES);
+    remember('appState.isCropping'); remember('new field crop');
+    say('How is this file related to the previous ones?', "You're holding every file in memory to connect it to the next. The first ones are already slipping.", [['One last check', next]]);
   },
   () => {
-    main.innerHTML = `<div class="diff"><h4>payments/states.ts</h4>${lines([['add', "  'retrying',"]])}</div>`;
+    main.innerHTML = `<div class="diff"><h4>${esc(TYPES)}</h4>${lines([['add', '    crop: ImageCrop | null;']])}</div>`;
     const reveal = () => {
       stuck('reach');
-      main.innerHTML = `<div class="ghosts"><p>Not in this PR. Not on this screen. They all read payment status.</p>${REACH.map(p => `<div class="ghost">${p}</div>`).join('')}</div>`;
-      say('The diff only shows files that changed.', 'These three files have no diff, and nobody will review them. They behave differently after this merge anyway.', [['Back to the review', next]]);
+      main.innerHTML = `<div class="ghosts"><p>Not in this pull request. Not on this screen. All affected by the new changes.</p>${REACH.map(p => `<div class="ghost">${p}</div>`).join('')}</div>`;
+      say("57 files you'll never see.", 'The diff shows what changed, never what it reaches. These go out with the merge, and no reviewer has looked at them.', [['Back to the review', next]]);
     };
-    say('A new status. What else reads it?', 'What else in the codebase cares about <code>retrying</code>?', [['Only files in this PR', reveal, 'alt'], ['Something outside it', reveal, 'alt'], ['No way to tell', reveal, 'alt']]);
+    say('What else in the codebase is affected by this change?', 'Images can now hold a crop. Whatever draws, exports or resizes an image has never seen one.', [['Only files in this pull request', reveal, 'alt'], ['Something outside it', reveal, 'alt'], ['No way to tell', reveal, 'alt']]);
   },
   () => {
-    clock(52); view(6); view(7); view(9);
+    clock(52);
     main.innerHTML = wall(); ping('any update on this one?');
-    say('52 minutes. 9 of 12 viewed.', 'The tests are collapsed, and someone is waiting. You could read it all again, or you could do what everyone does.', [['Approve: LGTM', next, 'danger']]);
+    say(`52 minutes. ${viewed} of 36 viewed.`, 'Your colleague is waiting. You could read it all again, or you could do what everyone does.', [['LGTM', next, 'danger']]);
   },
   () => {
     const at = step;
@@ -475,7 +1451,7 @@ const ACT_ONE = [
         if (step !== at) return;
         $('ping')?.remove();
         const f = document.createElement('div'); f.className = 'flood'; f.id = 'flood';
-        f.innerHTML = `${wall()}<h2>Is this really the best way to review a PR?</h2><p>You just approved 847 lines you couldn't explain. Three files you never saw changed with them.</p><button type="button" class="go" id="better">Review it again with MergeAtlas</button>`;
+        f.innerHTML = `${wall()}<h2>A complex change, approved from a wall of text.</h2><p>Is that how you want to approve the next one as well?</p><button type="button" class="go" id="better">Review it again with MergeAtlas</button>`;
         stage.append(f); $('better').onclick = next; $('better').focus({ preventScroll: true });
       }, still ? 0 : 520);
     }, still ? 0 : 1300);
@@ -488,20 +1464,59 @@ function inMap(fn) {
 }
 const press = selector => inMap(d => d.querySelector(selector)?.click());
 const reveal = name => { shown.push(name); inMap(d => d.body.classList.add(name)); };
-const openCard = id => press(`.cardlink[data-card="${id}"]`);
+const openCard = id => press(`.card[data-review-card="${id}"]`);
+// Steps the open card to the change that mentions the text, and scrolls its lines into view.
+const showChange = text => inMap(d => {
+  for (let i = 0; i < 20; i++) {
+    const c = d.querySelector('#modal .change:not([hidden])');
+    if (c?.textContent.includes(text)) { const pre = c.querySelector('pre'); if (pre) centerIn(pre); return; }
+    d.querySelector('#modal [data-step="1"]')?.click();
+  }
+});
+// Glides the canvas onto the elements the selector matches, with the same wheel a visitor uses, so the visitor sees the zoom that gets them there.
+// It zooms to fit them below the panel, up to max; when fitting would shrink cards and arrow labels past reading, it zooms to max and shows them from their top-left corner.
+let camera = 0;
+const frameIn = (selector, max = 1) => inMap(d => {
+  const els = [...d.querySelectorAll(selector)].filter(e => e.getClientRects().length), vp = d.querySelector('#viewport'), world = d.querySelector('#world'); if (!els.length) return;
+  const wheel = o => vp.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, ...o }));
+  const box = () => {
+    const rs = els.map(e => e.getBoundingClientRect()), left = Math.min(...rs.map(r => r.left)), top = Math.min(...rs.map(r => r.top));
+    return { left, top, width: Math.max(...rs.map(r => r.right)) - left, height: Math.max(...rs.map(r => r.bottom)) - top };
+  };
+  const zoom = () => parseFloat(world.style.getPropertyValue('--k')) || 1;
+  const area = { left: 40, top: d.querySelector('#panel').getBoundingClientRect().bottom + 16, right: d.defaultView.innerWidth - 40, bottom: d.defaultView.innerHeight - 56 };
+  const from = box(), k0 = zoom(), aw = area.right - area.left, ah = area.bottom - area.top;
+  const fit = k0 * Math.min(aw / from.width, ah / from.height), k1 = fit < .65 ? max : Math.min(max, fit), w = from.width * k1 / k0, h = from.height * k1 / k0;
+  const to = { left: area.left + Math.max(0, (aw - w) / 2), top: area.top + Math.max(0, (ah - h) / 2) };
+  const id = ++camera, t0 = performance.now(), ms = still ? 0 : 1100;
+  const glide = now => {
+    if (id !== camera) return;
+    const t = ms ? Math.min(1, (now - t0) / ms) : 1, e = t < .5 ? 4 * t ** 3 : 1 - (2 - 2 * t) ** 3 / 2;
+    const at = box();
+    wheel({ ctrlKey: true, clientX: at.left, clientY: at.top, deltaY: -100 * Math.log(k0 * (k1 / k0) ** e / zoom()) });
+    wheel({ deltaX: at.left - (from.left + (to.left - from.left) * e), deltaY: at.top - (from.top + (to.top - from.top) * e) });
+    if (t < 1) requestAnimationFrame(glide);
+  };
+  requestAnimationFrame(glide);
+});
 const panelOpen = open => inMap(d => { if (d.querySelector('#panel').classList.contains('collapsed') === open) press('#ptoggle'); });
-const syncTheme = () => inMap(d => { const t = document.documentElement.dataset.theme; if (t) d.documentElement.dataset.theme = t; else delete d.documentElement.dataset.theme; });
 function loadMap() {
-  try { localStorage.removeItem(`mergeatlas-reviewed:${MAP_ID}`); } catch {}
+  try { localStorage.removeItem(`mergeatlas-marks:${MAP_ID}`); } catch {}
   frame = document.createElement('iframe'); frame.className = 'viewer'; frame.title = 'MergeAtlas map of the sample PR';
   frame.src = `map/index.html?map=${MAP_ID}${matchMedia('(max-width: 700px)').matches ? '&view=list' : ''}`;
   frame.onload = () => inMap(d => {
     d.head.insertAdjacentHTML('beforeend', `<style>${REVEAL}</style>`);
     d.body.classList.add(...shown);
-    d.addEventListener('click', ev => { if (ev.target.closest('a[target="_blank"]')) ev.preventDefault(); }, true);
-    syncTheme();
+    d.addEventListener('click', ev => {
+      const a = ev.target.closest('a[target="_blank"]'); if (!a) return;
+      ev.preventDefault();
+      if (!checking || !a.classList.contains('keyline')) return;
+      const no = a.querySelector('.lineno')?.textContent ?? '';
+      toGithob(a.closest('pre').previousElementSibling.textContent.trim(), a.textContent.slice(no.length + 1));
+    }, true);
+    themeMap(d);
     const ready = setInterval(() => {
-      if (!d.querySelector('[data-review-toggle], .card')) return;
+      if (!d.querySelector('.card')) return;
       clearInterval(ready); panelOpen(!stage.classList.contains('atlas'));
     }, 50);
   });
@@ -510,86 +1525,596 @@ function loadMap() {
 
 const ACT_TWO = [
   () => {
-    $('flood')?.remove(); $('ping')?.remove(); stage.classList.remove('glitch', 'idle'); clock(0); main.textContent = '';
+    $('flood')?.remove(); $('ping')?.remove(); stage.classList.remove('glitch', 'idle', 'overview'); site(false); clock(0); main.textContent = '';
     const t = document.createElement('div'); t.className = 'term'; t.id = 'term';
-    t.innerHTML = '<div>&gt; /mergeatlas 4127</div><div>fetching PR #4127</div><div>reading 12 files and the code around them</div><div>sorting what the change reaches</div><div>map ready at http://127.0.0.1:8765</div>';
+    t.innerHTML = '<div>&gt; /mergeatlas 8613</div><div>fetching PR #8613</div><div>reading 36 files and the code around them</div><div>sorting what the change reaches</div><div>map ready at http://127.0.0.1:8765</div>';
     $('screen').append(t);
-    say('Rewind. Same PR, same afternoon.', 'This time you ask your agent to map it before you read a line.', [['Open the map', next]]);
+    say('Rewind. Same pull request, same afternoon.', 'This time you ask your agent to map it before you read a line.', [['Open MergeAtlas', next]]);
   },
   () => {
-    $('term').remove(); site(true); $('logTitle').textContent = 'Getting clearer'; tree(); loadMap(); solve('wall');
-    say('This is MergeAtlas. It starts with the story.', 'Before any code: what this part of the project does, the problem, and what the PR does about it.', [['Break up the wall', next]]);
+    $('term').remove(); site(true); $('logTitle').textContent = 'Getting clearer'; loadMap();
+    say('Context before code.', 'You get the context, before seeing a single line of code.', [['What is this one about?', next]]);
   },
   () => {
-    const from = FILES.map((_, i) => row(i).getBoundingClientRect()), box = stage.getBoundingClientRect(), map = frame.getBoundingClientRect();
-    stage.classList.add('atlas'); panelOpen(false); solve('order');
+    const box = stage.getBoundingClientRect(), map = frame.getBoundingClientRect();
+    // The file list the map replaces: one name per row down its left edge, as many as fit.
+    const from = FILES.map((_, i) => ({ left: map.left + 16, top: map.top + 12 + i * 22 })).filter(r => r.top < map.bottom - 30);
+    stage.classList.add('atlas'); panelOpen(false);
     setTimeout(() => press('#fit'), 50);
     setTimeout(() => reveal('s-cards'), still ? 0 : 750);
-    if (!still) from.forEach((r, i) => {
-      if (!r.width) return;
-      const f = document.createElement('div'); f.className = 'fly'; f.textContent = FILES[i][0].split('/').pop();
+    if (!still && !PHONE.matches) from.forEach((r, i) => {
+      const f = document.createElement('div'); f.className = 'fly'; f.textContent = FILES[i].split('/').pop();
       f.style.left = r.left - box.left + 'px'; f.style.top = r.top - box.top + 'px'; stage.append(f);
       requestAnimationFrame(() => requestAnimationFrame(() => {
         f.style.transform = `translate(${map.left + map.width / 2 - r.left}px, ${map.top + map.height / 2 - r.top}px) scale(.8)`; f.style.opacity = 0;
       }));
       setTimeout(() => f.remove(), 1300);
     });
-    say('12 files become 6 components.', 'Files that do one job share a card, so you read the change the way it was built.', [['Connect them', next]]);
+    say('Each group says.', '36 files, grouped into parts that change for the same reason. The pile becomes a picture.', [['What is each file for?', next]]);
   },
   () => {
-    reveal('s-links'); solve('links');
-    say('Now you can see what affects what.', 'Each arrow runs from a cause to its effect. Click a label to see the code that joins them. It all works, this is the real viewer.', [['Why does it exist?', next]]);
+    solve('wall'); frameIn('.hood[data-hood="crop-data"]', .75);
+    say('Its card tells you.', 'Every file, in its own card.', [['How is everything connected?', next]]);
   },
   () => {
-    press('#modal .close'); openCard('policy'); solve('why');
-    say('Every card says why it is here.', 'What it is, the problem, what changes, and why that fixes it. The “why 5?” question has a home now.', [['Which lines matter?', next]]);
+    // 60% on the zoom label, the furthest out cards keep their full text
+    reveal('s-links'); solve('links'); frameIn('.hood[data-hood="crop-data"]', .604);
+    say('Through arrows you can follow.', 'Each arrow runs from a cause to its effect, so the links live on the screen, not in your head. Click a label to see the code that joins two parts.', [['Where do I start?', next]]);
   },
   () => {
-    inMap(d => d.querySelector('#modal .snippets')?.scrollIntoView({ block: 'center' })); solve('equal');
-    say('The lines that matter, picked out.', 'Key lines point you to what deserves your attention, and say what rests on them. You read them yourself.', [['What about the rest of the codebase?', next]]);
+    solve('order'); frameIn('.card[data-review-card="element-types"]', 1.2);
+    say('Start with what the rest builds on.', 'See what changes belong together, in the order they build on each other.', [['Which lines matter most?', next]]);
   },
   () => {
-    press('#modal .close'); reveal('s-reach'); openCard('states'); press('#modal [data-grid]'); solve('reach');
-    say('Those three files are on the map now.', 'Unchanged files that behave differently because of this PR. Click one to see what changes for it.', [['Put it all together', next]]);
+    openCard('render-element'); showChange('every render'); solve('why'); solve('equal');
+    say('The few that change how it behaves.', 'They stand out from the rest, with the reason for each and the code around it. What they mean is still your call.', [['Can I check them in the diff?', next]]);
+  },
+  () => {
+    checking = true;
+    say('Yes, in one click.', 'Click any line. You land on that exact line in the diff.', [['Show me', () => toGithob(RENDER, 'const _elementWithCanvas = generateElementCanvas('), 'alt']]);
+  },
+  () => {
+    checking = false; $('back')?.remove(); site(true);
+    press('#modal .close'); reveal('s-reach'); frameIn('.stack[aria-label^="53 "], .reach-card[aria-label^="LayerUI"]'); solve('reach'); tickTodo(TICKET);
+    say('57 files outside the diff.', 'What changes for each is right here. Click one to see.', [["What's left to remember?", next]]);
   },
   () => {
     press('#modal .close'); solve('head'); $('lost').textContent = '';
-    $('chips').innerHTML = '<div class="chip">Nothing. It is all on the map.</div>'; head = [];
-    inMap(d => d.querySelectorAll('.cardlink').forEach(link => { link.click(); press('[data-review-toggle][data-state="none"]'); }));
+    $('chips').innerHTML = '<div class="chip">It\'s all on the map.</div>'; head = [];
+    inMap(d => d.querySelectorAll('.card[data-review-card]').forEach(card => { card.click(); d.querySelector('#modal button.review[data-state="none"]')?.click(); }));
     press('#modal .close'); press('#fit'); $('logTitle').textContent = 'Solved';
-    say('Now you can give a real review.', 'You know the problem, the path and the blast radius. The map stops at understanding. The bugs, the comments and the verdict are yours.', [['Install MergeAtlas', null], ['Play again', restart, 'alt']]);
-    ping('good question about the revenue report, looking now');
+    say('Nothing. Your head is clear.', "The problem, the path and what it reaches are all on the map. Finding what's wrong, the comments and the verdict are still yours.", [['LGTM', next]]);
+    ping('good question about the translations, looking now');
+    slickPost('engineering', 'You', 'Mapped #8613 using MergeAtlas. This is the best way to review complex PRs in the agentic era! It adds image cropping, and it changes how every element is drawn.');
+  },
+  () => {
+    tickTodo(REVIEW);
+    say('Wasn\'t that much better?', 'Next time a review request lands, ask your agent to map it first.', [desktop.matches ? ['Shut down', shutdown] : ['Install MergeAtlas', null], ['Play again', reboot, 'alt']]);
+    ping('thanks!! merging now');
+    slickPost('engineering', 'You', 'Definitely going to give a star to this one: [MergeAtlas](https://github.com/ismayilkarimli/MergeAtlas)');
+    os.classList.remove('story'); chan = 'engineering'; openWin('slick'); renderSlick();
   },
 ];
 const STEPS = [...ACT_ONE, ...ACT_TWO];
 
-function go(i) { step = i; document.querySelectorAll('#steps i').forEach((s, n) => s.classList.toggle('on', n <= i)); $('skip').hidden = i >= ACT_ONE.length; STEPS[i](); }
+// The desktop. Every window drags by its title bar, closes, and toggles full screen; on phones they all fill the screen.
+const os = $('os'), PHONE = matchMedia('(max-width: 900px)');
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const DESK = [
+  ['todo', 'todo.txt', 'txt'], ['hard', 'hard-things.txt', 'txt'], ['env', '.env', 'txt'], ['answer', 'answer.txt', 'txt'],
+  ['nodemods', 'definitely-not-node_modules', 'folder'], ['dependency', 'dependency.png', 'png'],
+];
+const APPS = {
+  slick: ['Slick', '<path d="M5 5h14v10h-9l-4 4v-4H5z"/>'],
+  githob: ['GitHob', '<circle cx="7" cy="6" r="2"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="9" r="2"/><path d="M7 8v8M17 11c0 4-6 3-8.5 5.5"/>'],
+  terminal: ['Terminal', '<path d="M5 7l5 5-5 5M12 17h7"/>'],
+  codix: ['Codix', '<path d="M12 3c.6 4.6 2.4 6.4 7 7-4.6.6-6.4 2.4-7 7-.6-4.6-2.4-6.4-7-7 4.6-.6 6.4-2.4 7-7z"/>'],
+  runner: ['LGTM Runner', '<ellipse cx="12" cy="13.5" rx="4.5" ry="5.5"/><path d="M12 8v11M7.5 11.5H4M7.5 15.5H4.5M16.5 11.5H20M16.5 15.5h3M10 8L8.5 5M14 8l1.5-3"/>'],
+};
+const SIZES = { slick: [818, 521], terminal: [520, 320], codix: [640, 430], runner: [600, 250], todo: [380, 280], hard: [400, 200], env: [340, 160], answer: [280, 150], nodemods: [460, 290], dependency: [360, 470] };
+const REVIEW = "review Sam's PR", TICKET = 'figure out what #8613 touches';
+const TODO = [[REVIEW, false], [TICKET, false], ['rename utils2.ts to utils-final.ts', true], ['find out who owns legacy/', false], ['read the onboarding doc (last edited 2019)', false], ['stop saying "quick question"', false], ['coffee', true]];
+const TEXT = {
+  todo: () => TODO.map(([task, done]) => `[${done || ticked.has(task) ? 'x' : ' '}] ${task}`).join('\n'),
+  hard: () => 'There are only two hard things in computer science:\n\n1. cache invalidation\n2. naming things\n3. off-by-one errors',
+  env: () => 'DB_PASSWORD=hunter2\n\n# TODO: add this file to .gitignore',
+  answer: () => '42',
+};
+const CTLS = '<button class="ctl close" type="button" aria-label="Close"><svg viewBox="0 0 8 8"><path d="M1.5 1.5l5 5M6.5 1.5l-5 5"/></svg></button><button class="ctl max" type="button" aria-label="Full screen"><svg class="enter" viewBox="0 0 8 8"><path d="M4.5 1H7v2.5M3.5 7H1V4.5"/></svg><svg class="exit" viewBox="0 0 8 8"><path d="M1.5 4h5"/></svg></button>';
+const STATUS = '<button class="status" type="button" data-tip="Lunch" aria-label="Status: Lunch">🍔</button>';
+const GRIPS = ['nw', 'ne', 'sw', 'se'].map(c => `<i class="grip ${c}" data-grip="${c}" aria-hidden="true"></i>`).join('');
+const winHtml = (id, title, body) => `<section class="window" id="w-${id}" data-win="${id}" aria-label="${title}" tabindex="-1" hidden><div class="chrome">${CTLS}<b>${esc(title)}</b></div><div class="wbody">${body}</div>${GRIPS}</section>`;
+
+$('w-githob').querySelector('.chrome').insertAdjacentHTML('afterbegin', CTLS);
+$('w-githob').insertAdjacentHTML('beforeend', GRIPS);
+$('icons').innerHTML = DESK.map(([id, name, kind]) => `<button class="file" type="button" data-open="${id}"><i class="glyph ${kind}"></i><span>${name}</span></button>`).join('');
+$('dock').innerHTML = Object.entries(APPS).map(([id, [name, icon]]) => `<button class="app" type="button" data-open="${id}" data-app="${id}" aria-label="${name}"><svg viewBox="0 0 24 24">${icon}</svg><span class="badge"></span></button>`).join('');
+$('dock').insertAdjacentHTML('beforebegin', [
+  winHtml('slick', 'Slick', `<div class="slick"><aside><h5>Channels</h5><button class="chan" type="button" data-ch="engineering"># engineering</button><button class="chan" type="button" data-ch="random"># random</button><h5>Direct messages</h5><div class="dm"><button class="chan" type="button" data-ch="sam">Sam</button>${STATUS}</div></aside><main><header id="slickHead"></header><div class="msgs" id="slickMsgs"></div><form class="composer send" id="slickForm"><input id="slickIn" autocomplete="off" aria-label="Message"><button type="submit" aria-label="Send"><svg viewBox="0 0 16 16"><path d="M2 8l12-5.5L9.5 14 7.5 9z"/><path d="M7.5 9L14 2.5"/></svg></button></form></main></div>`),
+  winHtml('terminal', 'Terminal', '<div class="tty" id="tty"><div id="ttyOut"></div><form class="prompt" id="ttyForm"><span>~ %</span><input id="ttyIn" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Command"></form></div>'),
+  winHtml('codix', 'Codix', '<div class="codix"><aside><button class="newchat" type="button" id="newChat">New chat</button><h5>Recent</h5><div id="chatList"></div></aside><main><div class="thread" id="thread"></div><form class="composer" id="codixForm"><input id="codixIn" autocomplete="off" placeholder="Ask Codix anything" aria-label="Message Codix"></form></main></div>'),
+  winHtml('runner', 'LGTM Runner', '<div class="runner"><canvas id="game" tabindex="0" aria-label="LGTM Runner. Press Space or tap to hop, hold to jump higher."></canvas></div>'),
+  ...DESK.map(([id, name, kind]) => winHtml(id, name, kind === 'txt' ? `<pre class="txt" id="f-${id}"></pre>` : kind === 'folder' ? `<div class="folder" id="f-${id}"></div>` : `<div class="pic"><img src="assets/dependency.png" width="385" height="489" alt="xkcd comic: a towering stack of blocks labelled All modern digital infrastructure, balanced on one tiny block near the bottom labelled A project some random person in Nebraska has been thanklessly maintaining since 2003."></div>`)),
+].join(''));
+
+let ztop = 10, placed = 0, depth = 0;
+const ticked = new Set();
+function tickTodo(task) { ticked.add(task); if (!$('w-todo').hidden) ON_OPEN.todo(); }
+const ON_OPEN = {
+  slick: () => { if (chan === 'sam') unread = 0; renderSlick(); $('slickIn').focus({ preventScroll: true }); },
+  terminal: () => $('ttyIn').focus({ preventScroll: true }),
+  codix: () => $('codixIn').focus({ preventScroll: true }),
+  runner: () => { gameReset(); $('game').focus({ preventScroll: true }); },
+  nodemods: renderFolder,
+};
+for (const id in TEXT) ON_OPEN[id] = () => { $(`f-${id}`).textContent = TEXT[id](); };
+const ON_CLOSE = { runner: () => gameReset() };
+
+function openWin(id) {
+  const w = $(`w-${id}`);
+  w.classList.remove('closing');
+  if (w.hidden) {
+    w.hidden = false;
+    if (SIZES[id] && !w.style.width) place(w, SIZES[id]);
+    w.dataset.min ??= `${w.offsetWidth} ${w.offsetHeight}`;
+    ON_OPEN[id]?.();
+  }
+  raiseWin(w);
+  if (id !== 'githob' && !w.contains(document.activeElement)) w.focus({ preventScroll: true });
+  dockState();
+}
+// Closing plays the opening in reverse and hides the window once it finishes.
+function closeWin(id) {
+  const w = $(`w-${id}`);
+  w.classList.add('closing');
+  w.onanimationend = e => {
+    if (e.target !== w || !w.classList.contains('closing')) return;
+    w.classList.remove('closing'); w.hidden = true; ON_CLOSE[id]?.(); dockState();
+  };
+}
+function raiseWin(w) { w.style.zIndex = ++ztop; }
+function toggleMax(w) { const max = w.classList.toggle('max'); w.querySelector('.ctl.max').setAttribute('aria-label', max ? 'Exit full screen' : 'Full screen'); }
+function place(w, [wide, tall]) {
+  const width = Math.min(wide, os.clientWidth - 20), height = Math.min(tall, os.clientHeight - 100), n = placed++ % 6;
+  Object.assign(w.style, { width: `${width}px`, height: `${height}px`, left: `${clamp(150 + n * 28, 10, os.clientWidth - width - 10)}px`, top: `${clamp(40 + n * 24, 30, os.clientHeight - height - 70)}px` });
+}
+function dockState() {
+  document.querySelectorAll('.app').forEach(a => {
+    const shut = $(`w-${a.dataset.app}`).hidden;
+    a.classList.toggle('running', !shut);
+    a.classList.toggle('bounce', a.dataset.app === 'githob' && step > 0 && shut);
+  });
+  document.querySelector('.app[data-app="slick"] .badge').textContent = unread || '';
+}
+os.addEventListener('pointerdown', e => { const w = e.target.closest('.window'); if (w) raiseWin(w); }, true);
+os.addEventListener('click', e => {
+  const ctl = e.target.closest('.ctl');
+  if (ctl) { const w = ctl.closest('.window'); if (ctl.classList.contains('close')) closeWin(w.dataset.win); else toggleMax(w); return; }
+  const file = e.target.closest('.icons .file');
+  if (file && !file.classList.contains('sel')) { selectFile(file); return; }
+  if (!file && !e.target.closest('.window')) selectFile(null);
+  const opener = e.target.closest('[data-open]');
+  if (opener) openWin(opener.dataset.open);
+});
+function selectFile(file) { document.querySelectorAll('.icons .file.sel').forEach(f => f.classList.remove('sel')); file?.classList.add('sel'); }
+// Follows one pointer from pointerdown until it lifts, calling move with each event.
+function track(el, e, move) {
+  e.preventDefault();
+  el.setPointerCapture(e.pointerId);
+  const end = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', end); el.removeEventListener('pointercancel', end); };
+  el.addEventListener('pointermove', move); el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+}
+// Pins a window to its current pixel box so moving or resizing starts from where it sits.
+function pin(w, box) {
+  const r = w.getBoundingClientRect();
+  Object.assign(w.style, { left: `${r.left - box.left}px`, top: `${r.top - box.top}px`, width: `${r.width}px`, height: `${r.height}px`, right: 'auto', bottom: 'auto' });
+  return { left: r.left - box.left, top: r.top - box.top, right: r.right - box.left, bottom: r.bottom - box.top };
+}
+os.addEventListener('pointerdown', e => {
+  const bar = e.target.closest('.chrome'), w = bar?.closest('.window');
+  if (!w || e.button || e.target.closest('button') || PHONE.matches || w.classList.contains('max')) return;
+  const box = os.getBoundingClientRect(), r = pin(w, box), width = r.right - r.left, dx = e.clientX - box.left - r.left, dy = e.clientY - box.top - r.top;
+  track(bar, e, ev => {
+    w.style.left = `${clamp(ev.clientX - box.left - dx, 80 - width, box.width - 80)}px`;
+    w.style.top = `${clamp(ev.clientY - box.top - dy, 24, box.height - 34)}px`;
+  });
+});
+// Each corner grip moves its own corner and leaves the opposite one where it is, never below the size the window opened at.
+os.addEventListener('pointerdown', e => {
+  const grip = e.target.closest('[data-grip]'), w = grip?.closest('.window');
+  if (!w || e.button || PHONE.matches || w.classList.contains('max')) return;
+  const box = os.getBoundingClientRect(), r = pin(w, box), corner = grip.dataset.grip, [MIN_W, MIN_H] = w.dataset.min.split(' ').map(Number);
+  track(grip, e, ev => {
+    const x = ev.clientX - box.left, y = ev.clientY - box.top;
+    const left = corner.includes('w') ? clamp(x, 0, r.right - MIN_W) : r.left;
+    const right = corner.includes('e') ? clamp(x, r.left + MIN_W, box.width) : r.right;
+    const top = corner.includes('n') ? clamp(y, 24, r.bottom - MIN_H) : r.top;
+    const bottom = corner.includes('s') ? clamp(y, r.top + MIN_H, box.height) : r.bottom;
+    Object.assign(w.style, { left: `${left}px`, top: `${top}px`, width: `${right - left}px`, height: `${bottom - top}px` });
+  });
+});
+
+// GitHob's tabs. Files changed is where the story plays.
+const GH_TABS = {
+  conv: `<div class="pr-over"><h3>feat: image cropping <span>#8613</span></h3><p class="gh-meta">Sam wants to merge into main. Review requested from you.</p><dl class="size"><div><dt>files changed</dt><dd data-n="36" data-p="">36</dd></div><div class="plus"><dt>lines added</dt><dd data-n="2199" data-p="+">+2,199</dd></div><div class="minus"><dt>lines removed</dt><dd data-n="92" data-p="−">−92</dd></div></dl><div class="gh-post"><div><b>Sam</b> opened this pull request</div><p>This PR brings image cropping to the Excalidraw editor.</p><p>With image cropping, we've added the property <code>crop: ImageCrop | null</code> to an image element.</p><p>By setting the <code>croppingElementId</code> on <code>AppState</code>, we enter the crop mode, where the un-cropped image is displayed underneath at a reduced alpha as a visual guide. When inside the crop editor, we'd display crop handles to guide the user.</p></div><button class="go" type="button" id="begin">Begin review</button></div>`,
+  commits: `<ol class="gh-list">${['add crop to image elements', 'add the crop editor', 'draw cropped images', 'crop handles', 'undo and redo for crop', 'update snapshots'].map(m => `<li>${m}</li>`).join('')}</ol>`,
+  checks: '<p class="gh-check"><span>✓</span> vibes passed</p><p class="gh-meta">1 successful check</p>',
+};
+function ghTab(name) {
+  document.querySelectorAll('.site [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  $('ghpanel').hidden = name === 'files';
+  if (name !== 'files') $('ghpanel').innerHTML = GH_TABS[name];
+}
+document.querySelector('.site').addEventListener('click', e => { const t = e.target.closest('[data-tab]'); if (t) ghTab(t.dataset.tab); });
+// Begin review moves the story on from the PR's overview; anywhere else it just opens Files changed.
+$('ghpanel').addEventListener('click', e => { if (!e.target.closest('#begin')) return; if (step === 1) next(); else ghTab('files'); });
+// The PR's size counts up as its page opens.
+function countUp() {
+  const els = [...$('ghpanel').querySelectorAll('[data-n]')], t0 = performance.now(), ms = still ? 0 : 1100;
+  const run = now => {
+    const k = ms ? Math.min(1, (now - t0) / ms) : 1, eased = 1 - (1 - k) ** 3;
+    els.forEach(el => { el.textContent = el.dataset.p + Math.round(el.dataset.n * eased).toLocaleString('en-US'); });
+    if (k < 1) requestAnimationFrame(run);
+  };
+  requestAnimationFrame(run);
+}
+
+// Slick: post anything, nobody answers.
+const PEOPLE = { Sam: '#2f6fdb', Alex: '#0f7a48', Jordan: '#b4580f', Mo: '#c9303a', You: '#56667c' };
+const CHANNELS = { engineering: '#engineering', random: '#random', sam: 'Sam' };
+let posts, chan, unread = 0;
+function seedSlick() {
+  posts = {
+    engineering: [['Alex', '2:03 PM', 'who broke staging'], ['Jordan', '2:05 PM', 'not me'], ['Alex', '2:31 PM', 'nvm, it was my VPN'], ['Jordan', '3:58 PM', 'does anyone have more context on #8613? it touches the renderer']],
+    random: [
+      ['Jordan', '11:40 AM', 'the coffee machine is fixed. it only makes decaf now'],
+      ['Alex', '11:42 AM', 'this is a hostile work environment'],
+      ['Mo', '12:20 PM', 'QA, explain yourselves', { src: 'assets/meme-qa-bar.png', w: 700, h: 728, alt: "A tweet: a QA engineer orders a beer, 0 beers, 99999999999 beers, a lizard, -1 beers. The first real customer asks where the bathroom is and the bar bursts into flames." }],
+      ['Mo', '1:15 PM', 'tabs vs spaces debate moved to Thursday. bring evidence'],
+      ['Alex', '1:58 PM', 'found the Q4 roadmap', { src: 'assets/meme-pls-make-website.png', w: 599, h: 376, alt: 'A code editor with a note: Machine, pls make website, all responsive like, with big pictures, fav fonts, fancy menus with whooosh, load fast pls. Thanks, Human. PS no bugs.' }],
+      ['Mo', '2:30 PM', "guys check this out. imagine building an entire app just by describing it 🤯 https://x.com/sharifshameem/status/1284095222939451393"],
+      ['Jordan', '3:47 PM', 'guys I just found this amazing new site for programmers, stackoverflow.com. you ask a question and actual humans answer it. why is nobody talking about this??'],
+    ],
+    sam: [['Sam', 'Yesterday', 'lunch tomorrow? the food truck is back'], ['You', 'Yesterday', 'only if you stop calling it brunch at 1pm']],
+  };
+  chan = 'sam'; unread = 0;
+}
+function slickPost(ch, who, text) {
+  posts[ch].push([who, $('clock').textContent, text]);
+  if (who !== 'You' && ($('w-slick').hidden || chan !== ch)) unread++;
+  renderSlick(); dockState();
+}
+// A link to the PR starts the review, the same as clicking Sam's notification; other links open in a new tab.
+// A [label](url) shows its label as the link; a bare URL shows itself.
+const linkify = html => html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s<]+/g, (url, label, link = url) => `<a href="${link}" ${link === PR_URL ? 'data-pr' : 'target="_blank" rel="noopener"'}>${label ?? link.replace(/^https?:\/\//, '')}</a>`);
+function renderSlick() {
+  document.querySelectorAll('.slick .chan').forEach(c => { c.classList.toggle('cur', c.dataset.ch === chan); c.classList.toggle('unread', c.dataset.ch === 'sam' && unread > 0); });
+  $('slickHead').innerHTML = chan === 'sam' ? `Sam ${STATUS}` : CHANNELS[chan];
+  $('slickMsgs').innerHTML = posts[chan].map(([who, time, text, img]) => `<div class="msg"><span class="av" style="background:${PEOPLE[who]}">${who[0]}</span><div><b>${who}</b>${who === 'Sam' ? ' <span title="Lunch">🍔</span>' : ''}<time>${time}</time><p>${linkify(esc(text))}</p>${img ? `<img src="${img.src}" width="${img.w}" height="${img.h}" alt="${esc(img.alt)}" loading="lazy">` : ''}</div></div>`).join('');
+  $('slickMsgs').scrollTop = $('slickMsgs').scrollHeight;
+  $('slickIn').placeholder = `Message ${CHANNELS[chan]}`;
+}
+$('w-slick').addEventListener('click', e => {
+  if (e.target.closest('a[data-pr]')) { e.preventDefault(); if ($('ping')?.onclick) $('ping').click(); return; }
+  const c = e.target.closest('.chan'); if (!c) return;
+  chan = c.dataset.ch; if (chan === 'sam') unread = 0;
+  renderSlick(); dockState(); $('slickIn').focus({ preventScroll: true });
+});
+$('slickForm').onsubmit = e => {
+  e.preventDefault();
+  const text = $('slickIn').value.trim(); if (!text) return;
+  $('slickIn').value = ''; $('slickIn').focus({ preventScroll: true }); slickPost(chan, 'You', text);
+};
+
+// Terminal: four commands with fixed answers.
+const ttyPrint = (text, cls = '') => { $('ttyOut').insertAdjacentHTML('beforeend', `<div class="${cls}">${esc(text)}</div>`); $('tty').scrollTop = $('tty').scrollHeight; };
+function seedTty() { $('ttyOut').textContent = ''; ttyPrint('Last login: Tue on ttys001\nType help to see what this terminal can do.'); }
+function cat(name) {
+  const file = DESK.find(([, n]) => n === name);
+  if (!file) return `cat: ${name}: No such file or directory`;
+  if (file[2] === 'folder') return `cat: ${name}: Is a directory`;
+  if (file[2] === 'png') return `cat: ${name}: binary file.`;
+  return TEXT[file[0]]();
+}
+function ttyRun(line) {
+  $('ttyOut').insertAdjacentHTML('beforeend', `<div class="typed">~ % <span>${esc(line)}</span></div>`);
+  const [name, ...args] = line.trim().split(/\s+/);
+  if (!name) return;
+  if (name === 'help') ttyPrint('help         list these commands\nls           list the files on the desktop\ncat <file>   print a file\nsudo <cmd>   run a command as admin');
+  else if (name === 'ls') ttyPrint(DESK.map(([, n]) => n).join('\n'));
+  else if (name === 'cat') ttyPrint(args.length ? args.map(cat).join('\n') : 'usage: cat <file>');
+  else if (line.trim() === 'make me a sandwich') ttyPrint('What? Make it yourself.');
+  else if (line.trim() === 'sudo make me a sandwich') ttyPrint('Okay.');
+  else if (name === 'sudo') ttyPrint('[sudo] password for you:\nyou are not in the sudoers file. This incident will be reported.');
+  else ttyPrint(`zsh: command not found: ${name}`);
+}
+$('ttyForm').onsubmit = e => { e.preventDefault(); ttyRun($('ttyIn').value); $('ttyIn').value = ''; };
+$('tty').addEventListener('click', () => { if (!getSelection().toString()) $('ttyIn').focus({ preventScroll: true }); });
+
+// Codix: old chats read fine, anything new hits an error.
+const CHATS = [
+  ['center a div', [[1, 'how do i center a div'], [0, 'Put `display: flex; align-items: center; justify-content: center;` on the parent.'], [1, "didn't work"], [0, 'Then try `display: grid; place-items: center;`. If that fails too, the div may not want to be centered.']]],
+  ['name a variable', [[1, 'what should i name a variable that holds the list of users'], [0, '`users`'], [1, 'too short'], [0, '`listOfAllTheUsersWeFetchedEarlierToday`']]],
+  ['email regex', [[1, 'write a regex that validates every email address'], [0, 'Send a confirmation email. That is the regex.']]],
+  ['is it friday', [[1, 'is it friday yet'], [0, 'It is Tuesday.'], [1, 'are you sure'], [0, 'Yes. Still Tuesday.']]],
+];
+const ERRORS = ['You are out of tokens. They refill in 4 hours.', 'Codix is unavailable right now. Try again later.', 'Too many requests. Wait a moment and try again.'];
+let chatAt, extra, errAt;
+function seedCodix() { chatAt = 0; extra = CHATS.map(() => []); extra.push([]); errAt = 0; }
+const md = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>');
+function renderCodix() {
+  $('chatList').innerHTML = CHATS.map(([title], i) => `<button class="chan${i === chatAt ? ' cur' : ''}" type="button" data-chat="${i}">${title}</button>`).join('');
+  const lines = [...(CHATS[chatAt]?.[1] ?? []), ...extra[chatAt]];
+  $('thread').innerHTML = lines.length ? lines.map(([who, t]) => who === 2 ? `<p class="err" role="alert">${esc(t)}</p>` : `<div class="bubble${who ? ' me' : ''}">${md(t)}</div>`).join('') : '<p class="empty">What are we building today?</p>';
+  $('thread').scrollTop = $('thread').scrollHeight;
+}
+$('chatList').addEventListener('click', e => { const c = e.target.closest('[data-chat]'); if (c) { chatAt = +c.dataset.chat; renderCodix(); } });
+$('newChat').onclick = () => { chatAt = CHATS.length; extra[chatAt] = []; renderCodix(); $('codixIn').focus({ preventScroll: true }); };
+$('codixForm').onsubmit = e => {
+  e.preventDefault();
+  const text = $('codixIn').value.trim(); if (!text) return;
+  $('codixIn').value = ''; extra[chatAt].push([1, text], [2, ERRORS[errAt++ % ERRORS.length]]); renderCodix();
+};
+
+// The folder that never ends.
+const DEPTHS = [[3, "It's folders all the way down."], [6, 'This folder now weighs more than your laptop.'], [10, 'npm: added 1,048,576 folders. 0 vulnerabilities.']];
+function renderFolder() {
+  const tip = DEPTHS.findLast(([d]) => depth >= d)?.[1];
+  $('f-nodemods').innerHTML = `<p class="crumb">&lrm;~/Desktop/${Array(depth + 1).fill('definitely-not-node_modules').join('/')}</p><div class="row2">${depth ? '<button class="up" type="button" data-up>Up</button>' : ''}<button class="file" type="button" data-deeper><i class="glyph folder"></i><span>definitely-not-node_modules</span></button></div>${tip ? `<p class="deep">${tip}</p>` : ''}`;
+}
+$('f-nodemods').addEventListener('click', e => {
+  const deeper = e.target.closest('[data-deeper]');
+  if (!deeper && !e.target.closest('[data-up]')) return;
+  depth += deeper ? 1 : -1; renderFolder();
+  $('f-nodemods').querySelector(deeper || !depth ? '[data-deeper]' : '[data-up]').focus();
+});
+
+// LGTM Runner: jump the bugs, stay under the pings. A tap hops, holding jumps high, and new hazards join as the score climbs.
+const GW = 600, GH = 200, FLOOR = 160;
+let game, best = 0, raf = 0, last = 0;
+function gameReset(state = 'ready') { cancelAnimationFrame(raf); game = { state, y: 0, vy: 0, obs: [], wait: 40, speed: 5, score: 0, t: 0 }; drawGame(); }
+function gamePress() {
+  if (game.state === 'run') { if (!game.y) game.vy = 10.5; return; }
+  gameReset('run'); last = performance.now(); raf = requestAnimationFrame(tick);
+}
+// Letting go early cuts the climb short, which turns a jump into a hop.
+function gameRelease() { if (game.state === 'run' && game.vy > 4) game.vy = 4; }
+function spawn(g) {
+  const s = g.score, roll = Math.random();
+  const add = (kind, w, h, y = 0, dx = 0) => g.obs.push({ kind, x: GW + dx, w, h, y, phase: Math.random() * Math.PI * 2 });
+  if (s > 250 && roll < .12) { add('bug', 22, 16); add('ping', 64, 20, 46, 20 * g.speed); }
+  else if (s > 200 && roll < .3) add('wall', 24, 40);
+  else if (s > 200 && roll < .45) add('flaky', 22, 16);
+  else if (s > 120 && roll < .65) add('ping', 64, 20, 46);
+  else if (s > 60 && roll < .8) add('bug', 22 * (2 + (Math.random() < .4)), 16);
+  else add('bug', 22, 16);
+  g.wait = (s > 80 && Math.random() < .15 ? 170 : 230 + Math.random() * 330) / g.speed;
+}
+function tick(now) {
+  const g = game, dt = Math.min(2, (now - last) / 16.7); last = now;
+  g.vy -= .6 * dt; g.y = Math.max(0, g.y + g.vy * dt); if (!g.y) g.vy = 0;
+  g.t += dt; g.score += g.speed * dt / 8; g.speed = Math.min(11, 5 + g.score / 250);
+  if ((g.wait -= dt) <= 0) spawn(g);
+  g.obs.forEach(o => { o.x -= g.speed * dt; if (o.kind === 'flaky') o.y = 22 + 22 * Math.sin(g.t / 12 + o.phase); });
+  g.obs = g.obs.filter(o => o.x + o.w > 0);
+  if (g.obs.some(o => o.x < 78 && o.x + o.w > 62 && g.y < o.y + o.h - 2 && g.y + 34 > o.y + 2)) { g.state = 'over'; best = Math.max(best, Math.floor(g.score)); }
+  drawGame();
+  if (g.state === 'run') raf = requestAnimationFrame(tick);
+}
+function drawBug(ctx, x, base) { ctx.fillRect(x + 1, base - 4, 20, 2); ctx.beginPath(); ctx.ellipse(x + 11, base - 9, 9, 7, 0, 0, Math.PI * 2); ctx.fill(); }
+function drawGame() {
+  const c = $('game'), ctx = c.getContext('2d'), dpr = devicePixelRatio || 1, g = game;
+  if (c.width !== GW * dpr) { c.width = GW * dpr; c.height = GH * dpr; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#0d1420'; ctx.fillRect(0, 0, GW, GH);
+  ctx.fillStyle = '#2c3644'; ctx.fillRect(0, FLOOR, GW, 2);
+  for (let x = -(g.t * g.speed % 40); x < GW; x += 40) ctx.fillRect(x, FLOOR + 9, 14, 2);
+  const top = FLOOR - g.y - 34, stride = g.state === 'run' && !g.y && Math.floor(g.t / 5) % 2;
+  ctx.fillStyle = '#f4f6f9'; ctx.fillRect(64, top, 12, 10);
+  ctx.fillStyle = '#3fd68a'; ctx.fillRect(62, top + 10, 16, 18); ctx.fillRect(stride ? 62 : 65, top + 28, 4, 6); ctx.fillRect(stride ? 74 : 71, top + 28, 4, 6);
+  ctx.textAlign = 'center';
+  g.obs.forEach(o => {
+    const base = FLOOR - o.y;
+    if (o.kind === 'ping') {
+      ctx.fillStyle = '#f0944a'; ctx.beginPath(); ctx.roundRect(o.x, base - o.h, o.w, o.h, 6); ctx.fill();
+      ctx.fillStyle = '#0d1420'; ctx.font = '600 10px "Atkinson Hyperlegible Mono", monospace'; ctx.fillText('update?', o.x + o.w / 2, base - 6);
+    } else if (o.kind === 'wall') {
+      ctx.fillStyle = '#ff8a85'; ctx.beginPath(); ctx.roundRect(o.x, base - o.h, o.w, o.h, 3); ctx.fill();
+      ctx.fillStyle = '#0d1420'; ctx.font = '600 8px "Atkinson Hyperlegible Mono", monospace';
+      ['<<<', '===', '>>>'].forEach((m, i) => ctx.fillText(m, o.x + o.w / 2, base - 28 + i * 11));
+    } else if (o.kind === 'flaky') {
+      ctx.fillStyle = '#c39bff'; drawBug(ctx, o.x, base);
+      ctx.font = '400 9px "Atkinson Hyperlegible Mono", monospace'; ctx.fillText('flaky', o.x + 11, base - 20);
+    } else {
+      ctx.fillStyle = '#ff8a85';
+      for (let x = o.x; x < o.x + o.w; x += 22) drawBug(ctx, x, base);
+    }
+  });
+  ctx.textAlign = 'right'; ctx.fillStyle = '#a9b6c8'; ctx.font = '400 11px "Atkinson Hyperlegible Mono", monospace';
+  ctx.fillText(`lines reviewed ${Math.floor(g.score)}`, GW - 14, 24);
+  if (best) ctx.fillText(`best ${best}`, GW - 14, 40);
+  if (g.state === 'run') return;
+  ctx.textAlign = 'center'; ctx.fillStyle = '#f4f6f9'; ctx.font = '700 30px "Atkinson Hyperlegible Next", sans-serif';
+  ctx.fillText(g.state === 'over' ? 'Merged to production.' : 'LGTM Runner', GW / 2, 72);
+  ctx.fillStyle = '#a9b6c8'; ctx.font = '400 11px "Atkinson Hyperlegible Mono", monospace';
+  ctx.fillText(g.state === 'over' ? 'Space or tap to review again' : 'Tap to hop, hold to jump. Jump the bugs, stay under the pings.', GW / 2, 98);
+}
+const JUMP_KEYS = [' ', 'ArrowUp', 'w'];
+$('game').addEventListener('keydown', e => { if (JUMP_KEYS.includes(e.key)) { e.preventDefault(); if (!e.repeat) gamePress(); } });
+$('game').addEventListener('keyup', e => { if (JUMP_KEYS.includes(e.key)) gameRelease(); });
+$('game').addEventListener('pointerdown', e => { e.preventDefault(); $('game').focus({ preventScroll: true }); gamePress(); });
+$('game').addEventListener('pointerup', gameRelease);
+$('game').addEventListener('pointercancel', gameRelease);
+
+// Power: the only option is Reboot, which also restarts the story.
+function closeMenu() { $('powerMenu').hidden = true; $('power').setAttribute('aria-expanded', 'false'); }
+$('power').onclick = () => {
+  const show = $('powerMenu').hidden;
+  $('powerMenu').hidden = !show; $('power').setAttribute('aria-expanded', String(show));
+  if (show) $('logout').focus();
+};
+document.addEventListener('click', e => { if (!e.target.closest('.power')) closeMenu(); if (!e.target.closest('.when')) closeToday(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeMenu(); closeToday(); } });
+
+// Clock: today's real date and the visitor's city and country. The hosting edge reads them from the visitor's IP address and serves them at /where.
+const countryName = code => { try { return new Intl.DisplayNames([navigator.language], { type: 'region' }).of(code); } catch { return code; } };
+let where;
+function closeToday() { $('today').hidden = true; $('clock').setAttribute('aria-expanded', 'false'); }
+$('clock').onclick = () => {
+  if (!$('today').hidden) { closeToday(); return; }
+  $('today').hidden = false; $('clock').setAttribute('aria-expanded', 'true');
+  const now = new Date();
+  $('date').textContent = now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  where ??= fetch('/where').then(r => r.ok ? r.json() : Promise.reject(new Error(r.status))).then(({ city, country }) => {
+    $('where').textContent = [city, country && countryName(country)].filter(Boolean).join(', ');
+    $('where').hidden = !$('where').textContent;
+  }, () => {});
+};
+function reboot() {
+  if (os.classList.contains('off')) return;
+  clearTimeout(pingTimer); closeMenu(); ['ping', 'term', 'flood'].forEach(id => $(id)?.remove());
+  os.classList.add('off');
+  setTimeout(() => { $('restarting').hidden = false; }, 700);
+  setTimeout(() => { $('restarting').hidden = true; booted = true; os.classList.replace('off', 'boot'); restart(); setTimeout(() => os.classList.remove('boot'), 1100); }, 2500);
+}
+$('reboot').onclick = reboot;
+
+// The opening's shot is the PR's own added lines, out of focus.
+{
+  const lines = Object.values(DIFFS).flat().filter(([k]) => k === 'add').map(([, t]) => `+  ${t}`.slice(0, 46).padEnd(50)).slice(0, 270);
+  const rows = Array.from({ length: Math.ceil(lines.length / 3) }, (_, r) => lines.slice(r * 3, r * 3 + 3).join('')).join('\n');
+  $('wallShot').textContent = `${rows}\n${rows}`;
+}
+// On desktop the hero states the mission first. Play a review glides to the story and starts it; scrolling to it starts it in place, and the page keeps scrolling past it.
+const root = document.documentElement, desktop = matchMedia('(min-width: 901px)');
+let engaged = false;
+function bootUp() {
+  $('booting').hidden = false;
+  setTimeout(() => $('booting').classList.add('leaving'), 1800);
+  setTimeout(() => { $('booting').hidden = true; $('booting').classList.remove('leaving'); $('loginBtn').focus({ preventScroll: true }); }, still ? 1800 : 2300);
+}
+function engage(glide) {
+  if (engaged) return;
+  engaged = true;
+  if (root.classList.contains('played')) { root.classList.remove('played', 'ending'); $('login').hidden = false; $('booting').hidden = false; restart(); }
+  if (glide) stage.scrollIntoView({ behavior: still ? 'auto' : 'smooth' });
+  setTimeout(bootUp, glide && !still ? 700 : 0);
+}
+function shutdown() {
+  clearTimeout(pingTimer); closeMenu(); ['ping', 'term', 'flood'].forEach(id => $(id)?.remove());
+  os.classList.add('off');
+  setTimeout(() => stage.classList.add('down'), still ? 0 : 700);
+  setTimeout(() => {
+    const top = stage.getBoundingClientRect().top + scrollY;
+    root.classList.add('played', 'ending'); stage.classList.remove('down'); os.classList.remove('off');
+    engaged = false; scrollTo(0, top);
+  }, still ? 0 : 1300);
+}
+addEventListener('scroll', () => {
+  if (desktop.matches && !engaged && !root.classList.contains('played') && stage.getBoundingClientRect().top < innerHeight / 2) engage(false);
+}, { passive: true });
+// The first wheel scroll from above that would carry the page past the game stops at its top for a beat, so a fast scroll can't skip it; after that the page scrolls freely.
+let caught = false, holding = false;
+addEventListener('wheel', e => {
+  if (!desktop.matches || e.deltaY <= 0) return;
+  if (holding) { e.preventDefault(); return; }
+  if (caught) return;
+  const top = stage.getBoundingClientRect().top + scrollY;
+  if (scrollY >= top - 1 || scrollY + e.deltaY < top) return;
+  e.preventDefault(); scrollTo(0, top); caught = holding = true;
+  setTimeout(() => { holding = false; }, 400);
+}, { passive: false });
+// Both Install links glide down to the install steps.
+document.querySelectorAll('a[href="#install"]').forEach(a => a.addEventListener('click', e => {
+  e.preventDefault();
+  $('install').scrollIntoView({ behavior: still ? 'auto' : 'smooth' });
+  history.replaceState(null, '', '#install');
+}));
+document.querySelector('.hero .go').addEventListener('click', e => {
+  if (!desktop.matches) return;
+  e.preventDefault(); engage(true);
+});
+
+// Log out covers the desktop with a login screen; logging back in leaves everything as it was.
+$('logout').onclick = () => { closeMenu(); $('login').classList.remove('leaving'); $('login').hidden = false; $('loginBtn').focus({ preventScroll: true }); };
+$('loginBtn').onclick = () => {
+  $('login').classList.add('leaving');
+  setTimeout(() => { $('login').hidden = true; $('login').classList.remove('leaving'); $('power').focus({ preventScroll: true }); }, 300);
+};
+
+function resetOS() {
+  document.querySelectorAll('#os .window').forEach(w => { w.hidden = true; w.classList.remove('max', 'closing'); w.removeAttribute('style'); delete w.dataset.min; w.querySelector('.ctl.max').setAttribute('aria-label', 'Full screen'); });
+  os.classList.remove('story'); ztop = 10; placed = 0; ticked.clear(); depth = 0; selectFile(null);
+  seedSlick(); renderSlick(); seedTty(); seedCodix(); renderCodix(); gameReset(); ghTab('files'); closeMenu(); closeToday(); dockState();
+}
+
+function go(i) {
+  step = i; document.querySelectorAll('#steps i').forEach((s, n) => { s.classList.toggle('on', n <= i); s.classList.toggle('now', n === i); });
+  if (i) { os.classList.add('story'); openWin('githob'); $('w-githob').classList.add('max'); ghTab('files'); }
+  STEPS[i](); dockState();
+}
 function next() { go(step + 1); }
 function restart() {
-  frame = null; shown = []; $('ping')?.remove(); stage.className = 'stage idle'; site(false); $('term')?.remove(); viewed = 0; head = []; forgot = 0; $('log').textContent = ''; $('chips').textContent = ''; $('lost').textContent = '';
-  $('viewed').textContent = '0 of 12 viewed'; $('headTitle').textContent = 'In your head'; $('logTitle').textContent = 'Stuck on'; clock(0); site(false); tree(); go(0);
+  clearTimeout(pingTimer); resetOS(); frame = null; checking = false; shown = []; $('ping')?.remove(); stage.className = 'stage idle'; site(false); $('term')?.remove(); viewed = 0; head = []; forgot = 0; $('log').textContent = ''; $('chips').textContent = ''; $('lost').textContent = '';
+  $('viewed').textContent = '0 of 36 viewed'; $('headTitle').textContent = 'In your head'; $('logTitle').textContent = 'Stuck on'; clock(0); site(false); tree(); go(0);
   stage.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'center' });
 }
-$('skip').onclick = () => {
-  $('log').textContent = ''; Object.keys(LIMITS).forEach(stuck);
-  go(ACT_ONE.length);
-};
 $('steps').innerHTML = STEPS.map(() => '<i></i>').join('');
-site(false); tree(); go(0);
+if (desktop.matches) { $('login').hidden = false; $('booting').hidden = false; }
+resetOS(); site(false); tree(); go(0);
 
 document.querySelectorAll('.copy').forEach(b => { b.onclick = () => {
   const text = b.previousElementSibling.textContent;
-  navigator.clipboard?.writeText(text).then(() => { b.textContent = 'Copied'; }, () => getSelection().selectAllChildren(b.previousElementSibling));
+  navigator.clipboard?.writeText(text).then(() => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy'; }, 2000); }, () => getSelection().selectAllChildren(b.previousElementSibling));
 }; });
 
-const THEMES = ['system', 'light', 'dark'];
+(() => {
+  if (matchMedia('(max-width: 700px)').matches) return;
+  const frame = document.getElementById('mapFrame'), canvas = document.getElementById('mapCanvas');
+  const frameExport = (tries = 50) => {
+    const map = frame.contentWindow;
+    if (!map.eval("typeof cardEl === 'object' && 'reach:render-element' in cardEl")) {
+      if (tries) setTimeout(() => frameExport(tries - 1), 100);
+      return;
+    }
+    map.document.fonts.ready.then(() => setTimeout(() => {
+      map.eval(`const group = document.querySelector('[data-hood="crop-draw"]'), cause = rectOf('render-element');
+        const left = parseFloat(group.style.left), width = parseFloat(group.style.width);
+        const bottom = Math.max(rectOf('reach:render-element').b, rectOf('reach:static-svg').b);
+        view.k = Math.min(0.92, (innerWidth - 32) / width, (innerHeight - 24 - 88) / (bottom - cause.t));
+        view.x = (innerWidth - width * view.k) / 2 - left * view.k;
+        view.y = 24 - cause.t * view.k;
+        touched = true; apply();
+        const cut = Math.max(0, ...[...document.querySelectorAll('.pill')].map(p => p.getBoundingClientRect())
+          .filter(r => r.left < innerWidth && r.right > innerWidth).map(r => r.right - innerWidth + 16));
+        if (cut) { view.x -= cut; apply(); }`);
+    }));
+  };
+  frame.addEventListener('load', () => { themeMap(frame.contentDocument); frameExport(); });
+  frame.src = 'map/index.html?map=pr-8613';
+  document.getElementById('mapOpen').addEventListener('click', e => {
+    if (!canvas.requestFullscreen) return;
+    e.preventDefault();
+    canvas.requestFullscreen();
+  });
+})();
+
+// The theme follows the system until the visitor picks one; the pressed button and both maps always show the theme in use.
+const darkOS = matchMedia('(prefers-color-scheme: dark)'), picks = document.querySelectorAll('[data-pick]');
+function shownTheme() { return document.documentElement.dataset.theme ?? (darkOS.matches ? 'dark' : 'light'); }
+function themeMap(d) { d.documentElement.dataset.theme = shownTheme(); }
+function showTheme() {
+  picks.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pick === shownTheme())));
+  document.querySelectorAll('iframe').forEach(f => { if (f.contentDocument?.documentElement) themeMap(f.contentDocument); });
+}
 function theme(name) {
-  if (name === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = name;
-  $('theme').textContent = name; syncTheme();
+  document.documentElement.dataset.theme = name; showTheme();
   try { localStorage.setItem('theme', name); } catch {}
 }
-$('theme').onclick = () => theme(THEMES[(THEMES.indexOf($('theme').textContent) + 1) % 3]);
-try { const saved = localStorage.getItem('theme'); if (THEMES.includes(saved)) theme(saved); } catch {}
+picks.forEach(b => { b.onclick = () => theme(b.dataset.pick); });
+darkOS.addEventListener('change', showTheme);
+try { const saved = localStorage.getItem('theme'); if (saved === 'light' || saved === 'dark') theme(saved); } catch {}
+showTheme();
 </script>
 </body>
 </html>

@@ -1,0 +1,627 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-06T22:00:00Z",
+  "title": "Design System: MergeAtlas",
+  "extensions": {
+    "colorMeta": {
+      "go-green": {
+        "role": "primary",
+        "displayName": "Go Green",
+        "cssVar": "--go",
+        "canonical": "oklch(75.9% 0.173 155.4)",
+        "tonalRamp": [
+          "#000f05",
+          "#032c17",
+          "#02502c",
+          "#177646",
+          "#249e60",
+          "#23ca79",
+          "#58ee9b",
+          "#c7fed9"
+        ]
+      },
+      "film": {
+        "role": "neutral",
+        "displayName": "Film",
+        "cssVar": "--film",
+        "canonical": "oklch(0.0% 0.000 0.0)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#242424",
+          "#424242",
+          "#636363",
+          "#868686",
+          "#ababab",
+          "#cecece",
+          "#eeeeee"
+        ]
+      },
+      "film-ink": {
+        "role": "neutral",
+        "displayName": "Film Ink",
+        "cssVar": "--film-ink",
+        "canonical": "oklch(95.2% 0.011 89.7)",
+        "tonalRamp": [
+          "#0d0b06",
+          "#26241e",
+          "#45423c",
+          "#66635c",
+          "#89867f",
+          "#adaba3",
+          "#d0cec6",
+          "#f1eee6"
+        ]
+      },
+      "film-muted": {
+        "role": "neutral",
+        "displayName": "Film Muted",
+        "cssVar": "--film-muted",
+        "canonical": "oklch(71.6% 0.015 88.7)",
+        "tonalRamp": [
+          "#0e0b05",
+          "#27241c",
+          "#464239",
+          "#67635a",
+          "#8a867c",
+          "#afaaa0",
+          "#d2cdc3",
+          "#f2eee3"
+        ]
+      },
+      "film-line": {
+        "role": "neutral",
+        "displayName": "Film Line",
+        "cssVar": "--film-line",
+        "canonical": "oklch(26.8% 0.004 106.6)",
+        "tonalRamp": [
+          "#0b0b0a",
+          "#242422",
+          "#424240",
+          "#636361",
+          "#868684",
+          "#ababa8",
+          "#cececb",
+          "#efefec"
+        ]
+      },
+      "light-table": {
+        "role": "neutral",
+        "displayName": "Light Table",
+        "cssVar": "--pg",
+        "canonical": "oklch(96.3% 0.005 106.5)",
+        "darkToken": "screening-room",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b09",
+          "#242421",
+          "#43433f",
+          "#636360",
+          "#868683",
+          "#ababa7",
+          "#cececa",
+          "#efefeb"
+        ]
+      },
+      "table-ink": {
+        "role": "neutral",
+        "displayName": "Table Ink",
+        "cssVar": "--pg-ink",
+        "canonical": "oklch(14.9% 0.002 106.7)",
+        "darkToken": "room-ink",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0a",
+          "#242423",
+          "#424241",
+          "#636362",
+          "#868685",
+          "#ababa9",
+          "#cececc",
+          "#eeeeed"
+        ]
+      },
+      "table-muted": {
+        "role": "neutral",
+        "displayName": "Table Muted",
+        "cssVar": "--pg-muted",
+        "canonical": "oklch(44.2% 0.010 91.6)",
+        "darkToken": "room-muted",
+        "theme": "light",
+        "tonalRamp": [
+          "#0d0b07",
+          "#26241f",
+          "#44423c",
+          "#65635d",
+          "#888680",
+          "#adaba4",
+          "#d0cec7",
+          "#f1eee7"
+        ]
+      },
+      "strip": {
+        "role": "neutral",
+        "displayName": "Strip",
+        "cssVar": "--strip",
+        "canonical": "oklch(14.9% 0.002 106.7)",
+        "darkToken": "strip-dark",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0a",
+          "#242423",
+          "#424241",
+          "#636362",
+          "#868685",
+          "#ababa9",
+          "#cececc",
+          "#eeeeed"
+        ]
+      },
+      "screening-room": {
+        "role": "neutral",
+        "displayName": "Screening Room",
+        "cssVar": "--pg",
+        "canonical": "oklch(0.0% 0.000 0.0)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#242424",
+          "#424242",
+          "#636363",
+          "#868686",
+          "#ababab",
+          "#cecece",
+          "#eeeeee"
+        ]
+      },
+      "room-ink": {
+        "role": "neutral",
+        "displayName": "Room Ink",
+        "cssVar": "--pg-ink",
+        "canonical": "oklch(95.2% 0.011 89.7)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0d0b06",
+          "#26241e",
+          "#45423c",
+          "#66635c",
+          "#89867f",
+          "#adaba3",
+          "#d0cec6",
+          "#f1eee6"
+        ]
+      },
+      "room-muted": {
+        "role": "neutral",
+        "displayName": "Room Muted",
+        "cssVar": "--pg-muted",
+        "canonical": "oklch(71.6% 0.015 88.7)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0e0b05",
+          "#27241c",
+          "#464239",
+          "#67635a",
+          "#8a867c",
+          "#afaaa0",
+          "#d2cdc3",
+          "#f2eee3"
+        ]
+      },
+      "strip-dark": {
+        "role": "neutral",
+        "displayName": "Strip Dark",
+        "cssVar": "--strip",
+        "canonical": "oklch(28.4% 0.005 106.7)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0b0b09",
+          "#242421",
+          "#43433f",
+          "#636360",
+          "#868683",
+          "#ababa7",
+          "#cececa",
+          "#efefeb"
+        ]
+      },
+      "shot-green": {
+        "role": "accent",
+        "displayName": "Shot Green",
+        "cssVar": "--shot",
+        "canonical": "oklch(51.1% 0.120 155.9)",
+        "tonalRamp": [
+          "#000d04",
+          "#012a15",
+          "#004a29",
+          "#026d3e",
+          "#2f8f5b",
+          "#58b47e",
+          "#7fdba3",
+          "#c5ffd9"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The single title card in the opening; pulls focus on load."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "One per after-screening section; the star ask sets its headline at display scale."
+      },
+      "narration": {
+        "displayName": "Narration",
+        "purpose": "Narration column step titles; clamp(29px, 2.9vw, 38px) above 900px, clamp(22px, 2.3vw, 27px) at 900px and below."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Install step names."
+      },
+      "brand": {
+        "displayName": "Brand",
+        "purpose": "Nav wordmark at 26px with a 44px logo; at 480px and below the 32px logo stands alone and the name is screen-reader only."
+      },
+      "lead": {
+        "displayName": "Lead",
+        "purpose": "Section prose at 62ch; 60ch bridge, 52ch install intro; hero subhead clamp(19px, 1.6vw, 23px) at 40ch."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Page base size and install notes."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Button text; hero actions clamp(18px, 1.4vw, 20px), star ask 20px, closing Star 18px, nav Install 17px (15px at 480px), Open the map 14px."
+      },
+      "small": {
+        "displayName": "Small",
+        "purpose": "The credit line."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Install commands."
+      },
+      "counter": {
+        "displayName": "Counter",
+        "purpose": "Install step numerals."
+      }
+    },
+    "gamePalette": {
+      "note": "The fake OS inside .stage/.screen keeps these older tokens. They are the game's fiction, not page tokens; page surfaces never use them.",
+      "tokens": [
+        {
+          "cssVar": "--bg",
+          "light": "#eef1f5",
+          "dark": "#0d1420",
+          "purpose": "Desktop ground; also the live map canvas."
+        },
+        {
+          "cssVar": "--dot",
+          "light": "#c5cdd8",
+          "dark": "#263142",
+          "purpose": "Dot grid on the game ground."
+        },
+        {
+          "cssVar": "--card",
+          "light": "#ffffff",
+          "dark": "#172030",
+          "purpose": "Window and panel surfaces."
+        },
+        {
+          "cssVar": "--code-bg",
+          "light": "#f2f5f9",
+          "dark": "#111927",
+          "purpose": "Window chrome, code wells, selected rows."
+        },
+        {
+          "cssVar": "--ink",
+          "light": "#0b1220",
+          "dark": "#e6ecf4",
+          "purpose": "Text inside windows."
+        },
+        {
+          "cssVar": "--muted",
+          "light": "#56667c",
+          "dark": "#a9b6c8",
+          "purpose": "Secondary text inside windows."
+        },
+        {
+          "cssVar": "--line",
+          "light": "#d6dde6",
+          "dark": "#2c3644",
+          "purpose": "Hairlines inside windows."
+        },
+        {
+          "cssVar": "--core",
+          "light": "#2f6fdb",
+          "dark": "#6b9bff",
+          "purpose": "Links and core-intent marks in the game."
+        },
+        {
+          "cssVar": "--cleanup",
+          "light": "#b4580f",
+          "dark": "#f0944a",
+          "purpose": "Cleanup marks, picks, active tab underline."
+        },
+        {
+          "cssVar": "--add",
+          "light": "#0f7a48",
+          "dark": "#3fd68a",
+          "purpose": "Lines added; the game's own green buttons."
+        },
+        {
+          "cssVar": "--del",
+          "light": "#c9303a",
+          "dark": "#ff8a85",
+          "purpose": "Lines removed; danger actions."
+        },
+        {
+          "cssVar": "--flood",
+          "light": "#0d1420",
+          "dark": "#0d1420",
+          "purpose": "OS desktop and the flood screen."
+        },
+        {
+          "cssVar": "--flood-ink",
+          "light": "#f4f6f9",
+          "dark": "#f4f6f9",
+          "purpose": "Text on the flood screen."
+        },
+        {
+          "cssVar": "--cream",
+          "light": "#f4f6f9",
+          "dark": "#f4f6f9",
+          "purpose": "Menu, icon and avatar fills on the desktop."
+        }
+      ],
+      "derived": {
+        "--add-bg": "color-mix(in srgb, var(--add) 11%, transparent)",
+        "--del-bg": "color-mix(in srgb, var(--del) 10%, transparent)"
+      },
+      "shadow": {
+        "light": "0 1px 2px rgba(11, 18, 32, .08), 0 8px 24px rgba(11, 18, 32, .08)",
+        "dark": "0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .4)"
+      },
+      "shape": "Windows 10px, dock 14px, game buttons 10px."
+    },
+    "shadows": [],
+    "textures": [
+      {
+        "name": "film-grain",
+        "value": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E\")",
+        "purpose": "Opening frame only: 16% opacity, inset -50%, jittered by the grain keyframes; inverted at 10% on the light table."
+      },
+      {
+        "name": "title-shade",
+        "value": "linear-gradient(to top, var(--film) 0%, color-mix(in srgb, var(--film) 80%, transparent) 42%, transparent 78%)",
+        "purpose": "Over the opening shot so the title card reads; --film is the room colour inside the opening."
+      },
+      {
+        "name": "perforation-mask",
+        "value": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='24'%3E%3Cpath fill-rule='evenodd' d='M0 0h26v24H0z M9 7h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z'/%3E%3C/svg%3E\") 0 0 / 26px 24px repeat-x",
+        "purpose": "Mask for the 40px two-row perforated strip divider."
+      }
+    ],
+    "focus": {
+      "value": "2px solid var(--go)",
+      "offset": "3px"
+    },
+    "selection": "color-mix(in srgb, var(--go) 35%, transparent)",
+    "motion": [
+      {
+        "name": "ease-camera",
+        "value": "cubic-bezier(.16, 1, .3, 1)",
+        "purpose": "Aperture and focus pull."
+      },
+      {
+        "name": "aperture",
+        "value": "clip-path inset(50% 0) to inset(0 0), 1.4s ease-camera",
+        "purpose": "Opening frame on load."
+      },
+      {
+        "name": "focus-pull",
+        "value": "blur(14px) opacity .15 to sharp, 1.6s ease-camera, .35s delay",
+        "purpose": "Title card on load."
+      },
+      {
+        "name": "roll",
+        "value": "translateY(-50%) over 90s linear infinite",
+        "purpose": "The defocused diff wall in the opening."
+      },
+      {
+        "name": "grain",
+        "value": ".5s steps(4) infinite",
+        "purpose": "Film grain jitter."
+      },
+      {
+        "name": "button-hover",
+        "value": "filter brightness(1.08), .15s",
+        "purpose": "Go buttons."
+      },
+      {
+        "name": "star-light",
+        "value": "fill and stroke to Go Green, rotate(-8deg), .5s ease-camera",
+        "purpose": "The star ask's mark while its button is hovered or focused."
+      },
+      {
+        "name": "scroll-catch",
+        "value": "one stop at the stage top, 400ms hold, above 900px",
+        "purpose": "A fast wheel scroll from the opening can't skip the game; afterwards the page scrolls freely."
+      },
+      {
+        "name": "install-glide",
+        "value": "smooth scrollIntoView, instant under reduced motion",
+        "purpose": "Install in the nav and Skip to install."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animations and transitions cut to .01ms; roll and grain off",
+        "purpose": "prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "stage-split",
+        "value": "901px",
+        "purpose": "Stage takes 100svh with the narration column beside the game; passages pair."
+      },
+      {
+        "name": "stack",
+        "value": "900px",
+        "purpose": "Title card and stage stack; 44px touch targets."
+      },
+      {
+        "name": "plate",
+        "value": "700px",
+        "purpose": "Live map replaced by its static plate."
+      },
+      {
+        "name": "star-stack",
+        "value": "600px",
+        "purpose": "The star ask stacks its mark (88px) above the headline."
+      },
+      {
+        "name": "compact",
+        "value": "480px",
+        "purpose": "Brand logo only (name screen-reader only); Install 15px; theme buttons and GitHub link 36px wide; fits 320px."
+      }
+    ],
+    "layout": {
+      "container": "1240px",
+      "gutter": "max(16px, env(safe-area-inset-left/right))",
+      "hero": "min-height 100svh; picture aspect-ratio 2.39 above 900px; title grid 1.5fr / 1fr, 24px 56px gap",
+      "narrationColumn": "clamp(360px, 33.6vw, 480px)"
+    }
+  },
+  "components": [
+    {
+      "name": "Go Button",
+      "kind": "button",
+      "refersTo": "button-go",
+      "description": "Every page action: Play a review, the narration's actions, Star on GitHub.",
+      "html": "<div class=\"ds-film\"><button class=\"ds-btn-go\">Play a review</button></div>",
+      "css": ".ds-film { background: #000; padding: 24px; } .ds-btn-go { display: inline-block; background: var(--go, #2fd07f); color: #000; border: 1.5px solid var(--go, #2fd07f); border-radius: 3px; padding: 9px 18px; font: 700 16px/1.4 \"Atkinson Hyperlegible Next\", system-ui, sans-serif; text-decoration: none; cursor: pointer; transition: filter .15s; } .ds-btn-go:hover { filter: brightness(1.08); } .ds-btn-go:focus-visible { outline: 2px solid var(--go, #2fd07f); outline-offset: 3px; }"
+    },
+    {
+      "name": "Go Button, Large",
+      "kind": "button",
+      "refersTo": "button-go-large",
+      "description": "The closing Star on GitHub, on the black install end card.",
+      "html": "<div class=\"ds-film\"><a class=\"ds-btn-go ds-btn-go-lg ds-star\" href=\"#\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3-4.6-4.4 6.3-.9z\"/></svg>Star on GitHub</a></div>",
+      "css": ".ds-film { background: #000; padding: 24px; } .ds-btn-go { display: inline-block; background: var(--go, #2fd07f); color: #000; border: 1.5px solid var(--go, #2fd07f); border-radius: 3px; padding: 9px 18px; font: 700 16px/1.4 \"Atkinson Hyperlegible Next\", system-ui, sans-serif; text-decoration: none; cursor: pointer; transition: filter .15s; } .ds-btn-go:hover { filter: brightness(1.08); } .ds-btn-go:focus-visible { outline: 2px solid var(--go, #2fd07f); outline-offset: 3px; } .ds-btn-go-lg { padding: 14px 26px; font-size: 18px; } .ds-star { display: inline-flex; align-items: center; gap: .5em; } .ds-star svg { width: 1.15em; height: 1.15em; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linejoin: round; } .ds-star:is(:hover, :focus-visible) svg { fill: currentColor; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Install in the nav and Open the map; label and border take the surrounding ink.",
+      "html": "<div class=\"ds-film\"><a class=\"ds-btn-outline\" href=\"#\">Install</a></div>",
+      "css": ".ds-film { background: #000; color: #f2efe7; padding: 24px; } .ds-btn-outline { display: inline-block; padding: 8px 14px; background: transparent; color: inherit; border: 1px solid color-mix(in srgb, currentColor 40%, transparent); border-radius: 3px; font: 700 14px/1.4 \"Atkinson Hyperlegible Next\", system-ui, sans-serif; text-decoration: none; } .ds-btn-outline:hover { border-color: currentColor; } .ds-btn-outline:focus-visible { outline: 2px solid #2fd07f; outline-offset: 3px; }"
+    },
+    {
+      "name": "Theme Switch",
+      "kind": "custom",
+      "refersTo": "theme-switch",
+      "description": "Sun and moon picks in the nav, followed by the GitHub link; the pressed one shows the theme in use.",
+      "html": "<div class=\"ds-film\"><div class=\"ds-theme\" role=\"group\" aria-label=\"Theme\"><button aria-pressed=\"false\" aria-label=\"Light\"><svg viewBox=\"0 0 16 16\"><circle cx=\"8\" cy=\"8\" r=\"3\"/><path d=\"M8 1.5v1.3M8 13.2v1.3M1.5 8h1.3M13.2 8h1.3M3.4 3.4l.9.9M11.7 11.7l.9.9M3.4 12.6l.9-.9M11.7 4.3l.9-.9\"/></svg></button><button aria-pressed=\"true\" aria-label=\"Dark\"><svg viewBox=\"0 0 16 16\"><path d=\"M13.5 9.6A5.8 5.8 0 0 1 6.4 2.5a5.8 5.8 0 1 0 7.1 7.1z\"/></svg></button></div></div>",
+      "css": ".ds-film { background: #000; padding: 24px; } .ds-theme { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid color-mix(in srgb, #f2efe7 40%, transparent); border-radius: 4px; } .ds-theme button { display: grid; place-items: center; width: 40px; height: 36px; padding: 0; background: none; border: 0; border-radius: 2px; color: #a7a399; cursor: pointer; } .ds-theme button:hover { color: #f2efe7; } .ds-theme button[aria-pressed=\"true\"] { background: #f2efe7; color: #000; } .ds-theme button:focus-visible { outline: 2px solid #2fd07f; outline-offset: 3px; } .ds-theme svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }"
+    },
+    {
+      "name": "Opening Title Card",
+      "kind": "custom",
+      "refersTo": "display",
+      "description": "The letterboxed opening frame on the room: grain, bottom shade, title pulling focus. Shown here on screening-room black; on the light table it takes the room colour and ink.",
+      "html": "<div class=\"ds-opening\"><h1>MergeAtlas: Know what you're approving for real</h1></div>",
+      "css": ".ds-opening { position: relative; overflow: hidden; display: grid; align-items: end; min-height: 280px; padding: 32px; background: #000; color: #f2efe7; animation: ds-aperture 1.4s cubic-bezier(.16, 1, .3, 1) both; } .ds-opening::after { content: \"\"; position: absolute; inset: -50%; opacity: .16; pointer-events: none; background: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E\"); animation: ds-grain .5s steps(4) infinite; } .ds-opening h1 { position: relative; margin: 0; max-width: 12em; font: 820 clamp(36px, 5.6vw, 72px)/.96 Archivo, \"Atkinson Hyperlegible Next\", system-ui, sans-serif; font-stretch: 118%; letter-spacing: -.035em; text-wrap: balance; animation: ds-focus 1.6s .35s cubic-bezier(.16, 1, .3, 1) both; } @keyframes ds-aperture { from { clip-path: inset(50% 0); } to { clip-path: inset(0 0); } } @keyframes ds-focus { from { filter: blur(14px); opacity: .15; } to { filter: blur(0); opacity: 1; } } @keyframes ds-grain { 25% { transform: translate(-8%, 5%); } 50% { transform: translate(6%, -9%); } 75% { transform: translate(-4%, 8%); } } @media (prefers-reduced-motion: reduce) { .ds-opening, .ds-opening h1, .ds-opening::after { animation: none; } }"
+    },
+    {
+      "name": "Perforated Strip",
+      "kind": "custom",
+      "refersTo": "strip",
+      "description": "The only section divider, full bleed.",
+      "html": "<div class=\"ds-room\"><div class=\"ds-strip\"></div><h2>Map your next review</h2></div>",
+      "css": ".ds-room { background: var(--pg, #f3f3ef); color: var(--pg-ink, #0b0b0a); padding: 0 0 24px; } .ds-strip { height: 24px; margin-bottom: 40px; background: var(--strip, #0b0b0a); -webkit-mask: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='24'%3E%3Cpath fill-rule='evenodd' d='M0 0h26v24H0z M9 7h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z'/%3E%3C/svg%3E\") 0 0 / 26px 24px repeat-x; mask: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='24'%3E%3Cpath fill-rule='evenodd' d='M0 0h26v24H0z M9 7h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z'/%3E%3C/svg%3E\") 0 0 / 26px 24px repeat-x; } .ds-room h2 { margin: 0 24px; font: 820 40px/1 Archivo, \"Atkinson Hyperlegible Next\", system-ui, sans-serif; font-stretch: 115%; letter-spacing: -.03em; }"
+    },
+    {
+      "name": "Star Ask",
+      "kind": "custom",
+      "refersTo": "button-star",
+      "description": "The star section after the game: a large drawn star beside a display-size headline; the star lights Go Green while its button is hovered or focused.",
+      "html": "<section class=\"ds-ask\"><svg class=\"ds-mark\" viewBox=\"2 2 20 19\" aria-hidden=\"true\"><path d=\"M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3-4.6-4.4 6.3-.9z\"/></svg><div><h2>Liked the review? Give MergeAtlas a star.</h2><a class=\"ds-btn-go ds-star\" href=\"#\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3-4.6-4.4 6.3-.9z\"/></svg>Star on GitHub</a></div></section>",
+      "css": ".ds-ask { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0 48px; padding: 32px; background: var(--pg, #f3f3ef); color: var(--pg-ink, #0b0b0a); } .ds-ask h2 { max-width: 18ch; margin: 0 0 24px; font: 820 clamp(28px, 4.4vw, 56px)/.96 Archivo, \"Atkinson Hyperlegible Next\", system-ui, sans-serif; font-stretch: 118%; letter-spacing: -.035em; text-wrap: balance; } .ds-mark { width: clamp(88px, 14vw, 160px); height: auto; fill: transparent; stroke: currentColor; stroke-width: 1.1; stroke-linejoin: round; transition: fill .5s cubic-bezier(.16, 1, .3, 1), stroke .5s cubic-bezier(.16, 1, .3, 1), transform .5s cubic-bezier(.16, 1, .3, 1); } .ds-ask:has(.ds-star:is(:hover, :focus-visible)) .ds-mark { fill: #2fd07f; stroke: #2fd07f; transform: rotate(-8deg); } .ds-btn-go { display: inline-block; background: var(--go, #2fd07f); color: #000; border: 1.5px solid var(--go, #2fd07f); border-radius: 3px; padding: 18px 32px 18px 28px; font: 700 20px/1.4 \"Atkinson Hyperlegible Next\", system-ui, sans-serif; text-decoration: none; transition: filter .15s; } .ds-btn-go:hover { filter: brightness(1.08); } .ds-btn-go:focus-visible { outline: 2px solid var(--go, #2fd07f); outline-offset: 3px; } .ds-star { display: inline-flex; align-items: center; gap: .5em; } .ds-star svg { width: 1.15em; height: 1.15em; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linejoin: round; } .ds-star:is(:hover, :focus-visible) svg { fill: currentColor; } @media (max-width: 600px) { .ds-ask { grid-template-columns: minmax(0, 1fr); } .ds-mark { margin-bottom: 20px; } } @media (prefers-reduced-motion: reduce) { .ds-mark { transition: none; } }"
+    },
+    {
+      "name": "Install Step with Command",
+      "kind": "custom",
+      "refersTo": "command-line",
+      "description": "Step counter, Archivo title and a black command line with Copy.",
+      "html": "<div class=\"ds-room\"><h3 class=\"ds-step\"><span>1</span>Clone it</h3><div class=\"ds-cmd\"><code>git clone https://github.com/ismayilkarimli/MergeAtlas.git</code><button>Copy</button></div></div>",
+      "css": ".ds-room { background: var(--pg, #f3f3ef); color: var(--pg-ink, #0b0b0a); padding: 24px; max-width: 420px; } .ds-step { display: flex; align-items: baseline; gap: 10px; margin: 0 0 12px; font: 750 20px/1.2 Archivo, \"Atkinson Hyperlegible Next\", system-ui, sans-serif; font-stretch: 108%; letter-spacing: -.01em; } .ds-step span { padding: 1px 6px; background: var(--pg-ink, #0b0b0a); color: var(--pg, #f3f3ef); font: 600 13px/1.4 \"Atkinson Hyperlegible Mono\", ui-monospace, monospace; font-variant-numeric: tabular-nums; } .ds-cmd { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; background: #000; color: #f2efe7; border: 1px solid #262624; border-radius: 3px; font: 400 14px/1.6 \"Atkinson Hyperlegible Mono\", ui-monospace, Menlo, monospace; } .ds-cmd code { flex: 1; min-width: 0; white-space: pre; overflow-x: auto; } .ds-cmd button { flex: none; background: none; border: 1px solid #262624; border-radius: 2px; padding: 2px 10px; font: 600 12px/1.6 \"Atkinson Hyperlegible Next\", system-ui, sans-serif; color: #a7a399; cursor: pointer; } .ds-cmd button:hover { color: #f2efe7; border-color: #a7a399; } .ds-cmd button:focus-visible { outline: 2px solid #2fd07f; outline-offset: 3px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Dailies off a Film Scanner",
+    "overview": "The page screens the review like rushes off a telecine: one frame at a time, each carrying its burn-in data. Every frame after the opening is black film in both themes: the review game's stage, the live map's band, the narration column, the install end card and its commands. Around the frames sits the room: a scanner's warm light table in the light theme, screening-room black in the dark one. The opening is screened on the room itself, so it follows the theme. The page never paints a later frame in the room's colour, and the room never takes a card, a tint or a shadow.\n\nThe opening is a single frame between letterbox bars in the room's colour (above 900px the picture is a true 2.39 frame, the bars splitting the rest of the viewport). The shot behind the title card is the real #8613 diff, set in Mono, three lines to a row so it fills the frame, tilted, defocused and rolling upward, in Go Green on screening-room black and Shot Green on the light table; a bottom-up shade in the room's colour sits behind the title card, and film grain over it, inverted on the light table. On load the aperture opens from a horizontal slit and the headline pulls focus. After the screening, the page is set type on the room's own ground, each section cut from the next by a strip of perforated film, the only divider the system has. Right after the game the page asks for a star: one large drawn star beside a display-size headline, lit Go Green while its button is in hand. The close is an end title card: install, the open-source note and a second star sit on a full-bleed black frame.\n\nArchivo, wide and heavy, sets the title cards; Atkinson Hyperlegible Next carries running text; Atkinson Hyperlegible Mono is kept for burn-in data, code and counters. Green is the one saturated note on the page and it means the action in front of you. Light and dark both ship; the system decides until the visitor picks the sun or the moon.",
+    "keyCharacteristics": [
+      "Frames after the opening are always black film; the opening and the room around the frames are the light table or screening-room black.",
+      "Square corners: 3px on frames and buttons, 2px on controls nested inside a frame.",
+      "One saturated colour, Go Green, on actions, focus, selection and link underlines.",
+      "Archivo expanded for title cards only; Atkinson Next for prose; Atkinson Mono for burn-in data and code.",
+      "Perforated film strip as the only section divider; no cards, bands or rules elsewhere.",
+      "No shadows or glows on the page; depth comes from black frames against the room, the title shade and grain."
+    ],
+    "rules": [
+      {
+        "name": "The Black Film Rule",
+        "body": "Every frame after the opening is black film (`film`) in both themes. Only the room, and the opening screened on it, change with the theme.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Note Rule",
+        "body": "Go Green is the only saturated colour the page draws from its own tokens, and it marks the action in front of you, focus and link underlines; the star mark takes it only while its button is in hand. Never a background band, a heading colour or decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Palettes Rule",
+        "body": "Page surfaces draw only from the page tokens (`--pg*`, `--film*`, `--strip`, `--go`); the game draws only from its own. Neither borrows from the other.",
+        "section": "colors"
+      },
+      {
+        "name": "The Title Card Rule",
+        "body": "Archivo sets title cards only: the display, section headlines, narration titles, step titles, the wordmark. Never a paragraph, button or label.",
+        "section": "typography"
+      },
+      {
+        "name": "The Burn-in Rule",
+        "body": "Mono on the page is data the frame carries: commands, step numerals. It never sets prose or headings.",
+        "section": "typography"
+      },
+      {
+        "name": "The Full Bleed Rule",
+        "body": "Frames run edge to edge; set type stays in the 1240px column. Text never sits in a full-bleed band of its own.",
+        "section": "layout"
+      },
+      {
+        "name": "The No Lift Rule",
+        "body": "Nothing on the page is raised. A thing that needs separating is either a black frame or set apart by a perforated strip.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do make every frame after the opening black film (`film`) in both themes and let only the room and the opening change.",
+      "Do cut after-screening sections with the perforated strip and nothing else.",
+      "Do keep Go Green for the action in front of you, focus, selection and link underlines, with a Film black label at weight 700.",
+      "Do set title cards in Archivo at 108 to 118% width and everything read at length in Atkinson Hyperlegible Next.",
+      "Do keep corners square: 3px on frames and buttons, 2px nested.",
+      "Do stop roll and grain under reduced motion."
+    ],
+    "donts": [
+      "Don't put shadows, glows, cards or tinted bands on the page; depth is film against the room.",
+      "Don't add a second saturated colour to the page or use Go Green as a fill behind text that is not an action.",
+      "Don't use game tokens (`--bg`, `--ink`, `--card`, `--line`, `--add`, ...) on page surfaces, or page tokens inside the game.",
+      "Don't set prose or headings in Mono; it is burn-in data.",
+      "Don't use Archivo for paragraphs, buttons or labels."
+    ]
+  }
+}
