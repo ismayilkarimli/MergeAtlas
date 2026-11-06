@@ -99,13 +99,7 @@ Before publishing, your agent hands each card to a fresh subagent that has never
 
 On the first run, your agent asks which model to use, with the default already selected, so pressing Enter keeps it. Your answer is saved to `~/.config/mergeatlas/config.json` (or under `$XDG_CONFIG_HOME`). To use another model for a single run, say so when you ask, such as "map this PR using Haiku 5.5 high"; the saved choice stays as it was.
 
-To change the saved choice later, run:
-
-```bash
-python3 skills/mergeatlas/scripts/mergeatlas.py config set claude-code "Opus 5.5" high
-```
-
-The first argument is your agent's entry: `claude-code`, `codex`, or `default` for any other agent. Use `own` as the model to run on your agent's own model. Running `config` alone shows what applies. You can also edit the file directly. Each entry replaces only the settings it names:
+To change the saved choice later, ask your agent, such as "set MergeAtlas's cold readers to Opus 5.5 high", or "show MergeAtlas's cold reader model" to see what applies. You can also edit the file directly. Under `cold_read`, the entries are `claude-code`, `codex`, and `default` for any other agent, and each entry replaces only the settings it names. An empty model means your agent's own model:
 
 ```json
 {
