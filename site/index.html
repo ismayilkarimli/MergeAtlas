@@ -475,6 +475,7 @@ button.ln:hover { outline: 1px solid var(--core); outline-offset: -1px; }
 .plan { list-style: none; counter-reset: step; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 32px; margin: 0; padding: 0; }
 .plan li { counter-increment: step; min-width: 0; }
 .plan li > :last-child { margin-bottom: 0; }
+.plan .cmd + .cmd { margin-top: 10px; }
 .plan h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 12px; font: 750 20px/1.2 var(--title); font-stretch: 108%; letter-spacing: -.01em; }
 .plan h3::before { content: counter(step); flex: none; padding: 1px 6px; background: var(--film-ink); color: var(--film); font: 600 13px/1.4 var(--mono); font-variant-numeric: tabular-nums; }
 .plan p { margin: 0 0 10px; color: var(--film-muted); }
@@ -672,16 +673,17 @@ button.ln:hover { outline: 1px solid var(--core); outline-offset: -1px; }
     <p>Open source, MIT. Your maps stay on your machine.</p>
     <ol class="plan">
       <li>
-        <h3>Add the marketplace in Claude Code</h3>
-        <div class="cmd"><code>/plugin marketplace add ismayilkarimli/MergeAtlas</code><button type="button" class="copy">Copy</button></div>
+        <h3>Install with skills.sh</h3>
+        <div class="cmd"><code>npx skills add ismayilkarimli/MergeAtlas</code><button type="button" class="copy">Copy</button></div>
       </li>
       <li>
-        <h3>Install the plugin</h3>
+        <h3>Install in Claude Code</h3>
+        <div class="cmd"><code>/plugin marketplace add ismayilkarimli/MergeAtlas</code><button type="button" class="copy">Copy</button></div>
         <div class="cmd"><code>/plugin install mergeatlas@mergeatlas</code><button type="button" class="copy">Copy</button></div>
       </li>
       <li>
         <h3>Ask your agent to map the pull request</h3>
-        <p>From inside the pull request's repository, ask your agent to map it, or run <code>/mergeatlas:mergeatlas</code>. For Codex and other agents, install with <code>npx skills add ismayilkarimli/MergeAtlas</code>.</p>
+        <p>From inside the pull request's repository, ask your agent to map it. In Claude Code you can also run <code>/mergeatlas:mergeatlas</code>.</p>
       </li>
     </ol>
     <div class="close">
