@@ -2,7 +2,7 @@
 
 <h1 align="center">MergeAtlas</h1>
 
-<p align="center"><strong>Review code you don't know</strong></p>
+<p align="center"><strong>Know what you're approving</strong></p>
 
 <p align="center"><a href="https://mergeatlas.dev">mergeatlas.dev</a></p>
 
@@ -10,30 +10,34 @@
 
 ![Tree view of a pull request](docs/tree-view.png)
 
-<p align="center"><sub>MergeAtlas mapping <a href="https://github.com/excalidraw/excalidraw/pull/10903">excalidraw/excalidraw#10903</a>, which makes image exports follow the editor's theme.</sub></p>
+<p align="center"><sub>MergeAtlas mapping <a href="https://github.com/excalidraw/excalidraw/pull/8613">excalidraw/excalidraw#8613</a>, which adds image cropping to the editor.</sub></p>
 
 ## What is MergeAtlas?
 
-When you're asked to review a change that reaches further than its diff, in a project you don't know well, MergeAtlas helps you quickly build the mental model you're missing. You can give a real review without having to reconstruct the change and hold it all in your head.
+A pull request arrives as a wall of lines, all the same green. MergeAtlas is an agent skill that turns it into an interactive map on localhost, so you start from what the change is for and what it reaches, before you read a line.
 
-It's made for changes with a medium to large blast radius: several files, some of them affected only indirectly. A config tweak doesn't need a map. Your agent or the PR description can tell you what it touches.
+It's made for changes that reach past their diff, even in code you know well: several files, some of them affected only indirectly.
 
-It's an agent skill that turns a pull request into an interactive map on localhost. The story of the change comes first: what this part of the project does, the problem, and what the PR does about it. Each changed file is a card, the cards sit in frames by the outcome they serve, and arrows show how a change in one reaches another, including through files the PR never touches. The map stops at understanding, so it doesn't find bugs, give verdicts, or tell you what to do. Those stay with you.
+The context comes first: how this part of the project works today, the problem, and what the pull request does about it. The changed files sit in groups that change for the same reason, and arrows run from each cause to its effect, including into files the pull request never touches. Each change on a card gives its problem, what changes, its key lines and why that fixes it.
+
+When agents write the code, most of a large change is wiring. You go straight to the lines that change how things behave, and the rest is there when you want it.
+
+It works beside the diff, not instead of it: anything the map tells you links to the lines it comes from. And it stops at understanding. It won't hunt for bugs or approve for you; the judgement stays yours.
 
 ## Features
 
 - **Map view:** an infinite canvas of cards and cause-and-effect arrows that you can pan, zoom and rearrange.
-- **Neighbourhoods:** in Files view, cards sit in a frame per intent, ordered so arrows run left to right. Arrows take the direct way between cards, and hovering a card highlights its own.
-- **Atlas zoom:** zoom out and cards turn compact, then each neighbourhood becomes one block with its title and progress.
+- **Groups:** cards sit in a frame per intent, the outcome they serve, ordered so arrows run left to right. Arrows take the direct way between cards, and hovering a card highlights its own.
+- **Atlas zoom:** zoom out and cards turn compact, then each group becomes one block with its title and progress.
 - **Compact and Detailed:** switch cards between a one-line summary and the full story of the change.
 - **Tree view:** a collapsible outline of the same cards and their affected files, with keyboard navigation.
-- **The story:** background, problem and solution in plain words, linked to the cards that did each part.
-- **Affected files:** unchanged files that behave differently because of the PR sit in a stack beside the card that reaches them.
+- **The story:** background, problem and what the pull request does, in plain words, linked to the cards that did each part.
+- **Changes:** a card steps through its changes one at a time, each with its problem, what changes, its key lines and why that fixes it.
+- **Affected files:** unchanged files that behave differently because of the pull request sit in a stack beside the card that reaches them.
 - **Tests and no-behaviour-change files:** tests stack beside the card they verify, and whitespace, formatting, renames and generated files stack apart with a reason each, so your attention goes to what matters.
-- **Key lines:** the lines most worth your attention on each card, the file they come from, and why they matter.
-- **Code links:** claims link to their lines, in the PR's Files changed tab or at the head commit.
+- **Code links:** claims link to their lines, in the pull request's Files changed tab or at the head commit.
 - **Review marks:** mark a file as reviewed and go straight to the next one. A progress bar counts the files that matter, and Previous and Next step through reading order.
-- **Jump to a file:** press ⌘K to find a file by name.
+- **Jump to a file:** press ⌘K, or Ctrl K, to find a file by name.
 - **Light and dark themes:** the viewer follows your system setting.
 
 ### Tickets
@@ -99,14 +103,14 @@ Before publishing, your agent hands each card to a fresh subagent that has never
 
 On the first run, your agent asks which model to use, with the default already selected, so pressing Enter keeps it. Your answer is saved to `~/.config/mergeatlas/config.json` (or under `$XDG_CONFIG_HOME`). To use another model for a single run, say so when you ask, such as "map this PR using Haiku 5.5 high"; the saved choice stays as it was.
 
-To change the saved choice later, ask your agent, such as "set MergeAtlas's cold readers to Opus 5.5 high", or "show MergeAtlas's cold reader model" to see what applies. You can also edit the file directly. Under `cold_read`, the entries are `claude-code`, `codex`, and `default` for any other agent, and each entry replaces only the settings it names. An empty model means your agent's own model:
+To change the saved choice later, ask your agent, such as "set MergeAtlas's cold readers to Opus 5.5 high", or "show MergeAtlas's cold reader model" to see what applies. You can also edit the file directly. Under `cold_read`, the entries are `claude-code`, `codex`, and `default` for any other agent, and each entry replaces only the settings it names. An empty model means your agent's own model. For example:
 
 ```json
 {
   "cold_read": {
     "claude-code": {"model": "Opus 5.5", "effort": "high"},
     "codex": {"effort": "low"},
-    "default": {"model": "Kimi K2"}
+    "default": {"model": "DeepSeek-v4.1-Flash-1017"}
   }
 }
 ```
