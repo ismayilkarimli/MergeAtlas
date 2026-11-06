@@ -38,7 +38,8 @@
 }
 * { box-sizing: border-box; }
 html { background: var(--pg); scrollbar-color: color-mix(in srgb, var(--pg-ink) 30%, transparent) transparent; }
-body { margin: 0; background: var(--pg); color: var(--pg-ink); font: 400 17px/1.55 var(--sans); caret-color: var(--go); }
+/* Full-bleed frames size against cqw, the visible width, because vw also counts a classic scrollbar. */
+body { margin: 0; background: var(--pg); color: var(--pg-ink); font: 400 17px/1.55 var(--sans); caret-color: var(--go); container-type: inline-size; }
 ::selection { background: color-mix(in srgb, var(--go) 35%, transparent); }
 .wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 a { color: var(--core); text-underline-offset: .2em; text-decoration-thickness: 1px; }
@@ -251,7 +252,7 @@ button.ping:hover { outline: 2px solid #f0944a; }
 .hint svg { display: block; width: 76px; margin: 0 auto; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 @keyframes nudge { to { transform: translateX(10px); } }
 @keyframes bob { to { transform: translateY(-10px); } }
-.term { position: absolute; z-index: 2000; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 24px)); padding: 14px 16px; font: 400 calc(12.5px + var(--up))/1.8 var(--mono); color: #3fd68a; background: #0d1420; border: 1px solid #2c3644; border-radius: 8px; box-shadow: 0 12px 40px rgba(0, 0, 0, .6); }
+.term { position: absolute; z-index: 2000; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(600px, calc(100% - 24px)); padding: 14px 16px; font: 400 calc(12.5px + var(--up))/1.8 var(--mono); color: #3fd68a; background: #0d1420; border: 1px solid #2c3644; border-radius: 8px; box-shadow: 0 12px 40px rgba(0, 0, 0, .6); }
 .term div { opacity: 0; overflow-wrap: anywhere; animation: reveal .15s forwards; }
 .term div:nth-child(2) { animation-delay: .5s; }
 .term div:nth-child(3) { animation-delay: 1s; }
@@ -417,7 +418,7 @@ button.ln:hover { outline: 1px solid var(--core); outline-offset: -1px; }
 .pic img { width: auto; height: auto; max-width: 100%; max-height: 100%; }
 
 /* After the screening: set type on the room's own ground, each section cut from the next by a strip of perforated film. */
-.after > section::before { content: ""; display: block; height: 40px; margin: 0 calc(50% - 50vw) clamp(56px, 7vw, 104px); background: var(--strip); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='40'%3E%3Cpath fill-rule='evenodd' d='M0 0h24v40H0z M8 5h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 8 5z M8 24h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 8 24z'/%3E%3C/svg%3E") 0 0 / 24px 40px repeat-x; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='40'%3E%3Cpath fill-rule='evenodd' d='M0 0h24v40H0z M8 5h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 8 5z M8 24h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 8 24z'/%3E%3C/svg%3E") 0 0 / 24px 40px repeat-x; }
+.after > section::before { content: ""; display: block; height: 40px; margin: 0 calc(50% - 50cqw) clamp(56px, 7vw, 104px); background: var(--strip); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='40'%3E%3Cpath fill-rule='evenodd' d='M0 0h24v40H0z M8 5h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 8 5z M8 24h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 8 24z'/%3E%3C/svg%3E") 0 0 / 24px 40px repeat-x; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='40'%3E%3Cpath fill-rule='evenodd' d='M0 0h24v40H0z M8 5h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 8 5z M8 24h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 8 24z'/%3E%3C/svg%3E") 0 0 / 24px 40px repeat-x; }
 .after a:not(.go) { color: inherit; text-decoration-color: var(--go); text-decoration-thickness: 2px; }
 .credit { margin: 16px 2px 0; color: var(--pg-muted); font-size: 14px; }
 .pass { padding-top: clamp(64px, 8vw, 112px); }
@@ -433,7 +434,7 @@ button.ln:hover { outline: 1px solid var(--core); outline-offset: -1px; }
 .proof { padding-top: clamp(64px, 8vw, 112px); }
 .bridge { max-width: 860px; margin-bottom: 40px; }
 .bridge p { max-width: 60ch; }
-.proof .stage { display: block; height: auto; padding-block: clamp(20px, 3vw, 44px); background: var(--film); border: 0; border-radius: 0; margin-inline: calc(50% - 50vw); padding-inline: max(16px, calc(50vw - 620px)); }
+.proof .stage { display: block; height: auto; padding-block: clamp(20px, 3vw, 44px); background: var(--film); border: 0; border-radius: 0; margin-inline: calc(50% - 50cqw); padding-inline: max(16px, calc(50cqw - 620px)); }
 .proof .bar { display: flex; justify-content: flex-end; padding: 0 0 12px; color: var(--film-ink); }
 .proof .open { padding: 6px 14px; font-size: 14px; }
 .proof .canvas { position: relative; height: 640px; background: var(--bg); }
@@ -441,7 +442,7 @@ button.ln:hover { outline: 1px solid var(--core); outline-offset: -1px; }
 .proof .plate { display: none; }
 .proof .plate img { display: block; width: 100%; height: auto; }
 /* The close is the end title card: a full-bleed black frame below its strip. */
-.install { margin: clamp(64px, 8vw, 112px) calc(50% - 50vw) 0; padding: 0 max(16px, calc(50vw - 620px)) clamp(72px, 9vw, 128px); background: linear-gradient(var(--film), var(--film)) 0 40px / 100% 100% no-repeat; color: var(--film-ink); }
+.install { margin: clamp(64px, 8vw, 112px) calc(50% - 50cqw) 0; padding: 0 max(16px, calc(50cqw - 620px)) clamp(72px, 9vw, 128px); background: linear-gradient(var(--film), var(--film)) 0 40px / 100% 100% no-repeat; color: var(--film-ink); }
 .install::before { margin-inline: 0; }
 .install > p { margin: 0; max-width: 52ch; font-size: clamp(18px, 1.5vw, 20px); }
 .install .plan { margin-top: 40px; }
@@ -671,16 +672,16 @@ button.ln:hover { outline: 1px solid var(--core); outline-offset: -1px; }
     <p>Open source, MIT. Your maps stay on your machine.</p>
     <ol class="plan">
       <li>
-        <h3>Clone it</h3>
-        <div class="cmd"><code>git clone https://github.com/ismayilkarimli/MergeAtlas.git</code><button type="button" class="copy">Copy</button></div>
+        <h3>Add the marketplace in Claude Code</h3>
+        <div class="cmd"><code>/plugin marketplace add ismayilkarimli/MergeAtlas</code><button type="button" class="copy">Copy</button></div>
       </li>
       <li>
-        <h3>Link it as a skill</h3>
-        <div class="cmd"><code>ln -s "$PWD/MergeAtlas/skills/mergeatlas" ~/.claude/skills/mergeatlas</code><button type="button" class="copy">Copy</button></div>
+        <h3>Install the plugin</h3>
+        <div class="cmd"><code>/plugin install mergeatlas@mergeatlas</code><button type="button" class="copy">Copy</button></div>
       </li>
       <li>
         <h3>Ask your agent to map the pull request</h3>
-        <p>From inside the pull request's repository, ask your agent to map it, or run <code>/mergeatlas</code> in Claude Code.</p>
+        <p>From inside the pull request's repository, ask your agent to map it, or run <code>/mergeatlas:mergeatlas</code>. For Codex and other agents, install with <code>npx skills add ismayilkarimli/MergeAtlas</code>.</p>
       </li>
     </ol>
     <div class="close">
@@ -1331,7 +1332,7 @@ function site(local) {
   stage.classList.toggle('local', local);
   const idle = stage.classList.contains('idle');
   const idleOrOver = idle ? 'idle' : stage.classList.contains('overview') ? 'over' : 'files';
-  $('addr').textContent = local ? '127.0.0.1:8765/?map=pr-8613' : { idle: 'githob.com/pulls/review-requested', over: 'githob.com/pull/8613', files: 'githob.com/pull/8613/files' }[idleOrOver];
+  $('addr').textContent = local ? '127.0.0.1:8765/?map=excalidraw-excalidraw-8613' : { idle: 'githob.com/pulls/review-requested', over: 'githob.com/pull/8613', files: 'githob.com/pull/8613/files' }[idleOrOver];
 }
 const PR_URL = 'https://githob.com/pull/8613', URL_RE = /https?:\/\/[^\s<]+/g;
 function ping(text, onclick) {
@@ -1527,7 +1528,7 @@ const ACT_TWO = [
   () => {
     $('flood')?.remove(); $('ping')?.remove(); stage.classList.remove('glitch', 'idle', 'overview'); site(false); clock(0); main.textContent = '';
     const t = document.createElement('div'); t.className = 'term'; t.id = 'term';
-    t.innerHTML = '<div>&gt; /mergeatlas 8613</div><div>fetching PR #8613</div><div>reading 36 files and the code around them</div><div>sorting what the change reaches</div><div>map ready at http://127.0.0.1:8765</div>';
+    t.innerHTML = '<div>&gt; /mergeatlas 8613</div><div>fetching PR #8613</div><div>reading 36 files and the code around them</div><div>sorting what the change reaches</div><div>map ready at<br>http://127.0.0.1:8765/<wbr>?&#8288;map=excalidraw-excalidraw-8613</div>';
     $('screen').append(t);
     say('Rewind. Same pull request, same afternoon.', 'This time you ask your agent to map it before you read a line.', [['Open MergeAtlas', next]]);
   },
