@@ -2,15 +2,20 @@
 """Mechanical half of the mergeatlas skill.
 
   mergeatlas.py fetch [number]   Fetch a PR into the work directory.
-  mergeatlas.py search <map-id> [--regex | --paths] <term>
+  mergeatlas.py search <map-id> [--substring | --regex | --paths] <term>
                                  Search the PR's head commit outside its changed files and log the result.
+                                 Matches whole words unless --substring or --regex.
   mergeatlas.py publish <map-id> Validate <map-id>.input.json, write the map, serve it.
   mergeatlas.py card <map-id> <card-id | story>
                                  Print one card as a cold reader sees it, for the cold read.
   mergeatlas.py serve            Run the viewer server; publish starts it when needed.
+  mergeatlas.py config           Print the config file's path and the model each agent gives its cold readers.
+  mergeatlas.py config set <agent> <model | own> [effort]
+                                 Save the cold readers' model for an agent; own means the agent's own model.
 """
 import hashlib
 import json
+import os
 import re
 import shutil
 import socket
@@ -27,25 +32,42 @@ WORK = HOME / "work"
 DATA = HOME / "data"
 VIEWER = Path(__file__).resolve().parent.parent / "assets" / "viewer.html"
 PORT = 8765
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "mergeatlas" / "config.json"
+# The cold readers' model for each agent; "default" covers any other agent, and an empty entry means its own model.
+COLD_READ = {
+    "claude-code": {"model": "Sonnet 5.5", "effort": "medium"},
+    "codex": {"model": "Sol 6.1", "effort": "medium"},
+    "default": {},
+}
+SETTINGS = ("model", "effort")
 
 KINDS = {"core", "cleanup", "test", "docs", "config"}
 EDGE_KINDS = {"enables", "replaces", "verifies", "docs", "depends"}
 CARD_FIELDS = ("id", "kind", "title", "paths", "summary", "bullets", "changes")
-COMPONENT_FIELDS = ("id", "title", "summary", "cards")
-EDGE_FIELDS = ("from", "to", "kind", "label", "connection", "connection_code", "connection_at", "flow")
+INTENT_FIELDS = ("id", "title", "outcome")
+BUILDS_ON_FIELDS = ("intent", "label", "how")
+EDGE_FIELDS = ("from", "to", "kind", "label", "relationship", "connection", "connection_code", "connection_at", "flow")
 CARD_TEXT = ("summary", "bullets")
 CHANGE_TEXT = ("problem", "change", "result")
-EDGE_TEXT = ("connection", "flow", "effect")
+EDGE_TEXT = ("relationship", "connection", "flow", "effect")
 CARD_LINK = re.compile(r"\[[^\]]+\]\(([\w-]+)\)")
 LOCATION = r"([^)#\s]+)#L(\d+)(?:-L(\d+))?"
 CODE_LINK = re.compile(r"\[[^\]]+\]\(" + LOCATION + r"\)")
 ANY_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 CODE_SPAN = re.compile(r"`[^`]*`")
 SENTENCE_END = re.compile(r"(?<=[.!?:])\s+")
-POINTER = re.compile(r"\b(above|below|as mentioned|as noted|mentioned earlier|earlier card|previous card|other cards?|next card)\b", re.I)
+# Words that send the reader elsewhere; bare "above" and "below" stay out, as they also place things on screen or compare values.
+POINTER = re.compile(
+    r"\b((described|mentioned|shown|noted|listed|explained|discussed|covered|see|seen)\s+(above|below|earlier)"
+    r"|(earlier|previous|next)\s+cards?)\b",
+    re.I,
+)
 FILE_HEADER = re.compile(r"diff --git a/.* b/(.*)$")
 HUNK_HEADER = re.compile(r"@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)$")
 REACH_KINDS = {"core", "cleanup"}
+MECHANICAL_REASONS = {"whitespace", "formatting", "comments", "rename", "generated", "snapshot"}
+INDENTED_SUFFIXES = (".py", ".pyi", ".yaml", ".yml", ".mk")
+INDENTED_NAMES = {"Makefile", "GNUmakefile", "makefile"}
 SURROUNDING_LINES = 4
 SHOWN_FILES = 30
 SHOWN_MATCHES = 3
@@ -54,6 +76,13 @@ COCHANGE_LARGEST_COMMIT = 50
 COCHANGE_MIN_COMMITS = 3
 COCHANGE_MIN_SHARE = 0.3
 COCHANGE_FILES = 10
+# Files that change alongside almost anything, so a co-change with them says nothing about reach.
+COCHANGE_NOISE = re.compile(
+    r"(^|/)(__snapshots__|goldens?)/"
+    r"|\.(snap|golden|lock|min\.js|min\.css|map)$"
+    r"|(^|/)(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|go\.sum)$"
+    r"|(^|/)(?i:CHANGELOG|CHANGES|HISTORY|RELEASES?|NEWS)(\.(md|markdown|txt|rst|adoc))?$"
+)
 TICKET_URLS = {
     "Jira": r"https://[\w-]+\.atlassian\.net/browse/[A-Z][A-Z0-9]+-\d+",
     "Linear": r"https://linear\.app/[\w-]+/issue/[A-Z0-9]+-\d+",
@@ -92,7 +121,7 @@ def files_at(commit):
 
 def co_changes(changed, commit):
     """Maps each changed file to the unchanged files its past commits often touched too."""
-    existing, found = files_at(commit) - changed, {}
+    existing, found = {f for f in files_at(commit) - changed if not COCHANGE_NOISE.search(f)}, {}
     for path in sorted(changed):
         log = subprocess.run(
             ["git", "log", "-n", str(COCHANGE_COMMITS), "--format=%x00", "--name-only", "--no-renames", "--full-diff",
@@ -118,7 +147,7 @@ def ticket_refs(title, body, branch):
 
 
 def fetch(number):
-    fields = "number,title,body,state,additions,deletions,files,headRefName,headRefOid,url,closingIssuesReferences"
+    fields = "number,title,body,additions,deletions,files,headRefName,headRefOid,url,closingIssuesReferences"
     pr = json.loads(gh("pr", "view", *number, "--json", fields))
     repo = pr["url"].split("/pull/")[0].split("github.com/")[1]
     map_id = f"{repo.replace('/', '-')}-{pr['number']}"
@@ -154,10 +183,11 @@ def fetch(number):
         print(f"  +{f['additions']} -{f['deletions']} {f['path']}")
 
 
-def matches_of(term, regex, commit):
+def matches_of(term, mode, commit):
     """Maps the files holding the term to their matching lines."""
+    flags = {"word": ["-F", "-w"], "substring": ["-F"], "regex": ["-E"]}[mode]
     found = subprocess.run(
-        ["git", "grep", "-n", "-I", "--null", "-E" if regex else "-F", "-e", term, commit],
+        ["git", "grep", "-n", "-I", "--null", *flags, "-e", term, commit],
         capture_output=True, text=True, errors="replace",
     )
     if found.returncode > 1:
@@ -175,7 +205,7 @@ def search(map_id, term, mode):
     if mode == "paths":
         matches = {path: [] for path in files_at(commit) if term in path}
     else:
-        matches = matches_of(term, mode == "regex", commit)
+        matches = matches_of(term, mode, commit)
     matches = {path: lines for path, lines in sorted(matches.items()) if path not in changed}
     log_path = WORK / f"{map_id}.searches.json"
     log = [s for s in json.loads(log_path.read_text()) if (s["term"], s["mode"]) != (term, mode)]
@@ -188,8 +218,11 @@ def search(map_id, term, mode):
             print(f"  {line}")
         if len(lines) > SHOWN_MATCHES:
             print(f"  ... {len(lines) - SHOWN_MATCHES} more")
-    if len(matches) > SHOWN_FILES:
-        print(f"... {len(matches) - SHOWN_FILES} more files")
+    rest = list(matches)[SHOWN_FILES:]
+    if rest:
+        print(f"... {len(rest)} more files, every one of which needs sorting:")
+        for path in rest:
+            print(path)
 
 
 def source_at(commit):
@@ -207,6 +240,14 @@ def cited_lines(read, path, first, last):
     if lines is None or not 1 <= int(first) <= int(last) <= len(lines):
         return None
     return lines[int(first) - 1:int(last)]
+
+
+def connection_lines(read, at):
+    """Shows an arrow's connecting lines as a snippet: the cited lines at the head commit, with the lines around them."""
+    path, first, last = re.fullmatch(LOCATION, at).groups()
+    lines, first, last = read(path), int(first), int(last or first)
+    return [{"text": f" {lines[n - 1]}", "path": path, "line": f"R{n}", "key": first <= n <= last}
+            for n in range(max(1, first - SURROUNDING_LINES), min(len(lines), last + SURROUNDING_LINES) + 1)]
 
 
 def diff_rows(diff):
@@ -266,6 +307,18 @@ def key_lines(card, code, rows):
     return lines
 
 
+def whitespace_only(path, rows):
+    """Tells whether a file's removed and added lines match once all whitespace is stripped."""
+    def stripped(mark):
+        return "".join("".join(line[1:].split()) for line, *_ in rows.get(path, []) if line.startswith(mark))
+    return stripped("-") == stripped("+")
+
+
+def indented(path):
+    name = Path(path).name
+    return name in INDENTED_NAMES or name.endswith(INDENTED_SUFFIXES)
+
+
 def fingerprint(card, rows):
     """Identifies a card's diff by its text, so moved lines keep the same value."""
     text = "\n".join(line for path in card["paths"] for line, *_ in rows.get(path, []))
@@ -286,22 +339,29 @@ def candidates_in(searches, broad, together):
     return sources
 
 
-def open_whys(name, text):
-    """Finds the two shapes a script can see: a reason that stops short of the code, and a lean on another card."""
+def cites(text, refs):
+    """Tells whether text names one of the PR's issues or tickets, such as #123 or ENG-123."""
+    return any(re.search(rf"(?<![\w/-]){re.escape(ref)}(?![\w-])", text) for ref in refs)
+
+
+def open_whys(name, text, refs=()):
+    """Finds the two shapes a script can see: a reason that stops short of the code or the issue, and a lean on another card."""
     found = []
     for sentence in SENTENCE_END.split(text):
         words = CODE_SPAN.sub("code", sentence)
         reason = re.search(r"\bbecause\b(.*)", words, re.I)
-        if reason and not CODE_LINK.search(reason[1]):
-            found.append(f"{name}: a reason ends with no code link after its because: {sentence!r}")
+        if reason and not CODE_LINK.search(reason[1]) and not cites(reason[1], refs):
+            found.append(f"{name}: a reason ends with no code link, or issue or ticket it comes from, after its because: {sentence!r}")
         pointer = POINTER.search(ANY_LINK.sub(r"\1", words))
         if pointer:
             found.append(f"{name}: leans on {pointer[0]!r}, so name the thing itself: {sentence!r}")
     return found
 
 
-def problems_in(data, stats, read, rows, searches, together):
+def problems_in(data, stats, read, rows, searches, together, issues=()):
     found, seen, ids, accounted = [], set(), set(), set()
+    refs = {f"#{i['number']}" for i in issues} | {t["key"] for t in data.get("tickets", []) if t.get("key")}
+    whys = partial(open_whys, refs=refs)
     for ticket in data.get("tickets", []):
         if not (ticket.get("key") and ticket.get("title")):
             found.append(f"ticket {ticket}: needs key and title")
@@ -323,7 +383,7 @@ def problems_in(data, stats, read, rows, searches, together):
             found += [f"{where}: missing {k}" for k in CHANGE_TEXT if not change.get(k)]
             check_links(where, change, CHANGE_TEXT)
             for field in CHANGE_TEXT:
-                found += open_whys(f"{where} {field}", change.get(field) or "")
+                found += whys(f"{where} {field}", change.get(field) or "")
             if not CODE_LINK.search(change.get("change", "")):
                 found.append(f"{where}: change has no code link")
             if has_lines and not change.get("snippets"):
@@ -340,11 +400,11 @@ def problems_in(data, stats, read, rows, searches, together):
         if c.get("kind") in REACH_KINDS and len(c.get("paths", [])) > 1:
             found.append(f"card {name}: a {c['kind']} card holds one file")
         check_links(f"card {name}", c, CARD_TEXT)
-        found += open_whys(f"card {name} summary", c.get("summary") or "")
+        found += whys(f"card {name} summary", c.get("summary") or "")
         reaches, unaffected = c.get("reaches", []), c.get("unaffected", [])
         for entry in reaches:
             check_links(f"card {name}", entry, ("effect",))
-            found += open_whys(f"card {name} reach", entry.get("effect", ""))
+            found += whys(f"card {name} reach", entry.get("effect", ""))
             if not CODE_LINK.search(entry.get("effect", "")):
                 found.append(f"card {name}: a reaches entry has no code link in its effect")
         found += [f"card {name}: an unaffected entry has no reason" for entry in unaffected if not entry.get("reason")]
@@ -372,21 +432,49 @@ def problems_in(data, stats, read, rows, searches, together):
     reach_paths = {p for c in data.get("cards", []) if c.get("kind") in REACH_KINDS for p in c.get("paths", [])}
     sources = candidates_in(searches, broad, {path: files for path, files in together.items() if path in reach_paths})
     found += [f"not accounted for: {p} (from {sources[p]})" for p in sorted(sources.keys() - accounted)]
-    grouped, component_ids, component_of = set(), set(), {}
-    for g in data.get("components", []):
+    intents = data.get("intents", [])
+    intent_ids = [g.get("id", "?") for g in intents]
+    for at, g in enumerate(intents):
         name = g.get("id", "?")
-        found += [f"component {name}: missing {k}" for k in COMPONENT_FIELDS if not g.get(k)]
-        if name in ids or name in component_ids:
-            found.append(f"component {name}: duplicate id")
-        component_ids.add(name)
-        for card in g.get("cards", []):
-            if card not in ids:
-                found.append(f"component {name}: no card {card}")
-            if card in grouped:
-                found.append(f"component {name}: {card} is already in another component")
-            grouped.add(card)
-            component_of[card] = name
-    found += [f"no component holds card {i}" for i in sorted(ids - grouped)]
+        found += [f"intent {name}: missing {k}" for k in INTENT_FIELDS if not g.get(k)]
+        if name in ids or intent_ids.index(name) != at:
+            found.append(f"intent {name}: duplicate id")
+        found += whys(f"intent {name} outcome", g.get("outcome") or "")
+        for base in g.get("builds_on", []):
+            where = f"intent {name} builds on {base.get('intent')}"
+            found += [f"{where}: missing {k}" for k in BUILDS_ON_FIELDS if not base.get(k)]
+            if base.get("intent") not in intent_ids[:at]:
+                found.append(f"{where}: builds only on an intent listed before it")
+            check_links(where, base, ("how",))
+            found += whys(f"{where} how", base.get("how") or "")
+            if not CODE_LINK.search(base.get("how", "")):
+                found.append(f"{where}: how has no code link")
+    mechanical = [g.get("id") for g in intents if g.get("mechanical")]
+    if len(mechanical) > 1:
+        found.append(f"intents {mechanical}: one mechanical intent holds every mechanical change")
+    used = {}
+    for c in data.get("cards", []):
+        reasons = set()
+        for number, change in enumerate(c.get("changes", []), 1):
+            where = f"card {c.get('id', '?')} change {number}"
+            if change.get("intent") not in intent_ids:
+                found.append(f"{where}: no intent {change.get('intent')}")
+            used.setdefault(change.get("intent"), set()).add(c.get("kind"))
+            reason = change.get("mechanical")
+            reasons.add(reason)
+            if change.get("intent") in mechanical and reason not in MECHANICAL_REASONS:
+                found.append(f"{where}: a mechanical change names its reason, one of {sorted(MECHANICAL_REASONS)}")
+            if change.get("intent") not in mechanical and reason:
+                found.append(f"{where}: only a change in the mechanical intent has a mechanical reason")
+        if reasons == {"whitespace"}:
+            for p in c.get("paths", []):
+                if indented(p):
+                    found.append(f"card {c.get('id', '?')}: indentation is logic in {p}, so its changes are not whitespace")
+                elif not whitespace_only(p, rows):
+                    found.append(f"card {c.get('id', '?')}: {p} changes more than whitespace")
+    found += [f"intent {i}: no change" for i in intent_ids if i not in used]
+    found += [f"intent {i}: every change is a test, so it joins the intent its assertions check"
+              for i in intent_ids if i not in mechanical and used.get(i) == {"test"}]
     for e in data.get("edges", []):
         name = f"{e.get('from')} -> {e.get('to')}"
         found += [f"arrow {name}: missing {k}" for k in EDGE_FIELDS if not e.get(k)]
@@ -397,9 +485,8 @@ def problems_in(data, stats, read, rows, searches, together):
         found += [f"arrow {name}: no card {e[k]}" for k in ("from", "to") if e.get(k) not in ids]
         check_links(f"arrow {name}", e, EDGE_TEXT)
         for field in EDGE_TEXT:
-            found += open_whys(f"arrow {name} {field}", e.get(field) or "")
-        if not CODE_LINK.search(e.get("flow", "")):
-            found.append(f"arrow {name}: flow has no code link")
+            found += whys(f"arrow {name} {field}", e.get(field) or "")
+        found += [f"arrow {name}: {k} has no code link" for k in ("relationship", "flow") if not CODE_LINK.search(e.get(k, ""))]
         at = re.fullmatch(LOCATION, e.get("connection_at", ""))
         cited = at and cited_lines(read, *at.groups())
         if not cited:
@@ -410,9 +497,8 @@ def problems_in(data, stats, read, rows, searches, together):
                       for l in e.get("connection_code", "").splitlines() if l.strip() not in source]
     found += [f"missing {k}" for k in ("background", "problem", "solution") if not data.get(k)]
     linked = set(CARD_LINK.findall(data.get("solution", "")))
-    found += [f"solution links to unknown card {i}" for i in sorted(linked - ids - component_ids)]
-    found += [f"solution has no link to core card {c['id']}" for c in data.get("cards", [])
-              if c.get("kind") == "core" and not linked & {c.get("id"), component_of.get(c.get("id"))}]
+    found += [f"solution links to unknown card or intent {i}" for i in sorted(linked - ids - set(intent_ids))]
+    found += [f"solution has no link to intent {i}" for i in intent_ids if i not in mechanical and i not in linked]
     return found
 
 
@@ -425,14 +511,20 @@ class NoStoreHandler(SimpleHTTPRequestHandler):
 
 
 def plain(text):
-    return ANY_LINK.sub(r"\1", text or "")
+    """Keeps a link's words and marks where it points, so a cold reader can tell a linked claim from a bare one."""
+    text = CODE_LINK.sub(lambda m: f"{m[0][1:m[0].index('](')]} [→ code]", text or "")
+    return ANY_LINK.sub(r"\1 [→ card]", text)
 
 
 def card_text(map_id, card_id):
-    """Prints one card as a cold reader sees it, with link targets removed so only the words count."""
+    """Prints one card as a cold reader sees it: link targets give way to a mark, so only the words count."""
     data = json.loads((WORK / f"{map_id}.input.json").read_text())
     if card_id == "story":
         print("\n\n".join(plain(data.get(k)) for k in ("background", "problem", "solution")))
+        for g in data.get("intents", []):
+            print(f"\nintent {g['id']}: {g['title']}\noutcome: {plain(g['outcome'])}")
+            for base in g.get("builds_on", []):
+                print(f"builds on {base['intent']}: {plain(base['how'])}")
         return
     cards = {c["id"]: c for c in data["cards"]}
     if card_id not in cards:
@@ -441,7 +533,7 @@ def card_text(map_id, card_id):
     print(f"# {', '.join(c['paths'])}")
     print(f"\nsummary: {plain(c['summary'])}")
     for number, change in enumerate(c["changes"], 1):
-        print(f"\nchange {number}")
+        print(f"\nchange {number}, intent {change['intent']}")
         for field in CHANGE_TEXT:
             print(f"{field}: {plain(change[field])}")
         for code in change.get("snippets", []):
@@ -489,7 +581,7 @@ def publish(map_id):
     rows = diff_rows((WORK / f"{map_id}.diff").read_text())
     searches = json.loads((WORK / f"{map_id}.searches.json").read_text())
     together = json.loads((WORK / f"{map_id}.cochange.json").read_text())
-    problems = problems_in(data, stats, read, rows, searches, together)
+    problems = problems_in(data, stats, read, rows, searches, together, pr["issues"])
     if problems:
         sys.exit("Map rejected:\n" + "\n".join(f"  {p}" for p in problems))
     for c in data["cards"]:
@@ -502,10 +594,11 @@ def publish(map_id):
             c["checked"] = len({p for entry in c.get("reaches", []) + c.get("unaffected", []) for p in entry["paths"]})
     for i, e in enumerate(data["edges"]):
         e["id"] = f"e{i + 1}"
-    broad_reasons = {e["term"]: e["reason"] for e in data.get("broad_searches", [])}
+        e["connection_lines"] = connection_lines(read, e.pop("connection_at"))
+        del e["connection_code"]
     output = {
         "pr": {
-            "number": pr["number"], "title": pr["title"], "state": pr["state"].lower(), "files": len(stats),
+            "number": pr["number"], "title": pr["title"], "files": len(stats),
             "additions": pr["additions"], "deletions": pr["deletions"],
             "url": pr["url"],
             "blob": f"{pr['url'].split('/pull/')[0]}/blob/{pr['headRefOid']}/",
@@ -518,32 +611,78 @@ def publish(map_id):
         },
         "cards": data["cards"],
         "edges": data["edges"],
-        "components": data["components"],
-        "searches": [
-            {"term": s["term"], "mode": s["mode"], "files": len(s["files"]), "broad": broad_reasons.get(s["term"])}
-            for s in searches
-        ],
+        "intents": data["intents"],
     }
     DATA.mkdir(parents=True, exist_ok=True)
     (DATA / f"{map_id}.json").write_text(json.dumps(output, indent=2))
     shutil.copy(VIEWER, HOME / "index.html")
     serve()
-    print(f"{len(data['cards'])} cards, {len(data['components'])} components, {len(data['edges'])} arrows")
+    print(f"{len(data['cards'])} cards, {len(data['intents'])} intents, {len(data['edges'])} arrows")
     print(f"http://127.0.0.1:{PORT}/?map={map_id}")
+
+
+def cold_read_models():
+    """Merges the config file over the defaults, entry by entry, so a file may change only the effort."""
+    models = {agent: dict(entry) for agent, entry in COLD_READ.items()}
+    if not CONFIG.exists():
+        return models, {}
+    try:
+        config = json.loads(CONFIG.read_text())
+    except json.JSONDecodeError as error:
+        sys.exit(f"{CONFIG} is not valid JSON: {error}")
+    chosen = config.get("cold_read", {}) if isinstance(config, dict) else None
+    if not isinstance(chosen, dict):
+        sys.exit(f"{CONFIG}: cold_read must map an agent to its settings")
+    for agent, entry in chosen.items():
+        if not isinstance(entry, dict):
+            sys.exit(f"{CONFIG}: cold_read.{agent} must be an object with {' and/or '.join(SETTINGS)}")
+        if unknown := sorted(set(entry) - set(SETTINGS)):
+            sys.exit(f"{CONFIG}: cold_read.{agent} has unknown settings {', '.join(unknown)}; use {' and/or '.join(SETTINGS)}")
+        if not all(isinstance(v, str) for v in entry.values()):
+            sys.exit(f"{CONFIG}: cold_read.{agent} takes text values only")
+        models.setdefault(agent, {}).update(entry)
+    return models, chosen
+
+
+def set_config(agent, model, effort=None):
+    """Replaces one agent's entry and keeps the rest of the file."""
+    cold_read_models()  # refuses to rewrite a file it cannot read
+    config = json.loads(CONFIG.read_text()) if CONFIG.exists() else {}
+    entry = {"model": "" if model == "own" else model}  # empty, since a missing model keeps the default
+    if effort:
+        entry["effort"] = effort
+    config.setdefault("cold_read", {})[agent] = entry
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG.write_text(json.dumps(config, indent=2) + "\n")
+    show_config()
+
+
+def show_config():
+    models, chosen = cold_read_models()
+    print(f"config file: {CONFIG}" + ("" if CONFIG.exists() else " (not created, so the defaults apply)"))
+    print("cold read model, by agent (default covers any other agent):")
+    for agent, entry in models.items():
+        model = f"model {entry['model']}" if entry.get("model") else "the agent's own model"
+        setting = model + (f", effort {entry['effort']}" if entry.get("effort") else "")
+        print(f"  {agent}: {setting}" + (" (from the config file)" if agent in chosen else ""))
 
 
 def main():
     command, args = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else ("", [])
     if command == "fetch" and len(args) <= 1:
         fetch(args)
-    elif command == "search" and len(args) in (2, 3) and args[1:-1] in ([], ["--regex"], ["--paths"]):
-        search(args[0], args[-1], args[1].removeprefix("--") if len(args) == 3 else "text")
+    elif command == "search" and len(args) in (2, 3) and args[1:-1] in ([], ["--substring"], ["--regex"], ["--paths"]):
+        search(args[0], args[-1], args[1].removeprefix("--") if len(args) == 3 else "word")
     elif command == "publish" and len(args) == 1:
         publish(args[0])
     elif command == "card" and len(args) == 2:
         card_text(*args)
     elif command == "serve" and not args:
         run_server()
+    elif command == "config" and not args:
+        show_config()
+    elif command == "config" and args[:1] == ["set"] and len(args) in (3, 4) and all(a.strip() for a in args):
+        set_config(*args[1:])
     else:
         sys.exit(__doc__)
 

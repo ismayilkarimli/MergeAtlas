@@ -1,6 +1,6 @@
 ---
 name: mergeatlas
-description: "MergeAtlas: an interactive infinite-canvas diagram of a pull request on localhost, with a card per changed file, a toggle that groups them into components, and cause-and-effect arrows that explain what changed and why. Use when the user asks to map, diagram or visualize a PR."
+description: "MergeAtlas: an interactive infinite-canvas diagram of a pull request on localhost, with a card per changed file, grouped by intent, and cause-and-effect arrows that explain what changed and why. Use when the user asks to map, diagram or visualize a PR."
 ---
 
 A **map** lets a reviewer understand a PR from the canvas alone: the problem it solves, which files change, how they relate, what each one is and why it needs changing, and how a change in A reaches B through the code that connects them. The analysis is yours; `scripts/mergeatlas.py` (next to this file) fetches the PR, runs the searches you choose for reach, checks the map, and publishes it.
@@ -9,21 +9,32 @@ The reader is a skilled engineer asked to review a change that spans across file
 
 ## Steps
 
-1. **Fetch.** From inside the PR's repository run `python3 <skill-dir>/scripts/mergeatlas.py fetch [number]`. With no number it uses the current branch's PR. It prints the map id, head commit, diff path, co-change path, linked issues, possible tickets, and file list. Done when you have those. No PRs to map: tell the user and stop.
+1. **Choose the cold readers' model.** Step 8 hands each card to subagents, and `python3 <skill-dir>/scripts/mergeatlas.py config` lists the model and effort they run on for each agent. Your entry is the one named for your agent (`claude-code` in Claude Code, `codex` in Codex), or `default` if none is; no model means your own. If the user's request names a model or effort for this run, such as "using Haiku high", use it for this run only: fill what it leaves out from your entry and save nothing. Otherwise, if `config` says the file is not created, ask the user once which model the cold readers should use. Use your question tool if you have one, such as AskUserQuestion in Claude Code or request_user_input in Codex: the first option is your entry's model and effort, marked "(Recommended)", so the user only presses Enter to accept it; the second is your own model; the tool's free-text answer covers any other. With no question tool, ask in plain text and name the default. Save the answer with `config set <entry-name> <model or own> [effort]`, using `default` as the name for an agent with no entry. Done when you know the model and effort for this run.
 
-2. **Read.** Read every linked issue and every ticket, following Tickets below, then the whole diff file, then open the surrounding source with `git show <head-commit>:<path>`. Done when you can state the problem in the issue's terms, every changed file is accounted for, and every link you plan to draw is confirmed in source: the caller, the import, the test that exercises it.
+2. **Fetch.** From inside the PR's repository run `python3 <skill-dir>/scripts/mergeatlas.py fetch [number]`. With no number it uses the current branch's PR. It prints the map id, head commit, diff path, co-change path, linked issues, possible tickets, and file list. Done when you have those. No PRs to map: tell the user and stop.
 
-3. **Search the reach.** Affected files sit outside the diff, so hunt for them as an engineer would. From inside the repository run `python3 <skill-dir>/scripts/mergeatlas.py search <map-id> "<term>"`, or add `--regex` or `--paths`. It searches every tracked text file at the head commit, or every file path, leaves out the PR's files, and logs the result. Search is case-sensitive and matches substrings, so choose terms for this language and project: names whose behaviour changed, fields and values the change writes, and keys, routes, columns and strings that link code without a shared name. Try their variations, such as another casing or a generated form. When a result shows a wrapper, alias or re-export, search for that name too. Open `<work-dir>/<map-id>.cochange.json`, which maps changed files to the unchanged files their past commits often touched, since it can reveal a link no term would. Done when every changed behaviour has been searched and the latest round found no new relevant file.
+3. **Read.** Read every linked issue and every ticket, following Tickets below, then the whole diff file, then open the surrounding source with `git show <head-commit>:<path>`. Done when you can state the problem in the issue's terms, every changed file is accounted for, and every link you plan to draw is confirmed in source: the caller, the import, the test that exercises it.
 
-4. **Sort the reach.** A match can mislead, so open the callers it leaves unclear. Done when every file from your searches, and every co-change file of a `core` or `cleanup` card, sits in `reaches` or `unaffected` on the card it relates to, reasoned from what the changed code does and what that file does with it. A search too broad to sort goes in `broad_searches` with its reason, after a narrower search has replaced it.
+4. **Search the reach.** Affected files sit outside the diff, so hunt for them as an engineer would. From inside the repository run `python3 <skill-dir>/scripts/mergeatlas.py search <map-id> "<term>"`, or add `--substring`, `--regex` or `--paths`. It searches every tracked text file at the head commit, or every file path, leaves out the PR's files, and logs the result. Search is case-sensitive and matches whole words, so `App` finds `App` but not `ExampleApp`; add `--substring` only when the name is a part of others that matter, such as a generated `getFoo` for `foo`, since every file it returns needs sorting. Choose terms for this language and project: names whose behaviour changed, fields and values the change writes, and keys, routes, columns and strings that link code without a shared name. Try their variations, such as another casing or a generated form. When a result shows a wrapper, alias or re-export, search for that name too. Open `<work-dir>/<map-id>.cochange.json`, which maps changed files to the unchanged files their past commits often touched, since it can reveal a link no term would. Done when every changed behaviour has been searched and the latest round found no new relevant file.
 
-5. **Write the map** as JSON to `<work-dir>/<map-id>.input.json`, following the rules below.
+5. **Sort the reach.** A match can mislead, so open the callers it leaves unclear. Done when every file from your searches, and every co-change file of a `core` or `cleanup` card, sits in `reaches` or `unaffected` on the card it relates to, reasoned from what the changed code does and what that file does with it. A search too broad to sort goes in `broad_searches` with its reason, after a narrower search has replaced it.
 
-6. **Publish.** From inside the repository, run `python3 <skill-dir>/scripts/mergeatlas.py publish <map-id>`. It rejects a map with problems and lists them; fix them and rerun. Done when it prints a URL.
+6. **Write the map** as JSON to `<work-dir>/<map-id>.input.json`, following the rules below.
 
-7. **Cold read.** You know the answers, so you cannot feel a gap in your own text. For the story and each card, run `python3 <skill-dir>/scripts/mergeatlas.py card <map-id> <card-id or story>` and give its output, and nothing else, to a fresh subagent, one per card: "You are a skilled engineer who has never seen this project. List only what you need answered to understand or believe a statement here: a why or how about the code's behaviour. Skip why anyone wanted the change, and skip what you would merely like to know about the rest of the project." With no subagents available, read that output yourself one statement at a time, as such a reader. Answer each question that passes that test from source, on that card, then publish again and repeat for the cards you changed. A reader always finds more to ask, so curiosity beyond the change stays out. Done when a round returns no question that a statement on the card depends on.
+7. **Publish.** From inside the repository, run `python3 <skill-dir>/scripts/mergeatlas.py publish <map-id>`. It rejects a map with problems and lists them; fix them and rerun. Done when it prints a URL.
 
-8. **Check.** Open the URL in the browser. Done when every card and arrow renders with no console errors, one card, one arrow and one story link open their modals, the Tree view shows the same cards in the map's order with each card's affected files under it, a branch collapses, a card with reach shows Also reaches and the searched terms, its affected files show on the map, a stack expands and collapses, the Files and Components toggle switches both views and keeps review marks, the card's Affects opens that grid, the file arrows step through it, a card with several changes steps through them with its arrows, which stay in view while the change scrolls, and marking a card as reviewed survives a reload. Give the user the URL, and say which reasons are inferred rather than stated in the PR.
+8. **Cold read.** You know the answers, so you cannot feel a gap in your own text. For the story and each card, run `python3 <skill-dir>/scripts/mergeatlas.py card <map-id> <card-id or story>` and paste its output, and nothing else, into the prompt of a fresh subagent, one per card. Run each subagent on the model and effort chosen in step 1. In the card output, words marked `[→ code]` link to source and words marked `[→ card]` link to a card. Give the subagent these instructions with it:
+
+    > You are a skilled engineer who has never seen this project, and this card is all you have. Find the places where it leaves you unable to follow what the code does:
+    > - a statement whose how or why the card does not give, so you cannot see how it follows;
+    > - a project term or name the card uses without saying what it is;
+    > - a statement that contradicts another statement or the key lines on this card.
+    >
+    > Words marked [→ code] link to the source, so accept what they state unless the card contradicts it. Skip what a skilled engineer knows from the language and its common libraries. Do not ask why the change was wanted or designed this way, about alternatives, about whether it was tested or verified, about versions or tooling, or about code the card does not mention. For each one, quote the statement and say which step is missing or which statements disagree. Most important first. If nothing is missing, reply "none".
+
+    With no subagents available, read that output yourself one statement at a time, as such a reader. Answer each question that a statement on the card depends on from source, on that card, then publish again and repeat for the cards you changed. Done when a round returns no such question, or after the third round. After a third round, read the edits it led to yourself, one statement at a time, as such a reader, and close what they leave open.
+
+9. **Check.** Open the URL in the browser. The viewer is the same for every map, so check only what this map's data can break, from the page's text rather than screenshots. Done when every card and arrow renders and the console shows no errors. Give the user the URL, and say which reasons are inferred rather than stated in the PR.
 
 ## Tickets
 
@@ -44,7 +55,7 @@ There are two whys:
 
 Ask "why?" and "how?" of each statement, then of each answer. Stop at a business decision or at what a skilled engineer knows without this project. Every other answer goes on the card, in this shape:
 
-- A reason ends in code behaviour: what runs, when, and what it does, with a code link after the `because`. A label or a conclusion is a new claim, so continue to the behaviour under it.
+- A reason ends in code behaviour: what runs, when, and what it does, with a code link after the `because`. A label or a conclusion is a new claim, so continue to the behaviour under it. A reason that is a business decision ends instead at the issue or ticket that states it, such as `#123` or `ENG-123`.
 - "No longer", "now" and "still" name what changed the situation.
 - A project term says what it is the first time a change uses it.
 - Each card and each change stands alone, because a reviewer may read one on Monday and the next on Tuesday. Restate what another said, name things outright, and write as if this is the only one read.
@@ -66,7 +77,7 @@ Every map reads as a review of an open PR, whatever its state. The current behav
 
 - `background`: what this area of the project does and how it works today, in plain words. Explain every project term the story depends on. Cover only what this change needs, and stop before any fault.
 - `problem`: the situation before this PR, in the terms of the issue: what the user or system ran into and why it was wrong. It stops before any fix.
-- `solution`: picks up where `problem` ends: what this PR introduces and how that resolves the problem. It names the main component, and it covers the problem's parts one by one. Link each statement to the card or component that did that part with `[words](id)`, so the story doubles as an index of the canvas. Every `core` card gets a link, directly or through its component.
+- `solution`: picks up where `problem` ends: what this PR introduces and how that resolves the problem. It covers the intents one by one, in their order. Link each statement to the intent or card that did that part with `[words](id)`, so the story doubles as an index of the canvas. Every intent other than the mechanical one gets a link.
 
 With no linked issue or ticket, build `problem` from the PR description and the code removed, and open it with "No linked issue:".
 
@@ -76,8 +87,8 @@ With no linked issue or ticket, build `problem` from the PR description and the 
 
 A card tells a reviewer who has never seen the file why it is in this PR:
 
-- `title`: the name of what the file holds, such as a class, widget, module, screen, service or endpoint. The Components view lists it under the component; a one-file card shows its file name instead.
-- `summary`: what the file does in the app.
+- `title`: the name of what the file holds, such as a class, widget, module, screen, service or endpoint. A one-file card shows its file name instead.
+- `summary`: what the file does in the app. It links the thing it names, such as the class, function or component the file holds, to where it is declared.
 - `changes`: what this PR does to the file, one reason at a time, in cause order.
 
 **Changes.** A reviewer takes in one reason at a time, so each change ties a problem, the code that addresses it and the result into one step, and the viewer shows one step at a time. Every change has the same four parts, in this order:
@@ -96,25 +107,38 @@ Card `kind`:
 - `core`: the behaviour the PR is about
 - `cleanup`: code removed or simplified because of the core change
 - `test`: tests
-- `docs`: documentation
+- `docs`: prose written for people, such as a README, guide or changelog. A file that code, clients or validation read, such as an OpenAPI, GraphQL, protobuf or JSON schema spec, takes the kind of what it defines, because the viewer leaves `test` and `docs` cards out of the review progress.
 - `config`: build, CI, dependency, or configuration changes
 
-**Components** group the cards for the viewer's Components toggle. A component is a class, widget, module, screen, service or endpoint that spans files. Aim for 4 to 12. Every card sits in exactly one component, and a card with no companions gets a component of its own. Each has an `id`, a `title`, a `summary` of what it does in the app, and its `cards`. The viewer builds everything else in that view from the cards and arrows.
+**Intents** group the changes into the map's neighbourhoods, so a reviewer reads the PR one reason at a time. An intent is one outcome the PR produces, together with the changes that make it happen. The outcome is a difference someone can observe after the merge: a user, calling code, the system, or a developer working in the code, which covers refactors. Intents hold changes, not files. Every change sits in exactly one intent, so a file whose changes serve two outcomes shows under both.
 
-**Arrows** run from the card whose change causes an effect to the card affected. Draw an arrow only for a link you confirmed. Fewer meaningful arrows beat a web; a card may have none.
+Group with the revert test, once the changes are written:
 
-An arrow shows the connection itself, then what travels along it:
+1. For each change, ask: if only this change were reverted, what observable outcome would stop? Write it as one sentence, "After this PR, *subject* *does X*". Changes that stop the same outcome share an intent. A change that stops two outcomes is two changes, under Split by reason.
+2. A change whose revert stops no outcome and only breaks the code that uses it, such as a new field or parameter, joins the intent of the change that needs it. Needed by several, it joins the first of those intents.
+3. Code removed because another change made it redundant joins that change's intent.
+4. A test change joins the intent whose outcome its assertions check. Checking two, it joins the first.
+5. Changes with no behaviour behind them share one intent marked `"mechanical": true`, and each names its reason in `mechanical`: `whitespace`, `formatting` (layout a formatter would produce, such as wrapping or trailing commas), `comments`, `rename`, `generated` or `snapshot`. The viewer stacks a file whose changes all sit here, with its reasons, out of the reviewer's way. Publish rejects a card claiming only `whitespace` when its lines differ by more than whitespace, or when it is Python, YAML or a Makefile, where indentation is logic.
+6. Two outcomes that say the same thing merge. An outcome that needs "and" to join two behaviours splits. An intent with one change is fine.
+7. Order: intent B follows intent A when a change in B builds on a change in A, and B records that in `builds_on`. Ties keep the order the problem states them in. The mechanical intent comes last.
 
-- `connection`: how the target uses the source in the code, including any screen in between.
-- `connection_code` and `connection_at`: the lines where they connect, copied verbatim from the head commit, and their location.
-- `flow`: how the source's change reaches the target through that connection. It carries at least one code link.
+Each intent has an `id`, a `title` that answers "what was the intent?" as a goal that opens with a verb ("Make exports follow the editor theme", "Let a manual export choice outlast theme changes"), whose verb acts on the outcome rather than on the code, the `outcome` sentence, and `builds_on`: for each earlier intent it builds on, that `intent`, a 2-5 word `label`, and `how`, which says with a code link what in this intent relies on it. An outcome only the code shows, with no issue, ticket or description behind it, is worded as inferred. An intent is never a component, a task step such as "add a field", or a verdict that the outcome is achieved. Give each change its intent's id in `intent`. Publish rejects a change without an intent, an intent with no change, an intent other than the mechanical one whose changes all sit on `test` cards, and `builds_on` that points at a later intent.
+
+**Arrows** run from the card whose change causes an effect to the card affected. Draw an arrow only for a link you confirmed. Fewer meaningful arrows beat a web; a card may have none. An arrow's `label` is 2-5 words that open with a verb and say what the source does to the target, so source, label and target read as one sentence ("Records the manual choice", "Passes down the live setting"). On a `verifies` arrow the test does the checking, so its label opens with "Checks" ("Checks theme sync").
+
+An arrow shows why the two files are linked, the connection itself, then what travels along it:
+
+- `relationship`: why the two files are connected at all, as the code stood before this PR: the part each plays and why one needs the other, naming both files, with a code link for each. "`ImageExportDialog.tsx` [imports the export actions](…) from `actionExport.tsx` and [runs them](…) through the action manager rather than setting state itself."
+- `connection`: how the target uses the source in the code, including any screen in between. Name each file by its file name as it comes in, so the reader can tell which side each part sits on without opening a link: "`App.tsx` reads the override field that `actionExport.tsx` writes".
+- `connection_code` and `connection_at`: the lines where they connect, copied verbatim from the head commit, and their location. Publish adds the lines around them, dimmed, as it does for a snippet.
+- `flow`: how the source's change reaches the target through that connection, as steps in the order they run, each opening with the file it happens in: "In `actionExport.tsx`, the switch now writes the override. In `App.tsx`, the theme sync then leaves the export setting alone." It carries at least one code link.
 - `effect`: what the target has to do as a result. Leave it out when the target changes nothing.
 
 Arrow `kind`:
 
 - `enables`: the target works because of the source
 - `replaces`: the source made code in the target redundant
-- `verifies`: the target test exercises the source
+- `verifies`: the target test exercises the source. Give every test card one from each card whose changed code its assertions exercise; the viewer stacks a test beside the one card it verifies, and a test that verifies several or none in a general test stack.
 - `docs`: the target documents the source
 - `depends`: the target changed to keep working with the source
 
@@ -137,7 +161,7 @@ Text fields take backticks for identifiers and `**bold**`; everything else is pl
 {
   "background": "What this area of the project does, in plain words",
   "problem": "The situation before this PR",
-  "solution": "What this PR introduces, with [statements linked](short-slug) to cards or components",
+  "solution": "What this PR introduces, with [statements linked](intent-slug) to intents or cards",
   "tickets": [{"key": "ENG-123", "title": "The ticket's title", "url": "https://linear.app/acme/issue/ENG-123"}],
   "broad_searches": [{"term": "A logged term too broad to sort", "reason": "Why, and which search replaced it"}],
   "cards": [{
@@ -151,22 +175,24 @@ Text fields take backticks for identifiers and `**bold**`; everything else is pl
       "problem": "Today, why it is a problem, and the outcome",
       "change": "What this PR does and how, with a [code link](path/to/file.dart#L20)",
       "snippets": ["Up to 12 diff lines, keeping + and - marks"],
-      "result": "How that removes the problem, and what happens without it"
+      "result": "How that removes the problem, and what happens without it",
+      "intent": "intent-slug"
     }],
     "reaches": [{"paths": ["an/unchanged/caller.dart"], "effect": "What changes for it, with a [code link](path/to/file.dart#L20)"}],
     "unaffected": [{"paths": ["another/caller.dart"], "reason": "The condition that keeps it as before"}]
   }],
-  "components": [{
-    "id": "component-slug",
-    "title": "Component name",
-    "summary": "One line: what this component does in the app",
-    "cards": ["short-slug"]
+  "intents": [{
+    "id": "intent-slug",
+    "title": "The goal, verb first",
+    "outcome": "After this PR, what someone can observe",
+    "builds_on": [{"intent": "earlier-intent-slug", "label": "2-5 words", "how": "What here relies on it, with a [code link](path/to/file.dart#L20)"}]
   }],
   "edges": [{
     "from": "card-id",
     "to": "card-id",
     "kind": "enables",
-    "label": "2-5 words",
+    "label": "What the source does, verb first",
+    "relationship": "Why the two files are linked at all, with a [code link](path/to/file.dart#L5) for each",
     "connection": "How the target uses the source",
     "connection_code": "The connecting lines, verbatim from the head commit",
     "connection_at": "path/to/file.dart#L10-L14",

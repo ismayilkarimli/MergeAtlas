@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="268 268 488 488">
+  <!--
+    MergeAtlas favicon: the M and A of logo.svg alone, with no map, main line or shadow,
+    cropped to the glyph's own square (x and y 268..756, beads included) so it fills the icon.
+    Render: Chrome headless, transparent background.
+  -->
+  <defs>
+    <!-- soft clay: bump from blurred alpha, diffuse to shade, low broad sheen -->
+    <filter id="clay" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="bump"/>
+      <feDiffuseLighting in="bump" surfaceScale="5" diffuseConstant="1.1" lighting-color="#fff" result="diff">
+        <feDistantLight azimuth="225" elevation="62"/>
+      </feDiffuseLighting>
+      <feComposite in="diff" in2="SourceAlpha" operator="in" result="diffIn"/>
+      <feBlend in="SourceGraphic" in2="diffIn" mode="multiply" result="lit"/>
+      <feSpecularLighting in="bump" surfaceScale="5" specularConstant="0.4" specularExponent="9" lighting-color="#fff" result="spec">
+        <feDistantLight azimuth="225" elevation="50"/>
+      </feSpecularLighting>
+      <feComposite in="spec" in2="SourceAlpha" operator="in" result="specIn"/>
+      <feComposite in="specIn" in2="lit" operator="arithmetic" k2="0.45" k3="1"/>
+    </filter>
+    <!-- glyph geometry -->
+    <path id="m" d="M300 512 L330 306 L512 512 L694 306 L724 512"
+          fill="none" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+    <path id="a" d="M402 724 L512 512 L622 724"
+          fill="none" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- crossbar of the A, 65% down from its apex; the A is steeper than the M's V so the two never line up into an X -->
+    <g id="arrow">
+      <path d="M441 650 H528" fill="none" stroke-width="30" stroke-linecap="round"/>
+      <path d="M527 624 L553 650 L527 676 Z" stroke-width="14" stroke-linejoin="round"/>
+    </g>
+  </defs>
+  <!-- M and A colours: diff green M (additions), diff red A (deletions) -->
+  <g filter="url(#clay)">
+    <use href="#m" stroke="#22c472"/>
+    <use href="#a" stroke="#e5484d"/>
+    <use href="#arrow" stroke="#e5484d" fill="#e5484d"/>
+  </g>
+  <g filter="url(#clay)">
+    <g fill="#f7f1de">
+      <circle cx="300" cy="512" r="32"/><circle cx="512" cy="512" r="38"/><circle cx="724" cy="512" r="32"/>
+    </g>
+    <g fill="#ff8a85">
+      <circle cx="402" cy="724" r="32"/><circle cx="622" cy="724" r="32"/>
+    </g>
+    <g fill="#8af0b6">
+      <circle cx="330" cy="306" r="38"/><circle cx="694" cy="306" r="38"/>
+    </g>
+    <circle cx="441" cy="650" r="30" fill="#b8262d"/>
+    <circle cx="583" cy="650" r="28" fill="#f7f1de"/>
+  </g>
+</svg>

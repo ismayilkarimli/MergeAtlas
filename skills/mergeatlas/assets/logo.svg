@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    MergeAtlas mark: a folded map with a git graph on it. The dotted line across the middle
+    is main. Above it an M: two branches fork off main and merge back, meeting at the centre
+    commit. Below it an A, the mirror of the M's V, whose crossbar arrow cherry-picks a commit.
+    Map, main line and glyph all centre on (512,512) before the 3px lip shift:
+      map   x 64..960,  y 64..960, square (outline, before the round-join stroke adds 12 on every side)
+      glyph x 268..756, y 268..756 (beads included), drawn at 1.3x about the centre -> 207..817
+    Colours: diff green M and diff red A on a mid slate map, mid-tone so it holds on light and dark pages.
+    Render: Chrome headless, transparent background, 1024x1024.
+  -->
+  <defs>
+    <!-- soft clay: bump from blurred alpha, diffuse to shade, low broad sheen -->
+    <filter id="clay" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="bump"/>
+      <feDiffuseLighting in="bump" surfaceScale="5" diffuseConstant="1.1" lighting-color="#fff" result="diff">
+        <feDistantLight azimuth="225" elevation="62"/>
+      </feDiffuseLighting>
+      <feComposite in="diff" in2="SourceAlpha" operator="in" result="diffIn"/>
+      <feBlend in="SourceGraphic" in2="diffIn" mode="multiply" result="lit"/>
+      <feSpecularLighting in="bump" surfaceScale="5" specularConstant="0.4" specularExponent="9" lighting-color="#fff" result="spec">
+        <feDistantLight azimuth="225" elevation="50"/>
+      </feSpecularLighting>
+      <feComposite in="spec" in2="SourceAlpha" operator="in" result="specIn"/>
+      <feComposite in="specIn" in2="lit" operator="arithmetic" k2="0.45" k3="1"/>
+    </filter>
+    <!-- the map is paper: same light, much flatter bump -->
+    <filter id="paper" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="bump"/>
+      <feDiffuseLighting in="bump" surfaceScale="3" diffuseConstant="1.12" lighting-color="#fff" result="diff">
+        <feDistantLight azimuth="225" elevation="62"/>
+      </feDiffuseLighting>
+      <feComposite in="diff" in2="SourceAlpha" operator="in" result="diffIn"/>
+      <feBlend in="SourceGraphic" in2="diffIn" mode="multiply"/>
+    </filter>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6e7f96"/><stop offset="1" stop-color="#5d6d83"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5a6a80"/><stop offset="1" stop-color="#4a586c"/>
+    </linearGradient>
+    <linearGradient id="g3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#697a91"/><stop offset="1" stop-color="#59697f"/>
+    </linearGradient>
+    <linearGradient id="g4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#56667c"/><stop offset="1" stop-color="#465468"/>
+    </linearGradient>
+
+    <!-- glyph geometry, shared by the shadow and the lit glyph -->
+    <path id="main" d="M96 512 H928" fill="none" stroke-width="16" stroke-linecap="round" stroke-dasharray="0 30"/>
+    <path id="m" d="M300 512 L330 306 L512 512 L694 306 L724 512"
+          fill="none" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+    <path id="a" d="M402 724 L512 512 L622 724"
+          fill="none" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- crossbar of the A, 65% down from its apex; the A is steeper than the M's V so the two never line up into an X -->
+    <g id="arrow">
+      <path d="M441 650 H528" fill="none" stroke-width="30" stroke-linecap="round"/>
+      <path d="M527 624 L553 650 L527 676 Z" stroke-width="14" stroke-linejoin="round"/>
+    </g>
+    <g id="beads">
+      <circle cx="300" cy="512" r="32"/><circle cx="512" cy="512" r="38"/><circle cx="724" cy="512" r="32"/>
+      <circle cx="402" cy="724" r="32"/><circle cx="622" cy="724" r="32"/>
+      <circle cx="330" cy="306" r="38"/><circle cx="694" cy="306" r="38"/>
+      <circle cx="441" cy="650" r="30"/><circle cx="583" cy="650" r="28"/>
+    </g>
+  </defs>
+
+  <!-- shifted 3px up so the whole silhouette, lip included, centres on the canvas -->
+  <g transform="translate(0 -3)">
+    <!-- map: a square of four panels; folds alternate so the outer panels and the middle fold sit low -->
+    <g stroke-linejoin="round" stroke-width="24">
+      <polygon points="64,166 288,70 512,166 736,70 960,166 960,966 736,870 512,966 288,870 64,966"
+               fill="#333e4e" stroke="#333e4e"/>
+      <g filter="url(#paper)">
+        <polygon points="64,160 288,64 288,864 64,960" fill="url(#g1)" stroke="url(#g1)"/>
+        <polygon points="288,64 512,160 512,960 288,864" fill="url(#g2)" stroke="url(#g2)"/>
+        <polygon points="512,160 736,64 736,864 512,960" fill="url(#g3)" stroke="url(#g3)"/>
+        <polygon points="736,64 960,160 960,960 736,864" fill="url(#g4)" stroke="url(#g4)"/>
+      </g>
+    </g>
+    <!-- fold creases -->
+    <g stroke-width="3" opacity="0.5">
+      <line x1="288" y1="64" x2="288" y2="864" stroke="#a9b6c8"/>
+      <line x1="512" y1="160" x2="512" y2="960" stroke="#2c3644"/>
+      <line x1="736" y1="64" x2="736" y2="864" stroke="#a9b6c8"/>
+    </g>
+
+    <!-- main is printed on the map as a dotted trail, so the raised M and A read first -->
+    <use href="#main" stroke="#e6ecf4" opacity="0.75"/>
+
+    <!-- the M and A, scaled up about the centre to fill the square map -->
+    <g transform="translate(512 512) scale(1.3) translate(-512 -512)">
+    <!-- soft shadow of the glyph on the map -->
+    <g transform="translate(7 13)" filter="url(#shadow)" opacity="0.38">
+      <use href="#m" stroke="#0b1220"/>
+      <use href="#a" stroke="#0b1220"/>
+      <use href="#arrow" stroke="#0b1220" fill="#0b1220"/>
+      <use href="#beads" fill="#0b1220"/>
+    </g>
+
+    <!-- M and A colours: diff green M (additions), diff red A (deletions) -->
+    <g filter="url(#clay)">
+      <use href="#m" stroke="#22c472"/>
+      <use href="#a" stroke="#e5484d"/>
+      <use href="#arrow" stroke="#e5484d" fill="#e5484d"/>
+    </g>
+    <g filter="url(#clay)">
+      <g fill="#f7f1de">
+        <circle cx="300" cy="512" r="32"/><circle cx="512" cy="512" r="38"/><circle cx="724" cy="512" r="32"/>
+      </g>
+      <g fill="#ff8a85">
+        <circle cx="402" cy="724" r="32"/><circle cx="622" cy="724" r="32"/>
+      </g>
+      <g fill="#8af0b6">
+        <circle cx="330" cy="306" r="38"/><circle cx="694" cy="306" r="38"/>
+      </g>
+      <circle cx="441" cy="650" r="30" fill="#b8262d"/>
+      <circle cx="583" cy="650" r="28" fill="#f7f1de"/>
+    </g>
+    </g>
+  </g>
+</svg>
