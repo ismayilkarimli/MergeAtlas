@@ -18,11 +18,11 @@ A pull request arrives as a wall of lines, all the same green. MergeAtlas is an 
 
 It's made for changes that reach past their diff, even in code you know well: several files, some of them affected only indirectly.
 
-The context comes first: how this part of the project works today, the problem, and what the pull request does about it. The changed files sit in groups that change for the same reason, and arrows run from each cause to its effect, including into files the pull request never touches. Each change on a card gives its problem, what changes, its key lines and why that fixes it.
+The context comes first: how this part of the project works today, the problem, and what the pull request does about it. The changed files sit in groups that change for the same reason, and arrows run from each cause to its effect, including into files the pull request never touches.
 
-When agents write the code, most of a large change is wiring. You go straight to the lines that change how things behave, and the rest is there when you want it.
+When agents write the code, much of a large change is wiring. You go straight to the lines that change how things behave, and the rest is there when you want it.
 
-It works beside the diff, not instead of it: anything the map tells you links to the lines it comes from. And it stops at understanding. It won't hunt for bugs or approve for you; the judgement stays yours.
+It works beside the diff, not instead of it: every claim links to the lines it comes from. And it stops at understanding. It won't hunt for bugs or approve for you; the judgement stays yours.
 
 ## Features
 
@@ -42,9 +42,9 @@ It works beside the diff, not instead of it: anything the map tells you links to
 
 ### Tickets
 
-GitHub issues linked to the PR work out of the box. For other trackers, MergeAtlas spots the ticket in the PR's title, description or branch name, and your agent reads it through the connection it already has, such as an MCP server. MergeAtlas stores no tracker credentials of its own.
+GitHub issues linked to the pull request work out of the box. For other trackers, MergeAtlas spots the ticket in the pull request's title, description or branch name, and your agent reads it through the connection it already has, such as an MCP server. MergeAtlas stores no tracker credentials of its own.
 
-It recognises links from Jira, Linear, Trello, Asana, Shortcut, ClickUp and Azure Boards, and bare keys like `ENG-123`. If your agent can't reach the tracker, it tells you which ticket it couldn't read and builds the map from the PR alone.
+It recognises links from Jira, Linear, Trello, Asana, Shortcut, ClickUp and Azure Boards, and bare keys like `ENG-123`. If your agent can't reach the tracker, it tells you which ticket it couldn't read and builds the map from the pull request alone.
 
 ## Running it
 
@@ -67,7 +67,7 @@ Add this repository as a plugin marketplace, then install the plugin:
 /plugin install mergeatlas@mergeatlas
 ```
 
-Plugin skills carry the plugin's name, so the command is `/mergeatlas:mergeatlas`. Asking your agent to map a PR works too. To update, run `/plugin marketplace update mergeatlas`.
+Plugin skills carry the plugin's name, so the command is `/mergeatlas:mergeatlas`. Asking your agent to map a pull request works too. To update, run `/plugin marketplace update mergeatlas`.
 
 ### Other agents, such as Codex
 
@@ -95,7 +95,7 @@ This is the setup where `/mergeatlas` works without the plugin's prefix.
 
 ### Using it
 
-From inside the PR's repository, ask your agent to map it. The map opens at `http://127.0.0.1:8765`.
+From inside the pull request's repository, ask your agent to map it. The map opens at `http://127.0.0.1:8765`.
 
 ### Choosing the cold readers' model
 
@@ -117,7 +117,7 @@ To change the saved choice later, ask your agent, such as "set MergeAtlas's cold
 
 ## How it works
 
-The analysis comes from your agent, which reads the issue, the diff and the surrounding source. `skills/mergeatlas/scripts/mergeatlas.py` does the mechanical part: it fetches the PR, runs the searches your agent chooses for affected files, checks the map against the diff, and serves it. Those searches are plain text, so MergeAtlas works in any language. Maps and working files stay on your machine in `~/.cache/mergeatlas`.
+The analysis comes from your agent, which reads the issue, the diff and the surrounding source. `skills/mergeatlas/scripts/mergeatlas.py` does the mechanical part: it fetches the pull request, runs the searches your agent chooses for affected files, checks the map against the diff, and serves it. Those searches are plain text, so MergeAtlas works in any language. Maps and working files stay on your machine in `~/.cache/mergeatlas`.
 
 ## License
 

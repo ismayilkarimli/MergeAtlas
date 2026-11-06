@@ -1,6 +1,6 @@
 {
   "name": "mergeatlas",
-  "description": "MergeAtlas: review code you don't know.",
+  "description": "MergeAtlas: know what you're approving.",
   "owner": { "name": "Ismayil Karimli" },
   "plugins": [
     {
