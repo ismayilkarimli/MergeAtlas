@@ -1,0 +1,13 @@
+{
+  "name": "mergeatlas",
+  "description": "MergeAtlas: review code you don't know.",
+  "owner": { "name": "Ismayil Karimli" },
+  "plugins": [
+    {
+      "name": "mergeatlas",
+      "source": "./",
+      "description": "Turn a pull request into an interactive map on localhost: a card per changed file, grouped by intent, with cause-and-effect arrows.",
+      "category": "code-review"
+    }
+  ]
+}

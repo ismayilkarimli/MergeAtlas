@@ -46,10 +46,36 @@ It recognises links from Jira, Linear, Trello, Asana, Shortcut, ClickUp and Azur
 
 You'll need:
 
-- An agent that runs skills, such as Claude Code
+- An agent that runs skills, such as Claude Code or Codex
 - Python 3
 - `git`
 - The [GitHub CLI](https://cli.github.com), signed in with `gh auth login`
+
+### Claude Code
+
+Add this repository as a plugin marketplace, then install the plugin:
+
+```
+/plugin marketplace add ismayilkarimli/MergeAtlas
+```
+
+```
+/plugin install mergeatlas@mergeatlas
+```
+
+Plugin skills carry the plugin's name, so the command is `/mergeatlas:mergeatlas`. Asking your agent to map a PR works too. To update, run `/plugin marketplace update mergeatlas`.
+
+### Other agents, such as Codex
+
+Install the skill with [skills.sh](https://skills.sh). It finds your agents and puts the skill where each looks:
+
+```bash
+npx skills add ismayilkarimli/MergeAtlas
+```
+
+Add `-a codex` to install for Codex only, and `-g` to install for every project instead of the current one.
+
+### By hand
 
 Clone the repository and link the skill into your skills folder:
 
@@ -61,7 +87,11 @@ git clone https://github.com/ismayilkarimli/MergeAtlas.git
 ln -s "$PWD/MergeAtlas/skills/mergeatlas" ~/.claude/skills/mergeatlas
 ```
 
-Then, from inside the PR's repository, ask your agent to map it, or run `/mergeatlas` in Claude Code. The map opens at `http://127.0.0.1:8765`.
+This is the setup where `/mergeatlas` works without the plugin's prefix.
+
+### Using it
+
+From inside the PR's repository, ask your agent to map it. The map opens at `http://127.0.0.1:8765`.
 
 ### Choosing the cold readers' model
 
