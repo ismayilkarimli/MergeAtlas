@@ -34,7 +34,7 @@ The reader is a skilled engineer asked to review a change that spans across file
 
     With no subagents available, read that output yourself one statement at a time, as such a reader. Answer each question that a statement on the card depends on from source, on that card, then publish again and repeat for the cards you changed. Done when a round returns no such question, or after the third round. After a third round, read the edits it led to yourself, one statement at a time, as such a reader, and close what they leave open.
 
-9. **Check.** Open the URL in the browser. The viewer is the same for every map, so check only what this map's data can break, from the page's text rather than screenshots. Done when every card and arrow renders and the console shows no errors. Give the user the URL, and say which reasons are inferred rather than stated in the PR.
+9. **Check.** Open the URL in the browser. The viewer is the same for every map, so check only what this map's data can break, from the page's text rather than screenshots. Done when every card and arrow renders and the console shows no errors. Give the user the URL, and say which reasons are inferred rather than stated in the PR. Tell them a colleague can open the map without MergeAtlas: the Share button in the viewer, or `python3 <skill-dir>/scripts/mergeatlas.py export <map-id> [path]`, writes it as one HTML file. Run `export` yourself only when the user asks for the file.
 
 ## Tickets
 

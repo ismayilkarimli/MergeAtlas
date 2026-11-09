@@ -6,6 +6,8 @@
                                  Search the PR's head commit outside its changed files and log the result.
                                  Matches whole words unless --substring or --regex.
   mergeatlas.py publish <map-id> Validate <map-id>.input.json, write the map, serve it.
+  mergeatlas.py export <map-id> [path]
+                                 Write the published map as one HTML file that opens in any browser, for sharing.
   mergeatlas.py card <map-id> <card-id | story>
                                  Print one card as a cold reader sees it, for the cold read.
   mergeatlas.py serve            Run the viewer server; publish starts it when needed.
@@ -32,6 +34,8 @@ WORK = HOME / "work"
 DATA = HOME / "data"
 VIEWER = Path(__file__).resolve().parent.parent / "assets" / "viewer.html"
 PORT = 8765
+# The viewer's empty slot for a map carried inside the page, which a shared file opens without a server.
+MAP_SLOT = '<script type="application/json" id="map-data"></script>'
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "mergeatlas" / "config.json"
 # The cold readers' model for each agent; "default" covers any other agent, and an empty entry means its own model.
 COLD_READ = {
@@ -621,6 +625,22 @@ def publish(map_id):
     print(f"http://127.0.0.1:{PORT}/?map={map_id}")
 
 
+def export(map_id, target=None):
+    """Writes the viewer with the published map inside it, so the file opens from disk with no server or install."""
+    source = DATA / f"{map_id}.json"
+    if not source.exists():
+        sys.exit(f"no published map {map_id}: run publish first")
+    viewer = VIEWER.read_text()
+    if MAP_SLOT not in viewer:
+        sys.exit(f"{VIEWER} has no map slot to fill")
+    # every < escaped, so code in the map can never close or reopen the script tag that carries it
+    carried = json.dumps(json.loads(source.read_text()), separators=(",", ":")).replace("<", "\\u003c")
+    filled = f'<script type="application/json" id="map-data" data-map="{map_id}">{carried}</script>'
+    path = Path(target).expanduser() if target else Path.cwd() / f"{map_id}.html"
+    path.write_text(viewer.replace(MAP_SLOT, filled, 1))
+    print(f"{path} ({path.stat().st_size // 1024} KB)")
+
+
 def cold_read_models():
     """Merges the config file over the defaults, entry by entry, so a file may change only the effort."""
     models = {agent: dict(entry) for agent, entry in COLD_READ.items()}
@@ -675,6 +695,8 @@ def main():
         search(args[0], args[-1], args[1].removeprefix("--") if len(args) == 3 else "word")
     elif command == "publish" and len(args) == 1:
         publish(args[0])
+    elif command == "export" and len(args) in (1, 2):
+        export(*args)
     elif command == "card" and len(args) == 2:
         card_text(*args)
     elif command == "serve" and not args:

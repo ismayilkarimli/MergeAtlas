@@ -38,6 +38,7 @@ It works beside the diff, not instead of it: every claim links to the lines it c
 - **Code links:** claims link to their lines, in the pull request's Files changed tab or at the head commit.
 - **Review marks:** mark a file as reviewed and go straight to the next one. A progress bar counts the files that matter, and Previous and Next step through reading order.
 - **Jump to a file:** press ⌘K, or Ctrl K, to find a file by name.
+- **Share:** download the map as one HTML file that opens in any browser, with no MergeAtlas or setup.
 - **Light and dark themes:** the viewer follows your system setting.
 
 ### Tickets

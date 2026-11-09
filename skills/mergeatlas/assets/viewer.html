@@ -112,6 +112,12 @@
     background: var(--card); box-shadow: var(--shadow); color: var(--muted); font-size: 12px; }
   #legend:popover-open { display: grid; grid-template-rows: repeat(5, auto); grid-auto-flow: column; gap: 6px 18px; }
   #legendbtn { display: inline-flex; align-items: center; gap: 8px; }
+  #share { position: fixed; inset: auto; margin: 0; width: min(340px, calc(100vw - 32px)); padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px;
+    background: var(--card); box-shadow: var(--shadow); color: var(--ink); font-size: 13px; line-height: 1.5; }
+  #share h2 { margin: 0 0 8px; font-size: 15px; }
+  #share p { margin: 0 0 8px; }
+  #sharedl { margin-top: 4px; width: 100%; padding: 9px 12px; border: 0; border-radius: 8px; background: var(--core); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  #sharedl:disabled { opacity: .6; cursor: progress; }
   .swatches { display: inline-flex; gap: 2px; }
   .swatches i { width: 4px; height: 14px; border-radius: 2px; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
@@ -342,6 +348,7 @@
   <symbol id="i-map" viewBox="0 0 24 24"><path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20z"/><path d="M9 4v13.5M15 6.5V20"/></symbol>
   <symbol id="i-tree" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="16" cy="19" r="2"/><path d="M6 7v12h8M6 12h8"/></symbol>
   <symbol id="i-detailed" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 9h8M8 12.5h8M8 16h5"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M5 13v5.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V13"/></symbol>
   <symbol id="i-compact" viewBox="0 0 24 24"><rect x="4" y="8.5" width="16" height="7" rx="2.5"/><path d="M8 12h6"/></symbol>
 </svg>
 
@@ -370,6 +377,14 @@
     <button data-density="detailed"><svg class="icon" aria-hidden="true"><use href="#i-detailed"/></svg>Detailed</button>
     <button data-density="compact"><svg class="icon" aria-hidden="true"><use href="#i-compact"/></svg>Compact</button>
   </div>
+  <div class="switch">
+    <button id="sharebtn" popovertarget="share"><svg class="icon" aria-hidden="true"><use href="#i-share"/></svg>Share</button>
+  </div>
+</div>
+<div id="share" popover aria-labelledby="share-title">
+  <h2 id="share-title">Share this map</h2>
+  <p>One HTML file that opens in any browser, with no MergeAtlas or setup.</p>
+  <button id="sharedl">Download HTML</button>
 </div>
 
 <div id="list">
@@ -409,7 +424,10 @@
   <div class="jump-keys" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>Enter</kbd> to open</span><span><kbd>Esc</kbd> to close</span></div>
 </div></div>
 
+<script type="application/json" id="map-data"></script>
 <script>
+// the page as it arrived, before boot changes it: the template a shared copy is made from
+const PAGE = `<!doctype html>\n${document.documentElement.outerHTML}`;
 const KIND = {
   core:    { color: 'var(--core)',    label: 'New behaviour' },
   cleanup: { color: 'var(--cleanup)', label: 'Cleanup' },
@@ -1655,14 +1673,45 @@ $('#viewswitch').addEventListener('click', ev => {
 
 let reviewed = {}, reviewKey;
 
+/* ---------- share ---------- */
+let RAW = '', MAP_ID = '';
+// every < escaped, so code in the map can never close or reopen the script tag that carries it
+const sharedPage = () => PAGE.replace(/<script type="application\/json" id="map-data"[^>]*>[\s\S]*?<\/script>/,
+  () => `<script type="application/json" id="map-data" data-map="${esc(MAP_ID)}">${JSON.stringify(JSON.parse(RAW)).replace(/</g, '\\u003c')}<\/script>`);
+$('#share').addEventListener('beforetoggle', e => {
+  if (e.newState !== 'open') return;
+  // open beside the button, toward whichever side of the screen has room
+  const b = $('#sharebtn').getBoundingClientRect(), s = $('#share').style;
+  s.top = b.top > innerHeight / 2 ? '' : `${b.bottom + 8}px`;
+  s.bottom = b.top > innerHeight / 2 ? `${innerHeight - b.top + 8}px` : '';
+  s.left = b.left < innerWidth / 2 ? `${b.left}px` : '';
+  s.right = b.left < innerWidth / 2 ? '' : `${innerWidth - b.right}px`;
+});
+$('#sharedl').addEventListener('click', () => {
+  if (!RAW) return;
+  const url = URL.createObjectURL(new Blob([sharedPage()], { type: 'text/html' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: `${MAP_ID || 'mergeatlas-map'}.html` });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  $('#share').hidePopover();
+});
+
 /* ---------- boot ---------- */
 async function boot() {
-  const id = new URLSearchParams(location.search).get('map');
+  // a shared file carries its map inside the page; a served page fetches it by the id in its address
+  const carried = $('#map-data');
+  const id = carried.textContent.trim() ? carried.dataset.map : new URLSearchParams(location.search).get('map');
   let data;
   try {
-    const res = await fetch(`data/${encodeURIComponent(id)}.json`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(res.status);
-    data = await res.json();
+    if (carried.textContent.trim()) {
+      RAW = carried.textContent;
+    } else {
+      const res = await fetch(`data/${encodeURIComponent(id)}.json`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(res.status);
+      RAW = await res.text();
+    }
+    data = JSON.parse(RAW);
+    MAP_ID = id;
   } catch (err) {
     document.body.insertAdjacentHTML('beforeend', `<div style="position:fixed;inset:0;display:grid;place-items:center;text-align:center;padding:24px"><div><h2>No map found</h2><p>Ask Claude to map a PR, then open the link it gives you.</p></div></div>`);
     return;
