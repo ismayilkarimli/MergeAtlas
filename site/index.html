@@ -472,7 +472,7 @@ button.ln:hover { outline: 1px solid var(--core); outline-offset: -1px; }
 .cta .skip { color: var(--film-ink); font-weight: 500; text-decoration-color: var(--go); text-decoration-thickness: 2px; }
 .cta :is(.go, .skip) { font-size: clamp(18px, 1.4vw, 20px); }
 .cta .go { padding: 12px 24px; }
-.plan { list-style: none; counter-reset: step; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 32px; margin: 0; padding: 0; }
+.plan { list-style: none; counter-reset: step; display: grid; gap: 48px; margin: 0; padding: 0; }
 .plan li { counter-increment: step; min-width: 0; }
 .plan li > :last-child { margin-bottom: 0; }
 .plan .cmd + .cmd { margin-top: 10px; }
@@ -480,6 +480,18 @@ button.ln:hover { outline: 1px solid var(--core); outline-offset: -1px; }
 .plan h3::before { content: counter(step); flex: none; padding: 1px 6px; background: var(--film-ink); color: var(--film); font: 600 13px/1.4 var(--mono); font-variant-numeric: tabular-nums; }
 .plan p { margin: 0 0 10px; color: var(--film-muted); }
 .plan p code { color: var(--film-ink); }
+/* The two ways to install are alternatives: a hairline that fades out at both ends separates them, with "or" at its centre. */
+.options { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0 32px; }
+.option { min-width: 0; }
+.option h4 { margin: 0 0 12px; font: 600 15px/1.4 var(--sans); color: var(--film-muted); }
+.or { position: relative; display: grid; place-items: center; color: var(--film-muted); font: 600 14px/1 var(--sans); }
+.or::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: linear-gradient(to bottom, transparent, var(--film-muted) 50%, transparent); }
+.or span { position: relative; padding: 10px 0; background: var(--film); }
+@media (max-width: 700px) {
+  .options { grid-template-columns: minmax(0, 1fr); gap: 20px 0; }
+  .or::before { top: 50%; bottom: auto; left: 0; right: 0; width: auto; height: 1px; background: linear-gradient(to right, transparent, var(--film-muted) 50%, transparent); }
+  .or span { padding: 0 10px; }
+}
 .nav a.go { white-space: nowrap; }
 @media (max-width: 700px) {
   .proof .stage .canvas { height: auto; }
@@ -670,16 +682,22 @@ button.ln:hover { outline: 1px solid var(--core); outline-offset: -1px; }
 
   <section class="install" id="install">
     <h2>Map your next review</h2>
-    <p>Open source, MIT. Your maps stay on your machine.</p>
+    <p>Open source, MIT. Works with any agent.</p>
     <ol class="plan">
       <li>
-        <h3>Install with skills.sh</h3>
-        <div class="cmd"><code>npx skills add ismayilkarimli/MergeAtlas</code><button type="button" class="copy">Copy</button></div>
-      </li>
-      <li>
-        <h3>Install in Claude Code</h3>
-        <div class="cmd"><code>/plugin marketplace add ismayilkarimli/MergeAtlas</code><button type="button" class="copy">Copy</button></div>
-        <div class="cmd"><code>/plugin install mergeatlas@mergeatlas</code><button type="button" class="copy">Copy</button></div>
+        <h3>Install</h3>
+        <div class="options">
+          <div class="option">
+            <h4>Codex and other agents</h4>
+            <div class="cmd"><code>npx skills add ismayilkarimli/MergeAtlas</code><button type="button" class="copy">Copy</button></div>
+          </div>
+          <div class="or"><span>or</span></div>
+          <div class="option">
+            <h4>Claude Code</h4>
+            <div class="cmd"><code>/plugin marketplace add ismayilkarimli/MergeAtlas</code><button type="button" class="copy">Copy</button></div>
+            <div class="cmd"><code>/plugin install mergeatlas@mergeatlas</code><button type="button" class="copy">Copy</button></div>
+          </div>
+        </div>
       </li>
       <li>
         <h3>Ask your agent to map the pull request</h3>
