@@ -476,14 +476,14 @@ button.ln:hover { outline: 1px solid var(--core); outline-offset: -1px; }
 .plan li { counter-increment: step; min-width: 0; }
 .plan li > :last-child { margin-bottom: 0; }
 .plan .cmd + .cmd { margin-top: 10px; }
-.plan h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 12px; font: 750 20px/1.2 var(--title); font-stretch: 108%; letter-spacing: -.01em; }
+.plan h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; font: 750 20px/1.2 var(--title); font-stretch: 108%; letter-spacing: -.01em; }
 .plan h3::before { content: counter(step); flex: none; padding: 1px 6px; background: var(--film-ink); color: var(--film); font: 600 13px/1.4 var(--mono); font-variant-numeric: tabular-nums; }
 .plan p { margin: 0 0 10px; color: var(--film-muted); }
 .plan p code { color: var(--film-ink); }
 /* The two ways to install are alternatives: a hairline that fades out at both ends separates them, with "or" at its centre. */
 .options { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0 32px; }
 .option { min-width: 0; }
-.option h4 { margin: 0 0 12px; font: 600 15px/1.4 var(--sans); color: var(--film-muted); }
+.option h4 { margin: 0 0 10px; font: inherit; color: var(--film-muted); }
 .or { position: relative; display: grid; place-items: center; color: var(--film-muted); font: 600 14px/1 var(--sans); }
 .or::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: linear-gradient(to bottom, transparent, var(--film-muted) 50%, transparent); }
 .or span { position: relative; padding: 10px 0; background: var(--film); }
