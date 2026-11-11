@@ -1,0 +1,26 @@
+name: A map was wrong, unclear or slow
+description: A map stated something untrue, left something out, was hard to follow, or took too long to make.
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What was wrong with the map?
+      description: Quote the statement, or name the card or arrow, if you can. Leave out anything from a private repository you can't share.
+    validations:
+      required: true
+  - type: input
+    id: pr
+    attributes:
+      label: Pull request
+      description: A link, if the pull request is public.
+  - type: textarea
+    id: report
+    attributes:
+      label: Run report
+      description: Ask your agent to "report this map", or run `mergeatlas.py report <map-id>`, and paste the output. It holds numbers alone, with no code, paths or repository name.
+      render: text
+  - type: input
+    id: agent
+    attributes:
+      label: Agent and model
+      description: Such as Claude Code with Opus 5.5, and the cold readers' model if you changed it.

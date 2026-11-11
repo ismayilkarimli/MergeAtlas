@@ -1,0 +1,24 @@
+name: Something broke
+description: A command failed, the viewer misbehaved, or the install didn't work.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      description: The command or request, and any error it printed.
+  - type: input
+    id: version
+    attributes:
+      label: MergeAtlas version
+      description: From `mergeatlas.py version`, or the first line of `mergeatlas.py report <map-id>`.
+  - type: input
+    id: setup
+    attributes:
+      label: Agent, operating system and browser
