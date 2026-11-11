@@ -1,0 +1,9 @@
+# The workflows name each action by its commit, so a tag that moves cannot change what runs. This keeps those commits current.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "Update"

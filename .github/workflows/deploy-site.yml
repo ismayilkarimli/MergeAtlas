@@ -1,6 +1,6 @@
 name: Deploy site
 
-# Every push to main publishes site/ to Cloudflare Pages, unless the push changes only the README.
+# Every push to main publishes site/ to Cloudflare Pages once CI passes, unless the push changes only the README.
 on:
   push:
     branches: [main]
@@ -16,11 +16,18 @@ permissions:
   contents: read
 
 jobs:
+  # The site's sample map runs on the skill's own viewer, so a broken viewer never reaches it.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   deploy:
+    needs: ci
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
       # Runs from site/ so Pages finds functions/ and resolves map/index.html's link to the skill's viewer.

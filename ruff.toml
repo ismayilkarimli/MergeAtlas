@@ -1,0 +1,6 @@
+# Lints for mistakes, not style: syntax Python 3.9 cannot read, names that do not exist, unused imports, likely bugs.
+target-version = "py39"
+line-length = 160
+
+[lint]
+select = ["E9", "F", "B"]
