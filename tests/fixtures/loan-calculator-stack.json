@@ -1,0 +1,125 @@
+{
+  "repo": "ismayilkarimli/home-loan-calculator",
+  "stacks": [
+    {
+      "base": "main",
+      "number": 9,
+      "prs": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    }
+  ],
+  "pulls": [
+    {
+      "base": "main",
+      "head": "01-landing-page",
+      "number": 1,
+      "stack": {
+        "number": 9,
+        "position": 1,
+        "size": 8
+      },
+      "state": "open",
+      "title": "Add landing page, shared layout and navigation",
+      "url": "https://github.com/ismayilkarimli/home-loan-calculator/pull/1"
+    },
+    {
+      "base": "01-landing-page",
+      "head": "02-about-page",
+      "number": 2,
+      "stack": {
+        "number": 9,
+        "position": 2,
+        "size": 8
+      },
+      "state": "open",
+      "title": "Add About us page",
+      "url": "https://github.com/ismayilkarimli/home-loan-calculator/pull/2"
+    },
+    {
+      "base": "02-about-page",
+      "head": "03-pricing-page",
+      "number": 3,
+      "stack": {
+        "number": 9,
+        "position": 3,
+        "size": 8
+      },
+      "state": "open",
+      "title": "Add Pricing page",
+      "url": "https://github.com/ismayilkarimli/home-loan-calculator/pull/3"
+    },
+    {
+      "base": "03-pricing-page",
+      "head": "04-catalog-page",
+      "number": 4,
+      "stack": {
+        "number": 9,
+        "position": 4,
+        "size": 8
+      },
+      "state": "open",
+      "title": "Add Catalog page listing loan products",
+      "url": "https://github.com/ismayilkarimli/home-loan-calculator/pull/4"
+    },
+    {
+      "base": "04-catalog-page",
+      "head": "05-contact-page",
+      "number": 5,
+      "stack": {
+        "number": 9,
+        "position": 5,
+        "size": 8
+      },
+      "state": "open",
+      "title": "Add Contact us page",
+      "url": "https://github.com/ismayilkarimli/home-loan-calculator/pull/5"
+    },
+    {
+      "base": "05-contact-page",
+      "head": "06-calculator",
+      "number": 6,
+      "stack": {
+        "number": 9,
+        "position": 6,
+        "size": 8
+      },
+      "state": "open",
+      "title": "Add loan calculator with standard fixed-rate payment",
+      "url": "https://github.com/ismayilkarimli/home-loan-calculator/pull/6"
+    },
+    {
+      "base": "06-calculator",
+      "head": "07-calculator-amortization-schedule",
+      "number": 7,
+      "stack": {
+        "number": 9,
+        "position": 7,
+        "size": 8
+      },
+      "state": "open",
+      "title": "Add month-by-month amortization schedule to the calculator",
+      "url": "https://github.com/ismayilkarimli/home-loan-calculator/pull/7"
+    },
+    {
+      "base": "07-calculator-amortization-schedule",
+      "head": "08-calculator-extra-payments",
+      "number": 8,
+      "stack": {
+        "number": 9,
+        "position": 8,
+        "size": 8
+      },
+      "state": "open",
+      "title": "Change calculator logic to support extra monthly payments",
+      "url": "https://github.com/ismayilkarimli/home-loan-calculator/pull/8"
+    }
+  ]
+}

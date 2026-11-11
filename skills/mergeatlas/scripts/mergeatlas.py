@@ -28,6 +28,7 @@ from collections import Counter
 from functools import lru_cache, partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import quote
 
 HOME = Path.home() / ".cache" / "mergeatlas"
 WORK = HOME / "work"
@@ -148,6 +149,144 @@ def ticket_refs(title, body, branch):
     urls = {url: name for name, pattern in TICKET_URLS.items() for url in re.findall(pattern, text)}
     keys = [*TICKET_KEY.findall(text), *(key.upper() for key in BRANCH_KEY.findall(branch))]
     return [*(f"{name} {url}" for url, name in urls.items()), *dict.fromkeys(keys)]
+
+
+PR_OR_STACK = re.compile(r"(?:https?://)?(?:www\.)?github\.com/([\w.-]+/[\w.-]+)/(pull|stack)/(\d+)(?:[/?#].*)?")
+
+
+def parse_target(text):
+    """Reads a PR or stack link, or a bare PR number, as (kind, repo, number); a bare number has no repo."""
+    text = text.strip()
+    bare = re.fullmatch(r"#?(\d+)", text)
+    if bare:
+        return ("pr", None, int(bare[1]))
+    link = PR_OR_STACK.fullmatch(text)
+    if not link:
+        raise ValueError(f"not a GitHub pull request or stack link: {text!r}")
+    return ("pr" if link[2] == "pull" else "stack", link[1], int(link[3]))
+
+
+def parse_fetch_args(args):
+    """Splits fetch's arguments into its targets and whether the user asked for the whole stack."""
+    return [parse_target(a) for a in args if a != "--stack"], "--stack" in args
+
+
+def open_or_merged(pulls):
+    return [p for p in pulls if p["state"] != "closed"]
+
+
+def stack_by_branches(repo, pull, github, known, strict):
+    """Finds a stack built without GitHub's stacks: each PR's base branch is the head branch of the PR below it.
+    Above a fork the chain has no single next PR, so strict fails there and otherwise stops."""
+    chain, seen = [pull], {pull["number"]}
+    while True:
+        below = open_or_merged(github.pulls_with_head(repo, chain[0]["base"]))
+        if len(below) != 1 or below[0]["number"] in seen:
+            break
+        chain.insert(0, below[0])
+        seen.add(below[0]["number"])
+    while True:
+        above = open_or_merged(github.pulls_with_base(repo, chain[-1]["head"]))
+        if len(above) > 1 and strict:
+            names = " and ".join(f"#{p['number']}" for p in sorted(above, key=lambda p: p["number"]))
+            raise ValueError(f"the stack forks above #{chain[-1]['number']} into {names}, so it is not one stack")
+        if len(above) != 1 or above[0]["number"] in seen:
+            break
+        chain.append(above[0])
+        seen.add(above[0]["number"])
+    if len(chain) == 1:
+        return None
+    known.update({p["number"]: p for p in chain})
+    return {"number": None, "source": "branches", "base": chain[0]["base"], "prs": [p["number"] for p in chain]}
+
+
+def stack_of(repo, pull, github, known, strict):
+    """The stack a PR sits in: GitHub's own when it has one, else the chain of base branches."""
+    if pull.get("stack"):
+        found = github.stack(repo, pull["stack"]["number"])
+        return {"number": found["number"], "source": "native", "base": found["base"], "prs": found["prs"]}
+    return stack_by_branches(repo, pull, github, known, strict)
+
+
+def resolve(targets, github, whole_stack=False):
+    """Decides which PRs to map, bottom to top, and the stack they sit in.
+    A stack link maps the whole stack; a PR link maps that PR unless whole_stack; several PRs map the run between them."""
+    repos = {repo or github.current_repo() for _, repo, _ in targets}
+    if len(repos) != 1:
+        raise ValueError(f"links from more than one repository: {', '.join(sorted(repos))}")
+    repo = repos.pop()
+    stacks = sorted({n for kind, _, n in targets if kind == "stack"})
+    listed = list(dict.fromkeys(n for kind, _, n in targets if kind == "pr"))
+    if len(stacks) > 1:
+        raise ValueError(f"links to more than one stack: {', '.join(f'#{n}' for n in stacks)}")
+    known = {n: github.pull(repo, n) for n in listed}
+    if len(listed) > 1:
+        for n in listed:
+            if known[n]["state"] == "merged":
+                raise ValueError(f"#{n} is already merged, so it has nothing left to review")
+    if stacks:
+        found = github.stack(repo, stacks[0])
+        stack = {"number": found["number"], "source": "native", "base": found["base"], "prs": found["prs"]}
+        whole_stack = True
+    else:
+        stack = stack_of(repo, known[listed[0]], github, known, strict=whole_stack)
+    if stack is None:
+        if len(listed) > 1:
+            raise ValueError(f"#{listed[0]} is in no stack, so {', '.join(f'#{n}' for n in listed[1:])} cannot share one with it")
+        return {"repo": repo, "stack": None, "map": listed, "added": []}
+    outside = [n for n in listed if n not in stack["prs"]]
+    if outside:
+        raise ValueError(f"{', '.join(f'#{n}' for n in outside)} not in the same stack as #{stack['prs'][0]}-#{stack['prs'][-1]}")
+    if whole_stack:
+        for n in stack["prs"]:
+            if n not in known:
+                known[n] = github.pull(repo, n)
+        chosen = [n for n in stack["prs"] if known[n]["state"] == "open"]
+    else:
+        positions = [stack["prs"].index(n) for n in listed]
+        chosen = stack["prs"][min(positions):max(positions) + 1]
+    added = [] if whole_stack else [n for n in chosen if n not in listed]
+    return {"repo": repo, "stack": stack, "map": chosen, "added": added}
+
+
+def pull_record(p):
+    """Cuts a pull request from GitHub's REST API down to what stack detection reads."""
+    state = "merged" if p.get("merged_at") else p["state"]
+    stack = p.get("stack")
+    return {
+        "number": p["number"], "title": p["title"], "url": p["html_url"], "state": state,
+        "base": p["base"]["ref"], "head": p["head"]["ref"],
+        "stack": {k: stack[k] for k in ("number", "position", "size")} if stack else None,
+    }
+
+
+class GhGitHub:
+    """Reads pull requests and stacks through the signed-in GitHub CLI."""
+
+    def _api(self, path):
+        try:
+            return json.loads(gh("api", path))
+        except subprocess.CalledProcessError as failed:
+            raise LookupError(f"GitHub has no {path}: {failed.stderr.strip()}") from None
+
+    def current_repo(self):
+        return gh("repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").strip()
+
+    def pull(self, repo, number):
+        return pull_record(self._api(f"repos/{repo}/pulls/{number}"))
+
+    def stack(self, repo, number):
+        found = self._api(f"repos/{repo}/stacks/{number}")
+        return {"number": found["number"], "base": found["base"]["ref"], "prs": [p["number"] for p in found["pull_requests"]]}
+
+    def _pulls(self, repo, query):
+        return [pull_record(p) for p in self._api(f"repos/{repo}/pulls?state=all&per_page=100&{query}")]
+
+    def pulls_with_head(self, repo, branch):
+        return self._pulls(repo, f"head={quote(repo.split('/')[0])}:{quote(branch)}")
+
+    def pulls_with_base(self, repo, branch):
+        return self._pulls(repo, f"base={quote(branch)}")
 
 
 def fetch(number):
