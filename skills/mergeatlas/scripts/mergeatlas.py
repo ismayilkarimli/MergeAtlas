@@ -9,9 +9,11 @@
                                  Search the PR's head commit outside its changed files and log the result.
                                  Matches whole words unless --substring or --regex.
   mergeatlas.py publish <map-id> Validate <map-id>.input.json, write the map, serve it.
+  mergeatlas.py publish-stack <stack-id>
+                                 Validate the stack story in <stack-id>.input.json, write the stack page, serve it.
   mergeatlas.py export <map-id> [path]
                                  Write the published map as one HTML file that opens in any browser, for sharing.
-  mergeatlas.py card <map-id> <card-id | story>
+  mergeatlas.py card <map-id | stack-id> <card-id | story>
                                  Print one card as a cold reader sees it, for the cold read.
   mergeatlas.py serve            Run the viewer server; publish starts it when needed.
   mergeatlas.py config           Print the config file's path and the model each agent gives its cold readers.
@@ -61,6 +63,7 @@ EDGE_TEXT = ("relationship", "connection", "flow", "effect")
 CARD_LINK = re.compile(r"\[[^\]]+\]\(([\w-]+)\)")
 LOCATION = r"([^)#\s]+)#L(\d+)(?:-L(\d+))?"
 CODE_LINK = re.compile(r"\[[^\]]+\]\(" + LOCATION + r"\)")
+STACK_LINK = re.compile(r"\[[^\]]+\]\(#(\d+)\)")
 ANY_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 CODE_SPAN = re.compile(r"`[^`]*`")
 SENTENCE_END = re.compile(r"(?<=[.!?:])\s+")
@@ -291,6 +294,9 @@ class GhGitHub:
     def pulls_with_base(self, repo, branch):
         return self._pulls(repo, f"base={quote(branch)}")
 
+    def files(self, repo, number):
+        return [f["filename"] for f in self._api(f"repos/{repo}/pulls/{number}/files?per_page=100")]
+
 
 def stack_context(plan, number):
     """The stack around one mapped PR: the whole stack, where the PR sits in it, and its neighbours."""
@@ -299,6 +305,128 @@ def stack_context(plan, number):
         return None
     prs, at = stack["prs"], stack["prs"].index(number)
     return {**stack, "position": at + 1, "below": prs[at - 1] if at else None, "above": prs[at + 1] if at + 1 < len(prs) else None}
+
+
+def map_id_of(repo, number):
+    return f"{repo.replace('/', '-')}-{number}"
+
+
+def stack_id(repo, stack):
+    """A native stack is named by its number, a stack of branches by its bottom and top PRs."""
+    name = stack["number"] if stack["number"] else f"{stack['prs'][0]}-{stack['prs'][-1]}"
+    return f"{repo.replace('/', '-')}-stack-{name}"
+
+
+def stack_record(plan, github):
+    """Everything the maps of one stack share: its PRs bottom to top, each with its map id and changed files."""
+    stack, repo = plan["stack"], plan["repo"]
+    prs = []
+    for number in stack["prs"]:
+        p = github.pull(repo, number)
+        prs.append({"number": number, "title": p["title"], "url": p["url"], "state": p["state"],
+                    "map_id": map_id_of(repo, number), "files": github.files(repo, number)})
+    return {"id": stack_id(repo, stack), "repo": repo, "number": stack["number"], "base": stack["base"],
+            "source": stack["source"], "url": f"https://github.com/{repo}/stack/{stack['number']}" if stack["number"] else None,
+            "prs": prs}
+
+
+def stack_labels(record, number):
+    """Labels each file another PR of the stack changes, and this one leaves alone, with where those PRs sit."""
+    numbers = [p["number"] for p in record["prs"]]
+    at, own = numbers.index(number), set(record["prs"][numbers.index(number)]["files"])
+    places = {}
+    for i, p in enumerate(record["prs"]):
+        for path in p["files"]:
+            if i != at and path not in own:
+                places.setdefault(path, []).append(f"#{p['number']} {'below' if i < at else 'above'}")
+    return {path: label_of(found) for path, found in places.items()}
+
+
+def label_of(places):
+    """Joins "#1 below", "#4 below", "#7 above" into "changed in #1, #4 below, #7 above"."""
+    groups = []
+    for place in places:
+        number, side = place.split()
+        if groups and groups[-1][1] == side:
+            groups[-1][0].append(number)
+        else:
+            groups.append(([number], side))
+    return "changed in " + ", ".join(f"{', '.join(ns)} {side}" for ns, side in groups)
+
+
+def stack_strip(record, number, published):
+    """What a map shows of its stack: every PR, which is this one, and which have a published map to open."""
+    return {
+        "id": record["id"], "number": record["number"], "url": record["url"], "page": record["id"] in published,
+        "prs": [{"number": p["number"], "title": p["title"], "url": p["url"], "state": p["state"], "map_id": p["map_id"],
+                 "current": p["number"] == number, "published": p["map_id"] in published} for p in record["prs"]],
+    }
+
+
+def card_texts(card):
+    """Every piece of prose on a card, where its code links sit."""
+    yield card.get("summary", "")
+    yield from card.get("bullets", [])
+    for change in card.get("changes", []):
+        yield from (change.get(k, "") for k in CHANGE_TEXT)
+    yield from (r.get("effect", "") for r in card.get("reaches", []))
+    yield from (u.get("reason", "") for u in card.get("unaffected", []))
+
+
+def stubs_for(data, record, number, maps):
+    """The "From #N" stubs: each file a card links to that this PR leaves alone and a PR below it changed, pointing at
+    the nearest such PR, and at its map's card for that file when that map is published."""
+    if record is None:
+        return []
+    numbers = [p["number"] for p in record["prs"]]
+    below, own = record["prs"][:numbers.index(number)], set(record["prs"][numbers.index(number)]["files"])
+    stubs = {}
+    for c in data["cards"]:
+        for path, _, _ in CODE_LINK.findall(" ".join(card_texts(c))):
+            source = next((p for p in reversed(below) if path in p["files"]), None)
+            if path in own or source is None:
+                continue
+            stub = stubs.setdefault(path, {
+                "id": f"from:{path}", "path": path, "pr": source["number"], "map_id": source["map_id"],
+                "title": source["title"],
+                "card_id": next((pc["id"] for pc in maps.get(source["map_id"], {}).get("cards", []) if path in pc["paths"]), None),
+                "cited_by": [],
+            })
+            if c["id"] not in stub["cited_by"]:
+                stub["cited_by"].append(c["id"])
+    return list(stubs.values())
+
+
+def stack_problems(data, record):
+    """A stack story tells the whole change once: every part present, and the solution an index of the stack's PRs."""
+    found, numbers = [], [p["number"] for p in record["prs"]]
+    for part in ("background", "problem", "solution"):
+        if not str(data.get(part) or "").strip():
+            found.append(f"stack story: needs {part}")
+    linked = {int(n) for n in STACK_LINK.findall(str(data.get("solution") or ""))}
+    missing = [f"#{n}" for n in numbers if n not in linked]
+    if missing:
+        found.append(f"solution: link every PR as [words](#N); missing {', '.join(missing)}")
+    strangers = sorted(linked - set(numbers))
+    if strangers:
+        found.append(f"solution: {', '.join(f'#{n}' for n in strangers)} not in this stack")
+    refs = {f"#{n}" for n in numbers}
+    for part in ("background", "problem", "solution"):
+        found += open_whys(part, str(data.get(part) or ""), refs)
+    return found
+
+
+def stack_page(data, record, maps):
+    """The published stack page: the story once, then each PR with the intents its published map found."""
+    return {
+        "kind": "stack",
+        "stack": {k: record[k] for k in ("id", "repo", "number", "base", "url")},
+        **{k: data[k] for k in ("background", "problem", "solution")},
+        "prs": [{"number": p["number"], "title": p["title"], "url": p["url"], "state": p["state"], "map_id": p["map_id"],
+                 "published": p["map_id"] in maps,
+                 "intents": [g["title"] for g in maps.get(p["map_id"], {}).get("intents", []) if not g.get("mechanical")],
+                 "files": len(p["files"])} for p in record["prs"]],
+    }
 
 
 def fetch(args):
@@ -316,23 +444,28 @@ def fetch(args):
     here = github.current_repo()
     if here.lower() != plan["repo"].lower():
         sys.exit(f"Run fetch from inside a clone of {plan['repo']}; this is {here}.")
-    stack = plan["stack"]
+    stack, record = plan["stack"], None
     if stack:
+        record = stack_record(plan, github)
+        WORK.mkdir(parents=True, exist_ok=True)
+        (WORK / f"{record['id']}.stack.json").write_text(json.dumps(record, indent=2))
         name = f"stack #{stack['number']}" if stack["number"] else "a stack of branches"
         print(f"stack:       {name} on {stack['base']}, bottom to top: {' '.join(f'#{n}' for n in stack['prs'])}")
+        print(f"stack id:    {record['id']}")
         print(f"mapping:     {' '.join(f'#{n}' for n in plan['map'])}")
         if plan["added"]:
             print(f"added:       {' '.join(f'#{n}' for n in plan['added'])}, not given but between the PRs given")
     for number in plan["map"]:
         print()
-        fetch_pr(plan["repo"], number, stack_context(plan, number))
+        context = stack_context(plan, number)
+        fetch_pr(plan["repo"], number, context and {**context, "id": record["id"]})
 
 
 def fetch_pr(repo, number, stack):
     fields = "number,title,body,additions,deletions,files,headRefName,headRefOid,url,closingIssuesReferences"
     pr = json.loads(gh("pr", "view", str(number), "--repo", repo, "--json", fields))
     pr["stack"] = stack
-    map_id = f"{repo.replace('/', '-')}-{pr['number']}"
+    map_id = map_id_of(repo, pr["number"])
     pr["issues"] = [
         json.loads(gh("issue", "view", str(i["number"]), "--repo", repo, "--json", "number,title,body,url"))
         for i in pr.pop("closingIssuesReferences")
@@ -397,9 +530,12 @@ def search(map_id, term, mode):
     log = [s for s in json.loads(log_path.read_text()) if (s["term"], s["mode"]) != (term, mode)]
     log.append({"term": term, "mode": mode, "files": list(matches)})
     log_path.write_text(json.dumps(log, indent=2))
+    record = stack_of_map(pr)
+    labels = stack_labels(record, pr["number"]) if record else {}
+    named = lambda path: f"{path}  ({labels[path]})" if path in labels else path
     print(f"{len(matches)} unchanged files match {term!r}")
     for path, lines in list(matches.items())[:SHOWN_FILES]:
-        print(path)
+        print(named(path))
         for line in lines[:SHOWN_MATCHES]:
             print(f"  {line}")
         if len(lines) > SHOWN_MATCHES:
@@ -408,7 +544,7 @@ def search(map_id, term, mode):
     if rest:
         print(f"... {len(rest)} more files, every one of which needs sorting:")
         for path in rest:
-            print(path)
+            print(named(path))
 
 
 def source_at(commit):
@@ -699,12 +835,18 @@ class NoStoreHandler(SimpleHTTPRequestHandler):
 def plain(text):
     """Keeps a link's words and marks where it points, so a cold reader can tell a linked claim from a bare one."""
     text = CODE_LINK.sub(lambda m: f"{m[0][1:m[0].index('](')]} [→ code]", text or "")
+    text = STACK_LINK.sub(lambda m: f"{m[0][1:m[0].index('](')]} [→ PR #{m[1]}]", text)
     return ANY_LINK.sub(r"\1 [→ card]", text)
 
 
 def card_text(map_id, card_id):
     """Prints one card as a cold reader sees it: link targets give way to a mark, so only the words count."""
     data = json.loads((WORK / f"{map_id}.input.json").read_text())
+    if (WORK / f"{map_id}.stack.json").exists():
+        if card_id != "story":
+            sys.exit("a stack has only its story to read")
+        print("\n\n".join(plain(data.get(k)) for k in ("background", "problem", "solution")))
+        return
     if card_id == "story":
         print("\n\n".join(plain(data.get(k)) for k in ("background", "problem", "solution")))
         for g in data.get("intents", []):
@@ -799,12 +941,61 @@ def publish(map_id):
         "edges": data["edges"],
         "intents": data["intents"],
     }
+    record = stack_of_map(pr)
+    if record:
+        output["stubs"] = stubs_for(data, record, pr["number"], published_maps(record))
     DATA.mkdir(parents=True, exist_ok=True)
     (DATA / f"{map_id}.json").write_text(json.dumps(output, indent=2))
+    if record:
+        refresh_stack(record)
     shutil.copy(VIEWER, HOME / "index.html")
     serve()
     print(f"{len(data['cards'])} cards, {len(data['intents'])} intents, {len(data['edges'])} arrows")
     print(f"http://127.0.0.1:{PORT}/?map={map_id}")
+
+
+def stack_of_map(pr):
+    """The stack record fetch saved for a PR's stack, None for a PR in no stack."""
+    stack = pr.get("stack")
+    path = WORK / f"{stack['id']}.stack.json" if stack and stack.get("id") else None
+    return json.loads(path.read_text()) if path and path.exists() else None
+
+
+def published_maps(record):
+    """The stack's maps that are published, by map id."""
+    paths = {p["map_id"]: DATA / f"{p['map_id']}.json" for p in record["prs"]}
+    return {i: json.loads(path.read_text()) for i, path in paths.items() if path.exists()}
+
+
+def refresh_stack(record):
+    """Rewrites what every published map and the stack page say about the stack, so each links the maps there now."""
+    maps = published_maps(record)
+    page_path = DATA / f"{record['id']}.json"
+    published = set(maps) | ({record["id"]} if page_path.exists() else set())
+    for i, data in maps.items():
+        data["pr"]["stack"] = stack_strip(record, next(p["number"] for p in record["prs"] if p["map_id"] == i), published)
+        (DATA / f"{i}.json").write_text(json.dumps(data, indent=2))
+    if page_path.exists():
+        page = json.loads(page_path.read_text())
+        page_path.write_text(json.dumps(stack_page(page, record, maps), indent=2))
+
+
+def publish_stack(stack_id):
+    """Publishes the stack page: the story of the whole change, written once, and every PR with its map."""
+    record_path, story_path = WORK / f"{stack_id}.stack.json", WORK / f"{stack_id}.input.json"
+    if not record_path.exists():
+        sys.exit(f"no stack {stack_id}: run fetch with the stack link first")
+    record, data = json.loads(record_path.read_text()), json.loads(story_path.read_text())
+    problems = stack_problems(data, record)
+    if problems:
+        sys.exit("Stack story rejected:\n" + "\n".join(f"  {p}" for p in problems))
+    DATA.mkdir(parents=True, exist_ok=True)
+    (DATA / f"{stack_id}.json").write_text(json.dumps(stack_page(data, record, published_maps(record)), indent=2))
+    refresh_stack(record)
+    shutil.copy(VIEWER, HOME / "index.html")
+    serve()
+    print(f"{len(record['prs'])} PRs, {len(published_maps(record))} maps published")
+    print(f"http://127.0.0.1:{PORT}/?map={stack_id}")
 
 
 def export(map_id, target=None):
@@ -877,6 +1068,8 @@ def main():
         search(args[0], args[-1], args[1].removeprefix("--") if len(args) == 3 else "word")
     elif command == "publish" and len(args) == 1:
         publish(args[0])
+    elif command == "publish-stack" and len(args) == 1:
+        publish_stack(args[0])
     elif command == "export" and len(args) in (1, 2):
         export(*args)
     elif command == "card" and len(args) == 2:

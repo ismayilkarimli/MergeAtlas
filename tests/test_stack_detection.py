@@ -74,6 +74,11 @@ class FakeGitHub:
             raise LookupError(f"no stack #{number} in {repo}")
         return copy.deepcopy(self.stacks[number])
 
+    def files(self, repo, number):
+        """The paths a PR changes."""
+        self._repo(repo)
+        return list(FIXTURE["files"][str(number)])
+
     def pulls_with_head(self, repo, branch):
         """Every PR, in any state, whose head is branch."""
         self._repo(repo)

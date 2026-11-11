@@ -121,5 +121,54 @@
       "title": "Change calculator logic to support extra monthly payments",
       "url": "https://github.com/ismayilkarimli/home-loan-calculator/pull/8"
     }
-  ]
+  ],
+  "files": {
+    "1": [
+      "css/styles.css",
+      "index.html",
+      "js/nav.js"
+    ],
+    "2": [
+      "about.html",
+      "js/nav.js"
+    ],
+    "3": [
+      "js/nav.js",
+      "pricing.html"
+    ],
+    "4": [
+      "catalog.html",
+      "css/styles.css",
+      "js/catalog.js",
+      "js/nav.js"
+    ],
+    "5": [
+      "contact.html",
+      "css/styles.css",
+      "js/contact.js",
+      "js/nav.js"
+    ],
+    "6": [
+      "calculator.html",
+      "css/styles.css",
+      "index.html",
+      "js/calculator.js",
+      "js/loan.js",
+      "js/nav.js",
+      "test/loan.test.js"
+    ],
+    "7": [
+      "calculator.html",
+      "css/styles.css",
+      "js/calculator.js",
+      "js/loan.js",
+      "test/loan.test.js"
+    ],
+    "8": [
+      "calculator.html",
+      "js/calculator.js",
+      "js/loan.js",
+      "test/loan.test.js"
+    ]
+  }
 }
