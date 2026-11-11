@@ -110,6 +110,8 @@
   .codelink { color: var(--core); }
   #panel.collapsed .body { display: none; }
   .stackstrip { margin: -2px 0 10px; font-size: 12px; color: var(--muted); }
+  .stackstrip .stacklink { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
+  .stackstrip .stacklink:hover { color: var(--core); text-decoration-style: solid; }
   .stackstrip .row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
   .stackstrip .chips { flex: 1; display: grid; grid-template-columns: repeat(var(--n), 1fr); gap: 6px; }
   .stackstrip .foot { margin-top: 8px; }
@@ -565,7 +567,8 @@ function stackStripHtml() {
   // five slots with this PR always in the middle one; slots past either end of the stack stay empty
   const side = (STRIP_SHOWN - 1) / 2;
   const shown = Array.from({ length: STRIP_SHOWN }, (_, i) => st.prs[here - side + i] ?? null);
-  return `<div>${name} · part ${at} of ${st.prs.length}</div>
+  const title = st.url ? `<a class="stacklink" href="${esc(st.url)}" target="_blank" rel="noopener" title="Open the stack on GitHub">${name}</a>` : name;
+  return `<div>${title} · part ${at} of ${st.prs.length}</div>
     <div class="row">${step(below, 'PR below', 'M10 3 5 8l5 5', 'ArrowLeft')}<div class="chips" style="--n:${STRIP_SHOWN}">${shown.map(p => p ? chip(p) : '<span class="chip empty" aria-hidden="true"></span>').join('')}</div>${step(above, 'PR above', 'm6 3 5 5-5 5', 'ArrowRight')}</div>
     ${overview ? `<div class="foot">${overview}</div>` : ''}`;
 }
