@@ -254,6 +254,23 @@ class StackFoundByBranches(unittest.TestCase):
         self.assertEqual((plan["map"], plan["stack"]["prs"][:3]), ([3], [1, 2, 3]))
 
 
+class StackContext(unittest.TestCase):
+    """What fetch records for each mapped PR about the stack around it."""
+
+    def test_mid_stack_pr(self):
+        context = mergeatlas.stack_context(resolve([pr(5)]), 5)
+        self.assertEqual(context, {"number": 9, "source": "native", "base": "main", "prs": STACK,
+                                   "position": 5, "below": 4, "above": 6})
+
+    def test_bottom_and_top(self):
+        plan = resolve([stack_link(9)])
+        self.assertEqual((mergeatlas.stack_context(plan, 1)["below"], mergeatlas.stack_context(plan, 1)["above"]), (None, 2))
+        self.assertEqual((mergeatlas.stack_context(plan, 8)["below"], mergeatlas.stack_context(plan, 8)["above"]), (7, None))
+
+    def test_pr_in_no_stack(self):
+        self.assertIsNone(mergeatlas.stack_context(resolve([pr(11)], extra=[lone_pr(11)]), 11))
+
+
 @unittest.skipUnless(os.environ.get("MERGEATLAS_LIVE"), "set MERGEATLAS_LIVE=1 to call GitHub")
 class LiveGitHub(unittest.TestCase):
     """The real adapter answers as the fixture does, so the fake stays honest."""

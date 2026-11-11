@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Mechanical half of the mergeatlas skill.
 
-  mergeatlas.py fetch [number]   Fetch a PR into the work directory.
+  mergeatlas.py fetch [link...] [--stack]
+                                 Fetch PRs into the work directory. A link is a PR link, a PR number or a
+                                 stack link; none means the current branch's PR. A stack link maps the whole
+                                 stack, a PR link maps that PR, and --stack maps the whole stack a PR sits in.
   mergeatlas.py search <map-id> [--substring | --regex | --paths] <term>
                                  Search the PR's head commit outside its changed files and log the result.
                                  Matches whole words unless --substring or --regex.
@@ -289,10 +292,46 @@ class GhGitHub:
         return self._pulls(repo, f"base={quote(branch)}")
 
 
-def fetch(number):
+def stack_context(plan, number):
+    """The stack around one mapped PR: the whole stack, where the PR sits in it, and its neighbours."""
+    stack = plan["stack"]
+    if stack is None:
+        return None
+    prs, at = stack["prs"], stack["prs"].index(number)
+    return {**stack, "position": at + 1, "below": prs[at - 1] if at else None, "above": prs[at + 1] if at + 1 < len(prs) else None}
+
+
+def fetch(args):
+    targets, whole_stack = parse_fetch_args(args)
+    github = GhGitHub()
+    if not targets:
+        try:
+            targets = [("pr", None, int(gh("pr", "view", "--json", "number", "--jq", ".number")))]
+        except subprocess.CalledProcessError:
+            sys.exit("No pull request for the current branch: give a PR or stack link.")
+    try:
+        plan = resolve(targets, github, whole_stack=whole_stack)
+    except (ValueError, LookupError) as problem:
+        sys.exit(str(problem))
+    here = github.current_repo()
+    if here.lower() != plan["repo"].lower():
+        sys.exit(f"Run fetch from inside a clone of {plan['repo']}; this is {here}.")
+    stack = plan["stack"]
+    if stack:
+        name = f"stack #{stack['number']}" if stack["number"] else "a stack of branches"
+        print(f"stack:       {name} on {stack['base']}, bottom to top: {' '.join(f'#{n}' for n in stack['prs'])}")
+        print(f"mapping:     {' '.join(f'#{n}' for n in plan['map'])}")
+        if plan["added"]:
+            print(f"added:       {' '.join(f'#{n}' for n in plan['added'])}, not given but between the PRs given")
+    for number in plan["map"]:
+        print()
+        fetch_pr(plan["repo"], number, stack_context(plan, number))
+
+
+def fetch_pr(repo, number, stack):
     fields = "number,title,body,additions,deletions,files,headRefName,headRefOid,url,closingIssuesReferences"
-    pr = json.loads(gh("pr", "view", *number, "--json", fields))
-    repo = pr["url"].split("/pull/")[0].split("github.com/")[1]
+    pr = json.loads(gh("pr", "view", str(number), "--repo", repo, "--json", fields))
+    pr["stack"] = stack
     map_id = f"{repo.replace('/', '-')}-{pr['number']}"
     pr["issues"] = [
         json.loads(gh("issue", "view", str(i["number"]), "--repo", repo, "--json", "number,title,body,url"))
@@ -309,6 +348,10 @@ def fetch(number):
     (WORK / f"{map_id}.searches.json").write_text("[]")
     (WORK / f"{map_id}.pr.json").write_text(json.dumps(pr))
     print(f"map id:      {map_id}")
+    if stack:
+        neighbours = [f"below it #{stack['below']}" if stack["below"] else "at the bottom",
+                      f"above it #{stack['above']}" if stack["above"] else "at the top"]
+        print(f"in stack:    {stack['position']} of {len(stack['prs'])}, {', '.join(neighbours)}")
     print(f"work dir:    {WORK}")
     print(f"head commit: {pr['headRefOid']}")
     print(f"diff:        {diff_path} ({len(diff_path.read_text().splitlines())} lines, binary files omitted)")
@@ -828,7 +871,7 @@ def show_config():
 
 def main():
     command, args = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else ("", [])
-    if command == "fetch" and len(args) <= 1:
+    if command == "fetch":
         fetch(args)
     elif command == "search" and len(args) in (2, 3) and args[1:-1] in ([], ["--substring"], ["--regex"], ["--paths"]):
         search(args[0], args[-1], args[1].removeprefix("--") if len(args) == 3 else "word")
