@@ -47,6 +47,10 @@ The reader is a skilled engineer asked to review a change that spans across file
 
 10. **Stack story.** Only when you mapped a whole stack, from a stack link or `--stack`, and only once every map in it is published. Each map's story covers its own PR, so the change the stack makes as a whole is told once, here. Write `<work-dir>/<stack-id>.input.json` with `background`, `problem` and `solution`, following Story and No open whys as for a map, where the problem is the one the whole stack solves. `solution` covers the PRs bottom to top and links each with `[words](#N)`, its PR number. Run `python3 <skill-dir>/scripts/mergeatlas.py publish-stack <stack-id>`, which rejects a story that misses a PR; fix and rerun. Cold read it as in step 8, with `card <stack-id> story`, where `[→ PR #N]` marks a link to a PR. Done when it prints a URL and the page shows every PR. Give the user the stack page's URL with the maps' URLs: every map shows the stack, links the maps around it, and links the stack page.
 
+## Reporting a map
+
+When the user says a map went wrong or took too long and wants to report it, run `python3 <skill-dir>/scripts/mergeatlas.py report <map-id>` and give them its output with the link https://github.com/ismayilkarimli/MergeAtlas/issues/new/choose. The output is counts alone, so add nothing from the map or the repository to it unless the user asks.
+
 ## Tickets
 
 `fetch` lists `possible ticket` lines: links to trackers such as Jira, Linear or Trello, and bare keys such as `ENG-123` from the title, description and branch. Keys are candidates, so drop the ones that are plainly something else, such as `UTF-8` or a branch's GitHub issue number. Links in the PR description to any other tracker count too.

@@ -200,7 +200,7 @@ class RefreshWork(unittest.TestCase):
             "cards": [{"id": "cfg", "kind": "config", "title": "cfg.txt", "paths": ["cfg.txt"],
                        "summary": "Holds [the setting](cfg.txt#L2).", "bullets": ["b"],
                        "changes": [{"intent": "i1", "problem": "b is lower case.",
-                                    "change": f"This PR writes [B](cfg.txt#L2), which [read](app.py#L3) returns.",
+                                    "change": "This PR writes [B](cfg.txt#L2), which [read](app.py#L3) returns.",
                                     "result": "B is upper case.", "snippets": [line]}]}],
             "edges": [], "intents": [{"id": "i1", "title": "Capitalise b", "outcome": "After this PR, cfg.txt holds B."}],
         }))

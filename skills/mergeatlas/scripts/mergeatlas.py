@@ -19,22 +19,31 @@
   mergeatlas.py config           Print the config file's path and the model each agent gives its cold readers.
   mergeatlas.py config set <agent> <model | own> [effort]
                                  Save the cold readers' model for an agent; own means the agent's own model.
+  mergeatlas.py report <map-id>  Sum up how a map's run went, in numbers alone, to paste into a bug report.
+  mergeatlas.py version          Print the version.
 """
 import difflib
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
+import time
 import urllib.request
 from collections import Counter
 from functools import lru_cache, partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
+
+# The release this file belongs to. .claude-plugin/plugin.json and CHANGELOG.md name the same one, and a test holds them to it.
+VERSION = "0.1.0"
+OLDEST_PYTHON = (3, 9)
 
 HOME = Path.home() / ".cache" / "mergeatlas"
 WORK = HOME / "work"
@@ -61,6 +70,10 @@ EDGE_FIELDS = ("from", "to", "kind", "label", "relationship", "connection", "con
 CARD_TEXT = ("summary", "bullets")
 CHANGE_TEXT = ("problem", "change", "result")
 EDGE_TEXT = ("relationship", "connection", "flow", "effect")
+# An id is a slug: the story links to it, and the viewer writes it into the page as it is.
+SLUG = re.compile(r"[\w-]+")
+# All the viewer's server hands out: the viewer itself and the published maps.
+SERVED = re.compile(r"/(index\.html)?|/data/[\w.-]+\.json")
 CARD_LINK = re.compile(r"\[[^\]]+\]\(([\w-]+)\)")
 LOCATION = r"([^)#\s]+)#L(\d+)(?:-L(\d+))?"
 CODE_LINK = re.compile(r"\[[^\]]+\]\(" + LOCATION + r"\)")
@@ -517,6 +530,8 @@ def fetch_pr(repo, number, stack):
         diff, pr["files"] = local_diff(built, head)
         pr["additions"], pr["deletions"] = sum(f["additions"] for f in pr["files"]), sum(f["deletions"] for f in pr["files"])
     status, plan = refresh_work(map_id, pr, diff, built)
+    note(map_id, "fetch", status=status, files=len(pr["files"]), additions=pr["additions"], deletions=pr["deletions"],
+         diff_lines=len(diff.splitlines()))
     url = f"http://127.0.0.1:{PORT}/?map={map_id}"
     if status == "same-head":
         shutil.copy(VIEWER, HOME / "index.html")
@@ -589,6 +604,7 @@ def search(map_id, term, mode):
     log = [s for s in json.loads(log_path.read_text()) if (s["term"], s["mode"]) != (term, mode)]
     log.append({"term": term, "mode": mode, "files": list(matches)})
     log_path.write_text(json.dumps(log, indent=2))
+    note(map_id, "search", mode=mode, files=len(matches))
     record = stack_of_map(pr)
     labels = stack_labels(record, pr["number"]) if record else {}
     named = lambda path: f"{path}  ({labels[path]})" if path in labels else path
@@ -823,7 +839,7 @@ def refresh_work(map_id, pr, diff, built):
         old.setdefault("baseRefName", pr.get("baseRefName"))
         work["pr.json"].write_text(json.dumps(old))
         if unpinned:
-            publish(map_id)
+            publish(map_id, asked=False)
         return "same-head", None
     old_rows, new_rows = diff_rows(work["diff"].read_text()), diff_rows(diff)
     old_paths = [f["path"] for f in old["files"]]
@@ -845,7 +861,7 @@ def refresh_work(map_id, pr, diff, built):
     plan = redo_plan(data["cards"], old_rows, new_rows, old_paths, paths, broken)
     if same and not broken:
         try:
-            publish(map_id)
+            publish(map_id, asked=False)
             return "refreshed", None
         except SystemExit as rejected:
             return "partial", {**plan, "redo": [c["id"] for c in data["cards"]], "keep": [], "problems": str(rejected)}
@@ -922,7 +938,7 @@ def problems_in(data, stats, read, rows, searches, together, issues=()):
                     found.append(f"{where}: a snippet is not in the diff of one of its files, in order")
                 if not any(line.startswith(("+", "-")) for line in code.splitlines()):
                     found.append(f"{where}: its key lines change nothing, so this is no change of this PR")
-        for code, changes in shown.items():
+        for changes in shown.values():
             if len({change.get("problem") for change in changes}) < len(changes):
                 found.append(f"card {name}: changes {[number for number, change in enumerate(c['changes'], 1) if change in changes]} share lines, so each states its own problem")
         if c.get("kind") in REACH_KINDS and len(c.get("paths", [])) > 1:
@@ -943,6 +959,8 @@ def problems_in(data, stats, read, rows, searches, together, issues=()):
             found.append(f"card {name}: unknown kind {c.get('kind')}")
         if name in ids:
             found.append(f"card {name}: duplicate id")
+        if not SLUG.fullmatch(str(name)):
+            found.append(f"card {name}: an id takes letters, digits, - and _ only")
         ids.add(name)
         for p in c.get("paths", []):
             if p not in stats:
@@ -967,6 +985,8 @@ def problems_in(data, stats, read, rows, searches, together, issues=()):
         found += [f"intent {name}: missing {k}" for k in INTENT_FIELDS if not g.get(k)]
         if name in ids or intent_ids.index(name) != at:
             found.append(f"intent {name}: duplicate id")
+        if not SLUG.fullmatch(str(name)):
+            found.append(f"intent {name}: an id takes letters, digits, - and _ only")
         found += whys(f"intent {name} outcome", g.get("outcome") or "")
         for base in g.get("builds_on", []):
             where = f"intent {name} builds on {base.get('intent')}"
@@ -1030,11 +1050,146 @@ def problems_in(data, stats, read, rows, searches, together, issues=()):
     return found
 
 
-class NoStoreHandler(SimpleHTTPRequestHandler):
-    """Keeps browsers from pairing a cached viewer with a newly published map."""
+# What a rejection was for, by the words publish and publish-stack use, so report can count rejections without quoting
+# the map. The first match wins, so the rules whose messages quote a sentence of the map come first.
+RULES = (
+    ("open-why", "a reason ends with no code link"),
+    ("leans-on-another-card", ": leans on "),
+    ("stack-story", "stack story: needs"),
+    ("stack-story", "solution: link every PR"),
+    ("stack-story", "not in this stack"),
+    ("ticket", "ticket "),
+    ("link-to-missing-lines", ": no such lines "),
+    ("claim-without-code-link", "has no code link"),
+    ("no-key-lines", ": has no key lines"),
+    ("snippet-not-in-diff", ": a snippet is not in the diff"),
+    ("key-lines-change-nothing", ": its key lines change nothing"),
+    ("shared-lines-repeat-a-problem", " share lines, so each states its own problem"),
+    ("several-files-on-one-card", " card holds one file"),
+    ("unaffected-without-reason", ": an unaffected entry has no reason"),
+    ("reach-names-missing-file", ": no such file "),
+    ("unknown-kind", ": unknown kind "),
+    ("duplicate-id", ": duplicate id"),
+    ("id-not-a-slug", ": an id takes letters"),
+    ("file-not-in-pr", " is not in this PR"),
+    ("file-on-two-cards", " is already in another card"),
+    ("file-without-card", "no card holds "),
+    ("no-searches", "no searches logged"),
+    ("broad-search", "broad search "),
+    ("reach-not-sorted", "not accounted for: "),
+    ("builds-on-order", ": builds only on an intent listed before it"),
+    ("mechanical", "one mechanical intent holds"),
+    ("mechanical", "a mechanical change names its reason"),
+    ("mechanical", "only a change in the mechanical intent"),
+    ("not-whitespace-only", "indentation is logic in"),
+    ("not-whitespace-only", " changes more than whitespace"),
+    ("change-without-intent", ": no intent "),
+    ("intent-without-change", ": no change"),
+    ("intent-of-tests-only", ": every change is a test"),
+    ("arrow-to-itself", ": points at itself"),
+    ("arrow-to-missing-card", ": no card "),
+    ("connection-code-not-found", ": not at "),
+    ("story-links", "solution links to unknown"),
+    ("story-links", "solution has no link to intent"),
+    ("missing-part", "missing "),
+)
+
+
+def rule_of(problem):
+    return next((rule for rule, words in RULES if words in problem), "other")
+
+
+def note(map_id, step, **numbers):
+    """Adds one step to a map's run record: when it ran and its counts, never code, paths or the map's words. The record
+    stays on this machine, and report sums it up."""
+    try:
+        WORK.mkdir(parents=True, exist_ok=True)
+        with (WORK / f"{map_id}.run.jsonl").open("a") as record:
+            record.write(json.dumps({"at": round(time.time(), 1), "step": step, "version": VERSION, **numbers}) + "\n")
+    except OSError:
+        pass  # a record that cannot be written never costs the map
+
+
+def words_in(data):
+    """How much a map asks its reader to read: every piece of prose, counted without its link targets."""
+    texts = [data.get(k, "") for k in ("background", "problem", "solution")]
+    texts += [t for c in data.get("cards", []) for t in card_texts(c)]
+    texts += [e.get(k, "") for e in data.get("edges", []) for k in EDGE_TEXT]
+    texts += [g.get("outcome", "") for g in data.get("intents", [])]
+    return sum(len(ANY_LINK.sub(r"\1", str(t or "")).split()) for t in texts)
+
+
+def minutes(seconds):
+    return f"{seconds:.0f} s" if seconds < 90 else f"{seconds / 60:.0f} min"
+
+
+def summary_of(steps):
+    """The lines report prints for a map's latest run. A run starts where fetch hands the agent work to do."""
+    starts = [i for i, s in enumerate(steps) if s["step"] == "fetch" and s.get("status") in ("new", "partial")]
+    run = steps[starts[-1]:] if starts else steps
+    of = lambda step: [s for s in run if s["step"] == step]
+    lines = [f"run            {len(starts) or 1} of {len(starts) or 1} for this map, MergeAtlas {', '.join(sorted({s['version'] for s in run}))}"]
+    for f in of("fetch")[:1]:
+        again = "new" if f["status"] == "new" else "changed since its last map"
+        lines.append(f"pull request   {f['files']} files, +{f['additions']} -{f['deletions']}, {f['diff_lines']} diff lines, {again}")
+    searches = of("search")
+    if searches:
+        modes = Counter(s["mode"] for s in searches)
+        lines.append(f"searches       {len(searches)} ({', '.join(f'{n} {mode}' for mode, n in modes.most_common())}), "
+                     f"{sum(s['files'] for s in searches)} files matched")
+    publishes = of("publish")
+    rejected = Counter()
+    for attempt in publishes:
+        rejected.update(attempt.get("rejected_for", {}))
+    if publishes:
+        lines.append(f"publishes      {len(publishes)}, of which {sum(not a['accepted'] for a in publishes)} rejected")
+    if rejected:
+        lines.append(f"rejected for   {', '.join(f'{rule} {n}' for rule, n in rejected.most_common())}")
+    rounds = sum(1 for before, s in zip([None, *run], run) if s["step"] == "card" and (before or {}).get("step") != "card")
+    if rounds:
+        lines.append(f"cold reads     {len(of('card'))} cards and stories printed, over {rounds} rounds")
+    accepted = [a for a in publishes if a["accepted"]]
+    if accepted:
+        last = accepted[-1]
+        lines.append(f"map            {last['cards']} cards, {last['intents']} intents, {last['arrows']} arrows, {last['words']} words")
+        lines.append(f"time           {minutes(accepted[0]['at'] - run[0]['at'])} to the first accepted publish, "
+                     f"{minutes(run[-1]['at'] - run[0]['at'])} to the last step")
+    return lines
+
+
+def report(map_id):
+    """Sums up a map's latest run in numbers alone, so it can go into a bug report as it stands."""
+    path = WORK / f"{map_id}.run.jsonl"
+    if not path.exists():
+        sys.exit(f"no run record for {map_id}: one is kept from the next fetch on")
+    steps = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    print(f"MergeAtlas {VERSION}, Python {platform.python_version()}, {platform.system()} {platform.machine()}")
+    print("Numbers alone: no code, no paths, no repository name and no words from the map.")
+    print("\n".join(summary_of(steps)))
+
+
+class ViewerHandler(SimpleHTTPRequestHandler):
+    """Serves the viewer and the published maps to this machine alone. The cache also holds the diffs and PR text of
+    private repositories, so nothing else in it is served. A request made under another host name is refused, since
+    that is how a web page whose own domain points at 127.0.0.1 would ask for them."""
+
+    def send_head(self):
+        port = self.server.server_address[1]
+        if self.headers.get("Host") not in (f"127.0.0.1:{port}", f"localhost:{port}"):
+            self.send_error(403, "MergeAtlas answers on 127.0.0.1 and localhost only")
+            return None
+        if not SERVED.fullmatch(urlsplit(self.path).path):
+            self.send_error(404)
+            return None
+        return super().send_head()
 
     def end_headers(self):
+        # no-store keeps browsers from pairing a cached viewer with a newly published map
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        # serve reads these two to tell a server from another release, and to stop that one
+        self.send_header("X-MergeAtlas-Version", VERSION)
+        self.send_header("X-MergeAtlas-Pid", str(os.getpid()))
         super().end_headers()
 
 
@@ -1051,9 +1206,11 @@ def card_text(map_id, card_id):
     if (WORK / f"{map_id}.stack.json").exists():
         if card_id != "story":
             sys.exit("a stack has only its story to read")
+        note(map_id, "card", story=True)
         print("\n\n".join(plain(data.get(k)) for k in ("background", "problem", "solution")))
         return
     if card_id == "story":
+        note(map_id, "card", story=True)
         print("\n\n".join(plain(data.get(k)) for k in ("background", "problem", "solution")))
         for g in data.get("intents", []):
             print(f"\nintent {g['id']}: {g['title']}\noutcome: {plain(g['outcome'])}")
@@ -1064,6 +1221,7 @@ def card_text(map_id, card_id):
     if card_id not in cards:
         sys.exit(f"no card {card_id}: choose from story, {', '.join(cards)}")
     c = cards[card_id]
+    note(map_id, "card", story=False)
     print(f"# {', '.join(c['paths'])}")
     print(f"\nsummary: {plain(c['summary'])}")
     for number, change in enumerate(c["changes"], 1):
@@ -1087,27 +1245,61 @@ def card_text(map_id, card_id):
 
 
 def run_server():
-    ThreadingHTTPServer(("127.0.0.1", PORT), partial(NoStoreHandler, directory=HOME)).serve_forever()
+    ThreadingHTTPServer(("127.0.0.1", PORT), partial(ViewerHandler, directory=HOME)).serve_forever()
+
+
+def listening():
+    with socket.socket() as s:
+        return s.connect_ex(("127.0.0.1", PORT)) == 0
+
+
+def unversioned_server():
+    """The process id of a viewer server from before servers named their release, None when it cannot be told. Such a
+    server hands out the whole cache, so serve replaces it. Only a process running this script's serve command counts."""
+    try:
+        pids = subprocess.run(["lsof", "-ti", f"tcp:{PORT}", "-sTCP:LISTEN"], capture_output=True, text=True).stdout.split()
+        for pid in pids:
+            command = subprocess.run(["ps", "-p", pid, "-o", "command="], capture_output=True, text=True).stdout
+            if "mergeatlas.py" in command and command.split()[-1:] == ["serve"]:
+                return pid
+    except OSError:
+        pass
+    return None
 
 
 def serve():
-    with socket.socket() as s:
-        running = s.connect_ex(("127.0.0.1", PORT)) == 0
-    if running:
+    """Starts the viewer server unless this release's is running, and replaces one left running by another release."""
+    if listening():
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/index.html", timeout=3) as res:
-                if b"id=\"world\"" in res.read():
-                    return
+                ours, version, pid = b"id=\"world\"" in res.read(), res.headers.get("X-MergeAtlas-Version"), res.headers.get("X-MergeAtlas-Pid")
+        except OSError:
+            ours = False
+        if not ours:
+            sys.exit(f"Port {PORT} is in use by something other than the MergeAtlas viewer.")
+        if version == VERSION:
+            return
+        pid = pid if version else unversioned_server()
+        if not (pid and pid.isdigit()):
+            print(f"An older MergeAtlas viewer server is running on port {PORT} and could not be replaced. "
+                  f"Stop it, then publish again.", file=sys.stderr)
+            return
+        try:
+            os.kill(int(pid), signal.SIGTERM)
         except OSError:
             pass
-        sys.exit(f"Port {PORT} is in use by something other than the MergeAtlas viewer.")
+        for _ in range(30):
+            if not listening():
+                break
+            time.sleep(0.1)
     subprocess.Popen(
         [sys.executable, __file__, "serve"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
     )
 
 
-def publish(map_id):
+def publish(map_id, asked=True):
+    """Checks the map and serves it. asked is False when fetch republishes a map by itself, which the run record leaves out."""
     pr = json.loads((WORK / f"{map_id}.pr.json").read_text())
     data = json.loads((WORK / f"{map_id}.input.json").read_text())
     stats = {f["path"]: (f["additions"], f["deletions"]) for f in pr["files"]}
@@ -1120,7 +1312,12 @@ def publish(map_id):
     together = json.loads((WORK / f"{map_id}.cochange.json").read_text())
     problems = problems_in(data, stats, read, rows, searches, together, pr["issues"])
     if problems:
+        if asked:
+            note(map_id, "publish", accepted=False, rejected_for=Counter(rule_of(p) for p in problems))
         sys.exit("Map rejected:\n" + "\n".join(f"  {p}" for p in problems))
+    if asked:
+        note(map_id, "publish", accepted=True, cards=len(data["cards"]), intents=len(data["intents"]),
+             arrows=len(data["edges"]), words=words_in(data))
     for c in data["cards"]:
         c["add"] = sum(stats[p][0] for p in c["paths"])
         c["del"] = sum(stats[p][1] for p in c["paths"])
@@ -1198,7 +1395,9 @@ def publish_stack(stack_id):
     record, data = json.loads(record_path.read_text()), json.loads(story_path.read_text())
     problems = stack_problems(data, record)
     if problems:
+        note(stack_id, "publish-stack", accepted=False, rejected_for=Counter(rule_of(p) for p in problems))
         sys.exit("Stack story rejected:\n" + "\n".join(f"  {p}" for p in problems))
+    note(stack_id, "publish-stack", accepted=True, words=words_in(data))
     DATA.mkdir(parents=True, exist_ok=True)
     (DATA / f"{stack_id}.json").write_text(json.dumps(stack_page(data, record, published_maps(record)), indent=2))
     refresh_stack(record)
@@ -1221,6 +1420,7 @@ def export(map_id, target=None):
     filled = f'<script type="application/json" id="map-data" data-map="{map_id}">{carried}</script>'
     path = Path(target).expanduser() if target else Path.cwd() / f"{map_id}.html"
     path.write_text(viewer.replace(MAP_SLOT, filled, 1))
+    note(map_id, "export")
     print(f"{path} ({path.stat().st_size // 1024} KB)")
 
 
@@ -1271,8 +1471,14 @@ def show_config():
 
 
 def main():
+    if sys.version_info < OLDEST_PYTHON:
+        sys.exit(f"MergeAtlas needs Python {'.'.join(map(str, OLDEST_PYTHON))} or newer; this is {platform.python_version()}.")
     command, args = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else ("", [])
-    if command == "fetch":
+    if command in ("version", "--version") and not args:
+        print(VERSION)
+    elif command == "report" and len(args) == 1:
+        report(args[0])
+    elif command == "fetch":
         fetch(args)
     elif command == "search" and len(args) in (2, 3) and args[1:-1] in ([], ["--substring"], ["--regex"], ["--paths"]):
         search(args[0], args[-1], args[1].removeprefix("--") if len(args) == 3 else "word")

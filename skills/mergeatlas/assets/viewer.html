@@ -509,7 +509,10 @@ let CARDS = [], EDGES = [], META = {}, VIEWS = {};
 const intentsOf = {};
 
 /* ---------- state ---------- */
-const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// quotes too, since much of this text lands inside attributes, and a PR title is whatever its author typed
+const ENTITY = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' };
+const esc = t => String(t).replace(/[&<>"']/g, c => ENTITY[c]);
+const unesc = t => t.replace(/&(amp|lt|gt|quot|apos);/g, e => Object.keys(ENTITY).find(c => ENTITY[c] === e));
 const codeUrl = at => {
   const [path, lines = ''] = at.split('#'), diff = META.diffs[path];
   return diff ? `${META.url}/files#diff-${diff}${lines.replace(/L/g, 'R')}` : META.blob + at;
@@ -525,7 +528,7 @@ const keyLine = ({ gap, text, path, line, key }) => {
 };
 const codeLink = (at, text) => `<a class="codelink" href="${esc(codeUrl(at))}" target="_blank" rel="noopener">${text}</a>`;
 const fmt = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-  .replace(/\[([^\]]+)\]\(([^)#\s]+#L\d+(?:-L\d+)?)\)/g, (_, text, at) => codeLink(at, text) + fromBadge(at.split('#')[0]));
+  .replace(/\[([^\]]+)\]\(([^)#\s]+#L\d+(?:-L\d+)?)\)/g, (_, text, at) => codeLink(unesc(at), text) + fromBadge(unesc(at).split('#')[0]));
 /* ---------- stack ---------- */
 /* A PR in a stack builds on the PRs below it. Code a card links to that a PR below wrote gets a "from #N" badge that
    opens that PR's map at the card for the file, and the panel shows the whole stack with a way to each map. */

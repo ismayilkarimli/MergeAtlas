@@ -52,7 +52,7 @@ It recognises links from Jira, Linear, Trello, Asana, Shortcut, ClickUp and Azur
 You'll need:
 
 - An agent that runs skills, such as Claude Code or Codex
-- Python 3
+- Python 3.9 or newer
 - `git`
 - The [GitHub CLI](https://cli.github.com), signed in with `gh auth login`
 
@@ -68,7 +68,7 @@ Add this repository as a plugin marketplace, then install the plugin:
 /plugin install mergeatlas@mergeatlas
 ```
 
-Plugin skills carry the plugin's name, so the command is `/mergeatlas:mergeatlas`. Asking your agent to map a pull request works too. To update, run `/plugin marketplace update mergeatlas`.
+Plugin skills carry the plugin's name, so the command is `/mergeatlas:mergeatlas`. Asking your agent to map a pull request works too. The plugin stays on a release until the next one is published; to bring that in, run `/plugin marketplace update mergeatlas`. [CHANGELOG.md](CHANGELOG.md) lists what each release changed.
 
 ### Other agents, such as Codex
 
@@ -116,9 +116,19 @@ To change the saved choice later, ask your agent, such as "set MergeAtlas's cold
 }
 ```
 
+### When a map goes wrong
+
+Ask your agent to "report this map". It runs `mergeatlas.py report`, which sums up the run: the size of the pull request, how many searches ran, what the map was rejected for before it was published, how many cold-read rounds it took, and how long it all took. The summary is numbers alone, with no code, paths, repository name or words from the map, so you can paste it into [an issue](https://github.com/ismayilkarimli/MergeAtlas/issues/new/choose) as it stands.
+
 ## How it works
 
 The analysis comes from your agent, which reads the issue, the diff and the surrounding source. `skills/mergeatlas/scripts/mergeatlas.py` does the mechanical part: it fetches the pull request, runs the searches your agent chooses for affected files, checks the map against the diff, and serves it. Those searches are plain text, so MergeAtlas works in any language. Maps and working files stay on your machine in `~/.cache/mergeatlas`.
+
+The viewer's server listens on `127.0.0.1` alone. It hands out the viewer and the published maps and nothing else in that folder, and it refuses requests made under any other host name. To report a security problem, see [SECURITY.md](SECURITY.md).
+
+## Contributing
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers running the tests, what CI checks, and how a release is made.
 
 ## License
 
