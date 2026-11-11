@@ -20,6 +20,7 @@
   mergeatlas.py config set <agent> <model | own> [effort]
                                  Save the cold readers' model for an agent; own means the agent's own model.
 """
+import difflib
 import hashlib
 import json
 import os
@@ -63,6 +64,7 @@ EDGE_TEXT = ("relationship", "connection", "flow", "effect")
 CARD_LINK = re.compile(r"\[[^\]]+\]\(([\w-]+)\)")
 LOCATION = r"([^)#\s]+)#L(\d+)(?:-L(\d+))?"
 CODE_LINK = re.compile(r"\[[^\]]+\]\(" + LOCATION + r"\)")
+SHIFTABLE = re.compile(r"(\[[^\]]+\]\()" + LOCATION + r"\)")
 STACK_LINK = re.compile(r"\[[^\]]+\]\(#(\d+)\)")
 ANY_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 CODE_SPAN = re.compile(r"`[^`]*`")
@@ -374,7 +376,7 @@ def card_texts(card):
 
 
 def stubs_for(data, record, number, maps):
-    """The "From #N" stubs: each file a card links to that this PR leaves alone and a PR below it changed, pointing at
+    """The "From #N" stubs: each file a card links to or reaches that this PR leaves alone and a PR below it changed, pointing at
     the nearest such PR, and at its map's card for that file when that map is published."""
     if record is None:
         return []
@@ -382,7 +384,8 @@ def stubs_for(data, record, number, maps):
     below, own = record["prs"][:numbers.index(number)], set(record["prs"][numbers.index(number)]["files"])
     stubs = {}
     for c in data["cards"]:
-        for path, _, _ in CODE_LINK.findall(" ".join(card_texts(c))):
+        reached = [path for entry in c.get("reaches", []) for path in entry.get("paths", [])]
+        for path in [*(m[0] for m in CODE_LINK.findall(" ".join(card_texts(c)))), *reached]:
             source = next((p for p in reversed(below) if path in p["files"]), None)
             if path in own or source is None:
                 continue
@@ -459,10 +462,39 @@ def fetch(args):
         print()
         context = stack_context(plan, number)
         fetch_pr(plan["repo"], number, context and {**context, "id": record["id"]})
+    if record:
+        refresh_stack(record)
+
+
+def has_commit(sha):
+    return subprocess.run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], capture_output=True).returncode == 0
+
+
+def ensure_commit(sha):
+    """Fetches a commit the clone lacks, such as a PR's old head after a force push; GitHub keeps them reachable."""
+    if sha and not has_commit(sha):
+        subprocess.run(["git", "fetch", "origin", sha], capture_output=True)
+
+
+def is_ancestor(older, newer):
+    return subprocess.run(["git", "merge-base", "--is-ancestor", older, newer], capture_output=True).returncode == 0
+
+
+def local_diff(built, head):
+    """The PR's own changes from the commit it was built on, with their file list, when GitHub's diff would also show a
+    squash-merged parent's changes."""
+    diff = subprocess.run(["git", "diff", "-M", built, head], capture_output=True, text=True, check=True).stdout
+    files = []
+    for line in subprocess.run(["git", "diff", "--numstat", "-M", built, head], capture_output=True, text=True,
+                               check=True).stdout.splitlines():
+        added, deleted, path = line.split("\t", 2)
+        files.append({"path": path, "additions": int(added) if added != "-" else 0,
+                      "deletions": int(deleted) if deleted != "-" else 0})
+    return text_only(diff), files
 
 
 def fetch_pr(repo, number, stack):
-    fields = "number,title,body,additions,deletions,files,headRefName,headRefOid,url,closingIssuesReferences"
+    fields = "number,title,body,additions,deletions,files,headRefName,headRefOid,baseRefName,baseRefOid,url,closingIssuesReferences"
     pr = json.loads(gh("pr", "view", str(number), "--repo", repo, "--json", fields))
     pr["stack"] = stack
     map_id = map_id_of(repo, pr["number"])
@@ -470,23 +502,50 @@ def fetch_pr(repo, number, stack):
         json.loads(gh("issue", "view", str(i["number"]), "--repo", repo, "--json", "number,title,body,url"))
         for i in pr.pop("closingIssuesReferences")
     ]
-    WORK.mkdir(parents=True, exist_ok=True)
-    diff_path = WORK / f"{map_id}.diff"
-    diff_path.write_text(text_only(gh("pr", "diff", str(pr["number"]), "--repo", repo)))
     subprocess.run(["git", "fetch", "origin", f"pull/{pr['number']}/head"], check=True, capture_output=True)
-    changed = {f["path"] for f in pr["files"]}
-    together = co_changes(changed, pr["headRefOid"])
-    cochange_path = WORK / f"{map_id}.cochange.json"
-    cochange_path.write_text(json.dumps(together, indent=2))
-    (WORK / f"{map_id}.searches.json").write_text("[]")
-    (WORK / f"{map_id}.pr.json").write_text(json.dumps(pr))
+    head, base = pr["headRefOid"], pr.pop("baseRefOid")
+    ensure_commit(base)
+    merge_base = subprocess.run(["git", "merge-base", head, base], capture_output=True, text=True).stdout.strip() or base
+    old_path = WORK / f"{map_id}.pr.json"
+    old = json.loads(old_path.read_text()) if old_path.exists() else {}
+    for sha in (old.get("pinned"), old.get("headRefOid")):
+        ensure_commit(sha)
+    built = built_on(merge_base, old.get("pinned"), head, is_ancestor)
+    if built == merge_base:
+        diff = text_only(gh("pr", "diff", str(pr["number"]), "--repo", repo))
+    else:
+        diff, pr["files"] = local_diff(built, head)
+        pr["additions"], pr["deletions"] = sum(f["additions"] for f in pr["files"]), sum(f["deletions"] for f in pr["files"])
+    status, plan = refresh_work(map_id, pr, diff, built)
+    url = f"http://127.0.0.1:{PORT}/?map={map_id}"
+    if status == "same-head":
+        shutil.copy(VIEWER, HOME / "index.html")
+        serve()
+        print(f"map id:      {map_id}\nmap:         unchanged since it was published (head {head[:7]}): {url}")
+        return
+    if status == "refreshed":
+        print(f"map id:      {map_id}\nmap:         refreshed by the script: the same changes on head {head[:7]}; links into "
+              f"its files moved with their lines, links outside stay at {pr['pinned'][:7]}: {url}")
+        return
+    diff_path, cochange_path = WORK / f"{map_id}.diff", WORK / f"{map_id}.cochange.json"
+    together = json.loads(cochange_path.read_text())
     print(f"map id:      {map_id}")
+    if plan:
+        print(f"map:         changed since it was published; keep the rest of {WORK / f'{map_id}.input.json'} as it is")
+        for what, items in [("write again the cards", plan["redo"]), ("keep the cards", plan["keep"]),
+                            ("add cards for the new files", plan["added"]), ("drop the files no longer in the PR", plan["gone"]),
+                            ("fix the links in", plan["fix"])]:
+            if items:
+                print(f"  {what}: {', '.join(items)}")
+        if plan.get("problems"):
+            print(f"  publish rejected the refreshed map:\n{plan['problems']}")
     if stack:
         neighbours = [f"below it #{stack['below']}" if stack["below"] else "at the bottom",
                       f"above it #{stack['above']}" if stack["above"] else "at the top"]
         print(f"in stack:    {stack['position']} of {len(stack['prs'])}, {', '.join(neighbours)}")
     print(f"work dir:    {WORK}")
     print(f"head commit: {pr['headRefOid']}")
+    print(f"built on:    {pr['pinned']}, where files outside the PR are read and linked")
     print(f"diff:        {diff_path} ({len(diff_path.read_text().splitlines())} lines, binary files omitted)")
     print(f"co-changes:  {cochange_path} ({len({u for file in together.values() for u in file})} unchanged files often change with these)")
     print(f"title:       {pr['title']}")
@@ -641,10 +700,157 @@ def indented(path):
     return name in INDENTED_NAMES or name.endswith(INDENTED_SUFFIXES)
 
 
+def changed_lines(rows, path):
+    return [line for line, *_ in rows.get(path, []) if line.startswith(("+", "-"))]
+
+
 def fingerprint(card, rows):
-    """Identifies a card's diff by its text, so moved lines keep the same value."""
-    text = "\n".join(line for path in card["paths"] for line, *_ in rows.get(path, []))
+    """Identifies a card's changes by their added and removed lines alone, so a rebase that only moves them or changes
+    the lines around them keeps the value, and the reviewer's marks with it."""
+    text = "\n".join(line for path in card["paths"] for line in changed_lines(rows, path))
     return hashlib.sha256(text.encode()).hexdigest()
+
+
+def patch_id(rows):
+    """Identifies a PR's changes as git patch-id does: every file's added and removed lines, with no line numbers."""
+    text = "\n".join(f"{path}\n" + "\n".join(changed_lines(rows, path)) for path in sorted(rows))
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def line_map(old, new):
+    """Maps each line number both versions of a file keep to its number in the new one."""
+    found = {}
+    for tag, i1, i2, j1, _ in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes():
+        if tag == "equal":
+            found.update({i1 + k + 1: j1 + k + 1 for k in range(i2 - i1)})
+    return found
+
+
+def shift_links(data, maps):
+    """Moves every code link and connection into a mapped file to where its lines are now. A link whose lines are gone,
+    or no longer sit together, stays as it was and its owner is reported, so the agent rewrites that part."""
+    broken = []
+
+    def moved(path, first, last):
+        first, last = int(first), int(last or first)
+        lines = maps[path]
+        new_first, new_last = lines.get(first), lines.get(last)
+        if new_first is None or new_last is None or new_last - new_first != last - first:
+            return None
+        return f"{path}#L{new_first}" + (f"-L{new_last}" if new_last != new_first else "")
+
+    def walk(item, owner, key=None):
+        if isinstance(item, dict):
+            return {k: walk(v, owner, k) for k, v in item.items()}
+        if isinstance(item, list):
+            return [walk(v, owner) for v in item]
+        if not isinstance(item, str):
+            return item
+        def shift(path, first, last, unchanged):
+            if path not in maps:
+                return unchanged
+            at = moved(path, first, last)
+            if at is None:
+                broken.append(owner)
+            return at or unchanged
+        at = re.fullmatch(LOCATION, item) if key == "connection_at" else None
+        if at:
+            return shift(*at.groups(), item)
+        return SHIFTABLE.sub(lambda m: f"{m[1]}{shift(m[2], m[3], m[4], m[0][len(m[1]):-1])})", item)
+
+    shifted = {}
+    for key, value in data.items():
+        if key == "cards":
+            shifted[key] = [walk(c, f"card {c.get('id')}") for c in value]
+        elif key == "edges":
+            shifted[key] = [walk(e, f"arrow {e.get('from')} -> {e.get('to')}") for e in value]
+        elif key == "intents":
+            shifted[key] = [walk(g, f"intent {g.get('id')}") for g in value]
+        else:
+            shifted[key] = walk(value, "story", key)
+    return shifted, list(dict.fromkeys(broken))
+
+
+def built_on(merge_base, pinned, head, is_ancestor):
+    """The commit a PR's own changes start from. That is its merge base, except when a parent was squash-merged and the
+    child not rebased: the child still holds the parent's old head, the commit its last map was built on, while its
+    merge base with the default branch falls back to before the parent's changes."""
+    if pinned and pinned != merge_base and is_ancestor(pinned, head) and is_ancestor(merge_base, pinned):
+        return pinned
+    return merge_base
+
+
+def redo_plan(cards, old_rows, new_rows, old_paths, new_paths, broken):
+    """Splits a map's cards into those whose changes are the same, which stay, and those the agent writes again."""
+    owners = {f"card {c['id']}" for c in cards}
+    redo = [c["id"] for c in cards
+            if fingerprint(c, old_rows) != fingerprint(c, new_rows) or f"card {c['id']}" in broken
+            or any(p not in new_paths for p in c["paths"])]
+    return {
+        "redo": redo, "keep": [c["id"] for c in cards if c["id"] not in redo],
+        "added": [p for p in new_paths if p not in old_paths], "gone": [p for p in old_paths if p not in new_paths],
+        "fix": [o for o in broken if o not in owners],
+    }
+
+
+def cited_paths(data):
+    """Every file a map links to, in its prose or in an arrow's connection."""
+    found = {m[2] for m in SHIFTABLE.finditer(json.dumps(data))}
+    return found | {at[1] for e in data.get("edges", []) if (at := re.fullmatch(LOCATION, e.get("connection_at", "")))}
+
+
+def refresh_work(map_id, pr, diff, built):
+    """Brings the work directory up to a fetched PR. A PR mapped before keeps its map when it can: the same head commit
+    changes nothing; the same changes on a new commit get their links shifted and are published again by the script;
+    otherwise the links are shifted where they still hold and the plan says which cards the agent writes again."""
+    work = {k: WORK / f"{map_id}.{k}" for k in ("pr.json", "input.json", "diff", "searches.json", "cochange.json")}
+    WORK.mkdir(parents=True, exist_ok=True)
+    known = all(work[k].exists() for k in ("pr.json", "input.json", "diff")) and (DATA / f"{map_id}.json").exists()
+    old = json.loads(work["pr.json"].read_text()) if known else None
+    paths = [f["path"] for f in pr["files"]]
+    if old is None:
+        pr["pinned"] = built
+        work["diff"].write_text(diff)
+        work["cochange.json"].write_text(json.dumps(co_changes(set(paths), pr["headRefOid"]), indent=2))
+        work["searches.json"].write_text("[]")
+        work["pr.json"].write_text(json.dumps(pr))
+        return "new", None
+    if old["headRefOid"] == pr["headRefOid"]:
+        old["stack"] = pr["stack"]
+        # a map from before links were pinned takes the commit it was built on once, which the same head leaves unchanged
+        unpinned = "pinned" not in old
+        old.setdefault("pinned", built)
+        old.setdefault("baseRefName", pr.get("baseRefName"))
+        work["pr.json"].write_text(json.dumps(old))
+        if unpinned:
+            publish(map_id)
+        return "same-head", None
+    old_rows, new_rows = diff_rows(work["diff"].read_text()), diff_rows(diff)
+    old_paths = [f["path"] for f in old["files"]]
+    same = patch_id(old_rows) == patch_id(new_rows) and sorted(old_paths) == sorted(paths)
+    old_pinned = old.get("pinned") or old["headRefOid"]
+    pr["pinned"] = old_pinned if same else built
+    old_head, old_pin = source_at(old["headRefOid"]), source_at(old_pinned)
+    new_head, new_pin = source_at(pr["headRefOid"]), source_at(pr["pinned"])
+    data, maps = json.loads(work["input.json"].read_text()), {}
+    for path in sorted(cited_paths(data)):
+        before = (old_head if path in old_paths else old_pin)(path)
+        after = (new_head if path in paths else new_pin)(path)
+        if before != after:
+            maps[path] = line_map(before, after) if before is not None and after is not None else {}
+    data, broken = shift_links(data, maps)
+    work["input.json"].write_text(json.dumps(data, indent=2))
+    work["diff"].write_text(diff)
+    work["pr.json"].write_text(json.dumps(pr))
+    plan = redo_plan(data["cards"], old_rows, new_rows, old_paths, paths, broken)
+    if same and not broken:
+        try:
+            publish(map_id)
+            return "refreshed", None
+        except SystemExit as rejected:
+            return "partial", {**plan, "redo": [c["id"] for c in data["cards"]], "keep": [], "problems": str(rejected)}
+    work["cochange.json"].write_text(json.dumps(co_changes(set(paths), pr["headRefOid"]), indent=2))
+    return "partial", plan
 
 
 def candidates_in(searches, broad, together):
@@ -905,7 +1111,10 @@ def publish(map_id):
     pr = json.loads((WORK / f"{map_id}.pr.json").read_text())
     data = json.loads((WORK / f"{map_id}.input.json").read_text())
     stats = {f["path"]: (f["additions"], f["deletions"]) for f in pr["files"]}
-    read = source_at(pr["headRefOid"])
+    # the PR's own files are read at its head; every other file at the commit the map was built on
+    pinned = pr.get("pinned") or pr["headRefOid"]
+    head_read, pinned_read = source_at(pr["headRefOid"]), source_at(pinned)
+    read = lambda path: head_read(path) if path in stats else pinned_read(path)
     rows = diff_rows((WORK / f"{map_id}.diff").read_text())
     searches = json.loads((WORK / f"{map_id}.searches.json").read_text())
     together = json.loads((WORK / f"{map_id}.cochange.json").read_text())
@@ -929,7 +1138,8 @@ def publish(map_id):
             "number": pr["number"], "title": pr["title"], "files": len(stats),
             "additions": pr["additions"], "deletions": pr["deletions"],
             "url": pr["url"],
-            "blob": f"{pr['url'].split('/pull/')[0]}/blob/{pr['headRefOid']}/",
+            "blob": f"{pr['url'].split('/pull/')[0]}/blob/{pinned}/",
+            "pinned": {"commit": pinned, "base": pr.get("baseRefName"), "below": (pr.get("stack") or {}).get("below")},
             "diffs": {p: hashlib.sha256(p.encode()).hexdigest() for p in stats},
             "issues": [
                 *({"label": f"#{i['number']}", "title": i["title"], "url": i["url"]} for i in pr["issues"]),

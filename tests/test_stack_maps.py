@@ -142,6 +142,11 @@ class Stubs(unittest.TestCase):
         stubs = mergeatlas.stubs_for(self.data, record(), 8, {})
         self.assertEqual({s["path"]: s["cited_by"] for s in stubs}["css/styles.css"], ["page", "loan"])
 
+    def test_files_a_card_reaches_count_as_cited(self):
+        self.data["cards"][1]["reaches"].append({"paths": ["pricing.html"], "effect": "Links it."})
+        stubs = mergeatlas.stubs_for(self.data, record(), 8, {})
+        self.assertEqual({s["path"]: s["cited_by"] for s in stubs}["pricing.html"], ["page"])
+
     def test_a_pr_with_nothing_below_gets_no_stubs(self):
         self.assertEqual(mergeatlas.stubs_for(self.data, record(), 1, {}), [])
 
@@ -151,7 +156,7 @@ class Stubs(unittest.TestCase):
 
 def story(solution=None):
     links = " ".join(f"[part {n}](#{n})." for n in range(1, 9))
-    return {"background": "The site is static HTML.", "problem": "No linked issue: there is no calculator.",
+    return {"background": "The site is static HTML.", "problem": "There is no calculator.",
             "solution": links if solution is None else solution}
 
 

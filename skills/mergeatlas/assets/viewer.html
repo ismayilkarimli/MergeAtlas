@@ -95,7 +95,9 @@
     border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; z-index: 5; }
   #panel .brand { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; color: var(--muted); font-size: 12px; font-weight: 600; }
   #panel .brand img { width: 24px; height: 24px; }
-  #panel h1 { margin: 0 0 2px; font-size: 16px; line-height: 1.3; }
+  /* the title always takes two lines, so the stack strip under it stays put from one PR to the next */
+  #panel h1 { margin: 0 0 2px; font-size: 16px; line-height: 1.3; height: 2.6em; display: flex; align-items: center; }
+  #panel h1 span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   #panel .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
   #panel { max-height: calc(100vh - 32px); overflow: auto; }
   #panel .body { font-size: 13px; }
@@ -108,28 +110,48 @@
   .codelink { color: var(--core); }
   #panel.collapsed .body { display: none; }
   .stackstrip { margin: -2px 0 10px; font-size: 12px; color: var(--muted); }
-  .stackstrip .row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
-  .stackstrip .chip { display: inline-grid; place-items: center; min-width: 26px; height: 22px; padding: 0 5px; box-sizing: border-box;
+  .stackstrip .row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .stackstrip .chips { flex: 1; display: grid; grid-template-columns: repeat(var(--n), 1fr); gap: 6px; }
+  .stackstrip .foot { margin-top: 8px; }
+  .stackstrip .chip { display: grid; place-items: center; height: 26px; padding: 0 5px; box-sizing: border-box;
     border: 1px solid var(--line); border-radius: 6px; color: var(--ink); font: 12px var(--mono); text-decoration: none; }
+  .stackstrip .chip.empty { border-color: transparent; }
   .stackstrip .chip.unmapped { border-style: dashed; color: var(--muted); }
   .stackstrip .chip.current { background: var(--core); border-color: var(--core); color: var(--card); font-weight: 700; }
   .stackstrip a.chip:hover { border-color: var(--core); }
-  .stackstrip .overview { margin-left: 4px; color: var(--core); font-weight: 600; text-decoration: none; }
+  .stackstrip .step { flex: none; display: grid; place-items: center; width: 28px; height: 26px; border-radius: 6px; color: var(--ink); }
+  .stackstrip .step svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .stackstrip a.step:hover { background: var(--code-bg); color: var(--core); }
+  .stackstrip span.step { color: var(--line); }
+  .stackstrip .overview { color: var(--core); font-weight: 600; text-decoration: none; }
   .stackstrip .overview:hover { text-decoration: underline; }
+  #panel .pinned { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
+  #panel .pinned a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
+  #panel .pinned a.sha { font-family: var(--mono); }
   .from-pr { margin-left: .3em; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted);
     font: 11px var(--mono); text-decoration: none; white-space: nowrap; }
   .from-pr:hover { color: var(--core); border-color: var(--core); }
-  body.stack-page { overflow: auto; height: auto; }
   body.stack-page > :not(#stackpage, script, svg) { display: none !important; }
-  #stackpage { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
-  #stackpage .brand { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 600; }
-  #stackpage h1 { margin: 8px 0 4px; font-size: 26px; letter-spacing: -.01em; }
-  #stackpage .meta { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
-  #stackpage h2.beat { margin: 22px 0 4px; }
-  #stackpage p { margin: 0; line-height: 1.55; }
-  #stackpage ol.prs { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
-  #stackpage .pr { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--core); border-radius: 10px; padding: 12px 14px; }
-  #stackpage .pr.unmapped { border-left-color: var(--line); border-left-style: dashed; }
+  #stackpage { position: fixed; inset: 0; overflow: auto; background: var(--bg); }
+  #stackpage .inner { max-width: 760px; margin: 0 auto; padding: 72px 16px 64px; font-size: 15px; }
+  #stackpage .back { position: fixed; left: 16px; top: 16px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); cursor: pointer; box-shadow: var(--shadow); }
+  #stackpage .back:hover { border-color: var(--muted); }
+  #stackpage .back svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  #stackpage h1 { margin: 0 0 6px; font-size: 34px; line-height: 1.15; letter-spacing: -.015em; }
+  #stackpage h1 a { color: var(--core); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 6px; }
+  #stackpage h1 a svg { width: .55em; height: .55em; margin-left: .2em; vertical-align: .05em; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  #stackpage h1 a:hover { text-decoration-thickness: 3px; }
+  #stackpage .meta { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  #stackpage h2.beat { margin: 28px 0 6px; }
+  #stackpage p { margin: 0; max-width: 68ch; line-height: 1.6; text-wrap: pretty; }
+  /* the PRs hang off one rail in stack order, each marked with its place */
+  #stackpage ol.prs { position: relative; list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
+  #stackpage ol.prs::before { content: ""; position: absolute; left: 13px; top: 26px; bottom: 26px; width: 2px; background: var(--line); }
+  #stackpage .pr { position: relative; margin-left: 40px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  #stackpage .pr .pos { position: absolute; left: -41px; top: 11px; display: grid; place-items: center; width: 28px; height: 28px; box-sizing: border-box;
+    border-radius: 50%; background: var(--core); color: var(--card); font: 600 12px var(--mono); font-variant-numeric: tabular-nums; }
+  #stackpage .pr.unmapped .pos { background: var(--bg); border: 1.5px dashed var(--muted); color: var(--muted); }
   #stackpage .pr .top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   #stackpage .pr .num { font: 600 13px var(--mono); color: var(--muted); }
   #stackpage .pr h3 { margin: 0; font-size: 16px; flex: 1 1 auto; }
@@ -147,7 +169,7 @@
     background: var(--card); box-shadow: var(--shadow); color: var(--ink); font-size: 13px; line-height: 1.5; }
   #share h2 { margin: 0 0 8px; font-size: 15px; }
   #share p { margin: 0 0 8px; }
-  #sharedl { margin-top: 4px; width: 100%; padding: 9px 12px; border: 0; border-radius: 8px; background: var(--core); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  #sharedl { margin-top: 4px; width: 100%; padding: 9px 12px; border: 0; border-radius: 8px; background: var(--core); color: var(--card); font: inherit; font-weight: 600; cursor: pointer; }
   #sharedl:disabled { opacity: .6; cursor: progress; }
   .swatches { display: inline-flex; gap: 2px; }
   .swatches i { width: 4px; height: 14px; border-radius: 2px; }
@@ -306,6 +328,9 @@
   .links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
   .links button { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 12px; }
   .links button:hover { border-color: var(--accent); }
+  .links a.button { display: inline-block; border: 1px solid var(--line); background: var(--bg); color: var(--core); border-radius: 999px;
+    padding: 4px 12px; font-size: 12px; font-weight: 600; text-decoration: none; }
+  .links a.button:hover { border-color: var(--core); }
 
   #switches { position: fixed; right: 16px; top: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 6; }
   .switch { display: flex; background: var(--card);
@@ -395,6 +420,7 @@
   <h1 id="ptitle"></h1>
   <div class="meta" id="pmeta"></div>
   <div class="stackstrip" id="pstack" hidden></div>
+  <div class="pinned" id="ppinned" hidden></div>
   <div class="body">
     <div id="pstory"></div>
   </div>
@@ -501,7 +527,7 @@ const fmt = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([
 /* ---------- stack ---------- */
 /* A PR in a stack builds on the PRs below it. Code a card links to that a PR below wrote gets a "from #N" badge that
    opens that PR's map at the card for the file, and the panel shows the whole stack with a way to each map. */
-let STUBS = {}, CARRIED = false;
+let STUBS = {}, CARRIED = false, STACK_PAGE = null;
 const mapHref = (id, card) => `?map=${encodeURIComponent(id)}${card ? `&card=${encodeURIComponent(card)}` : ''}`;
 const stackPr = n => META.stack?.prs.find(p => p.number === n);
 // a shared file has no server to open other maps from, so it sends the reader to GitHub instead
@@ -512,6 +538,15 @@ function fromBadge(path) {
   const where = !CARRIED && p.published ? `Open PR #${s.pr}'s map${s.card_id ? ' at this file' : ''}` : `PR #${s.pr} on GitHub`;
   return `<a class="from-pr" href="${esc(prHref(p, s.card_id))}" title="${esc(`${path} was changed in #${s.pr} below: ${s.title}. ${where}.`)}">from #${s.pr}</a>`;
 }
+// code outside the PR is linked at the commit the map was built on, so a rebase leaves those links where they were
+function pinnedHtml() {
+  const p = META.pinned; if (!p?.commit) return '';
+  const commit = `<a class="sha" href="${esc(META.blob.replace(/\/blob\/[^/]+\/$/, `/commit/${p.commit}`))}" target="_blank" rel="noopener">${esc(p.commit.slice(0, 7))}</a>`;
+  const repo = META.url.replace(/\/pull\/\d+.*$/, ''), link = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(text)}</a>`;
+  const base = p.below ? link(stackPr(p.below)?.url ?? `${repo}/pull/${p.below}`, `#${p.below}`) : p.base ? link(`${repo}/tree/${encodeURI(p.base)}`, p.base) : '';
+  return `<span title="Links to files this PR doesn't change open at this commit">Base: ${base ? `${base} @ ` : ''}${commit}</span>`;
+}
+const STRIP_SHOWN = 5;
 function stackStripHtml() {
   const st = META.stack; if (!st) return '';
   const at = st.prs.findIndex(p => p.current) + 1;
@@ -521,7 +556,18 @@ function stackStripHtml() {
     : `<a class="chip${p.published ? '' : ' unmapped'}" href="${esc(prHref(p))}"${!CARRIED && p.published ? '' : ' target="_blank" rel="noopener"'} title="${esc(`#${p.number} ${p.title}${p.published ? '' : ' (no map yet)'}`)}">${p.number}</a>`;
   const overview = st.page && !CARRIED ? `<a class="overview" href="${esc(mapHref(st.id))}">Stack overview →</a>`
     : st.url ? `<a class="overview" href="${esc(st.url)}" target="_blank" rel="noopener">Stack on GitHub →</a>` : '';
-  return `<div>${name} · part ${at} of ${st.prs.length}, bottom to top</div><div class="row">${st.prs.map(chip).join('')}${overview}</div>`;
+  // the arrows step to the nearest map below or above, past PRs that have none yet
+  const here = at - 1, mapped = p => p.published && !CARRIED;
+  const below = st.prs.slice(0, here).reverse().find(mapped), above = st.prs.slice(here + 1).find(mapped);
+  const step = (p, dir, d, key) => p
+    ? `<a class="step" href="${esc(mapHref(p.map_id))}" data-step-key="${key}" aria-keyshortcuts="${key}" aria-label="${esc(`${dir}: #${p.number} ${p.title}`)}" title="${esc(`${dir}: #${p.number} ${p.title}`)}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="${d}"/></svg></a>`
+    : `<span class="step" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="${d}"/></svg></span>`;
+  // five slots with this PR always in the middle one; slots past either end of the stack stay empty
+  const side = (STRIP_SHOWN - 1) / 2;
+  const shown = Array.from({ length: STRIP_SHOWN }, (_, i) => st.prs[here - side + i] ?? null);
+  return `<div>${name} · part ${at} of ${st.prs.length}</div>
+    <div class="row">${step(below, 'PR below', 'M10 3 5 8l5 5', 'ArrowLeft')}<div class="chips" style="--n:${STRIP_SHOWN}">${shown.map(p => p ? chip(p) : '<span class="chip empty" aria-hidden="true"></span>').join('')}</div>${step(above, 'PR above', 'm6 3 5 5-5 5', 'ArrowRight')}</div>
+    ${overview ? `<div class="foot">${overview}</div>` : ''}`;
 }
 function renderStackPage(page) {
   const st = page.stack, byNumber = Object.fromEntries(page.prs.map(p => [p.number, p]));
@@ -531,21 +577,25 @@ function renderStackPage(page) {
     return `<a class="prlink" href="${esc(href(p))}"${!CARRIED && p.published ? '' : ' target="_blank" rel="noopener"'}>${words}</a>`;
   });
   const beat = (title, text) => `<h2 class="beat">${title}</h2><p>${linkPrs(text)}</p>`;
-  const prHtml = (p, i) => `<li class="pr${p.published ? '' : ' unmapped'}">
-      <div class="top"><span class="num">${i + 1} · #${p.number}</span><h3>${esc(p.title)}</h3><span class="state">${esc(p.state)}</span></div>
+  const prHtml = (p, i) => `<li class="pr${p.published ? '' : ' unmapped'}"><span class="pos" aria-hidden="true">${i + 1}</span>
+      <div class="top"><span class="num">#${p.number}</span><h3>${esc(p.title)}</h3><span class="state">${esc(p.state)}</span></div>
       ${p.intents.length ? `<ul>${p.intents.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
       <div class="links">${!CARRIED && p.published ? `<a href="${esc(mapHref(p.map_id))}">Open map →</a>` : `<span class="state">${p.published ? 'Mapped' : 'No map yet'}</span>`}
         <a href="${esc(p.url)}" target="_blank" rel="noopener">${p.files} ${p.files === 1 ? 'file' : 'files'} on GitHub</a></div></li>`;
   const name = st.number ? `Stack #${st.number}` : `Stack of ${page.prs.length} PRs`;
+  STACK_PAGE = page;
   document.title = `${name} · MergeAtlas`;
   document.body.classList.add('stack-page');
-  document.body.insertAdjacentHTML('beforeend', `<main id="stackpage">
-    <div class="brand">${$('#panel .brand').innerHTML}</div>
-    <h1>${esc(name)}</h1>
-    <div class="meta">${esc(st.repo)} · ${page.prs.length} PRs on ${esc(st.base)}, read bottom to top${st.url ? ` · <a class="prlink" href="${esc(st.url)}" target="_blank" rel="noopener">GitHub</a>` : ''}</div>
+  $('#stackpage')?.remove();
+  const back = !CARRIED && page.prs.some(p => p.published)
+    ? `<button class="back" id="stackback" aria-label="Back to the map" title="Back to the map (Esc)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8H3m4-4L3 8l4 4"/></svg></button>` : '';
+  document.body.insertAdjacentHTML('beforeend', `<main id="stackpage">${back}<div class="inner">
+    <h1>${st.url ? `<a href="${esc(st.url)}" target="_blank" rel="noopener" title="Open the stack on GitHub">${esc(name)}<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3h7v7M13 3 4 12"/></svg></a>` : esc(name)}</h1>
+    <div class="meta">${esc(st.repo)} · ${page.prs.length} PRs on ${esc(st.base)}</div>
     ${beat('Background', page.background)}${beat('Problem', page.problem)}${beat('Solution', page.solution)}
-    <h2 class="beat">The PRs, bottom to top</h2>
-    <ol class="prs">${page.prs.map(prHtml).join('')}</ol></main>`);
+    <h2 class="beat">The PRs</h2>
+    <ol class="prs">${page.prs.map(prHtml).join('')}</ol></div></main>`);
+  $('#stackback')?.addEventListener('click', leaveStack);
 }
 const story = t => fmt(t).replace(/\[([^\]]+)\]\(([\w-]+)\)/g, '<a class="cardlink" href="#" data-card="$2">$1</a>');
 document.addEventListener('click', ev => { if (ev.target.closest('.cardlink')) ev.preventDefault(); });
@@ -562,7 +612,8 @@ const at = id => stackOf[id] ?? id;
 const allNodes = () => [...CARDS, ...reachNodes, ...fileStacks];
 const allLinks = () => [
   ...EDGES.map(e => ({ ...e, from: at(e.from), to: at(e.to) })).filter(e => e.from !== e.to),
-  ...reachNodes.map(n => ({ id: `to:${n.id}`, from: n.source, to: n.id, kind: 'reach' })),
+  // files a PR below wrote feed the card, so their arrow runs into it
+  ...reachNodes.map(n => ({ id: `to:${n.id}`, ...(n.files.every(f => f.from) ? { from: n.id, to: n.source } : { from: n.source, to: n.id }), kind: 'reach' })),
 ];
 const STACK_MS = 340, STACK_COLUMNS = 3, FILE_GAP = 14, STACK_PADDING = 18, FILE_STAGGER = .07, STACK_CLEARANCE = 32;
 const smooth = t => t * t * (3 - 2 * t);
@@ -689,9 +740,16 @@ function build() {
   buildReach();
   buildFileStacks();
 }
+/* A card's node of files outside this PR holds what the change reaches and, in a stack, the files it builds on that a
+   PR below changed ("From #N"), which open that PR's map. */
+const fileTag = f => f.from ? `From #${f.from.pr} · not changed here` : 'Not changed · affected';
+const outsideTag = files => files.every(f => f.from) ? 'From PRs below' : files.some(f => f.from) ? 'Not changed here' : 'Not changed · affected';
+const outsideLabel = files => files.every(f => f.from) ? `${count(files.length, 'file')} from PRs below`
+  : files.some(f => f.from) ? `${count(files.length, 'file')} outside this PR` : `${files.length} affected file${files.length > 1 ? 's' : ''} outside this PR`;
+const fromEffect = s => `Changed in #${s.pr} below, ${s.title}. This PR leaves it as it is.`;
 const reachFileHtml = f => {
   const name = fileName(f), preview = f.effect.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-  return `<div class="top"><span class="tag">Not changed · affected</span></div>
+  return `<div class="top"><span class="tag">${esc(fileTag(f))}</span></div>
     <h3>${esc(name)}</h3>
     <div class="path">${esc(f.path.slice(0, -name.length))}</div>
     <p>${fmt(preview)}</p>`;
@@ -699,18 +757,21 @@ const reachFileHtml = f => {
 function buildReach() {
   for (const c of CARDS) {
     const effects = Map.groupBy((c.reaches ?? []).flatMap(r => r.paths.map(path => ({ path, effect: r.effect }))), f => f.path);
-    const files = [...effects].map(([path, same]) => ({ path, effect: same.map(f => f.effect).join(' ') }));
+    const files = [...effects].map(([path, same]) => ({ path, effect: same.map(f => f.effect).join(' '), origin: STUBS[path] }));
+    for (const stub of Object.values(STUBS)) {
+      if (stub.cited_by.includes(c.id) && !effects.has(stub.path)) files.push({ path: stub.path, effect: fromEffect(stub), from: stub, origin: stub });
+    }
     if (!files.length) continue;
     const n = { id: `reach:${c.id}`, source: c.id, files, progress: 0, target: 0 };
     const stacked = files.length > 1;
     const el = document.createElement('div'); el.className = `card ${stacked ? 'stack' : 'reach-card'}`;
     el.innerHTML = stacked ? `
-      <div class="top"><span class="tag">Not changed · affected</span><button class="stack-toggle" tabindex="-1">Show files</button></div>
-      <h3>${files.length} affected files outside this PR</h3>
+      <div class="top"><span class="tag">${esc(outsideTag(files))}</span><button class="stack-toggle" tabindex="-1">Show files</button></div>
+      <h3>${esc(outsideLabel(files))}</h3>
       <div class="stack-files">${files.map((f, i) => `<div class="card reach-card stack-file" data-file="${i}" tabindex="0" role="button">${reachFileHtml(f)}</div>`).join('')}</div>`
       : reachFileHtml(files[0]);
     el.tabIndex = 0; el.setAttribute('role', stacked ? 'group' : 'button');
-    el.setAttribute('aria-label', stacked ? `${files.length} affected files outside this PR` : `${fileName(files[0])}, not changed but affected`);
+    el.setAttribute('aria-label', stacked ? outsideLabel(files) : `${fileName(files[0])}, ${fileTag(files[0])}`);
     world.appendChild(el); cardEl[n.id] = el; byId[n.id] = n;
     attachCardDrag(el, n, pressed => {
       if (!stacked) return openReach(n, 0);
@@ -1257,7 +1318,7 @@ function cardHtml(c) {
   const out = edges.filter(e => e.from === c.id), inn = edges.filter(e => e.to === c.id);
   const link = (e, dirLabel, other) => `<button data-edge="${e.id}">${dirLabel} ${esc(byId[other].title)} · ${esc(e.label)}</button>`;
   const grid = reachNodes.find(n => n.source === c.id);
-  const gridLink = grid ? `<button data-grid="${grid.id}">→ ${grid.files.length > 1 ? `${grid.files.length} affected files` : esc(fileName(grid.files[0]))} · outside this PR</button>` : '';
+  const gridLink = grid ? `<button data-grid="${grid.id}">→ ${grid.files.length > 1 ? esc(outsideLabel(grid.files)) : `${esc(fileName(grid.files[0]))} · ${esc(fileTag(grid.files[0]))}`}</button>` : '';
   return `
     <div class="tag" style="color:${KIND[c.kind].color}">${KIND[c.kind].label} · ${statHtml(c)}</div>
     <h2>${esc(c.title)}</h2>
@@ -1338,11 +1399,14 @@ function openReach(n, i) {
       ${other ? `${step < 0 ? '← ' : ''}<span>${esc(fileName(other))}</span>${step > 0 ? ' →' : ''}` : ''}</button>`;
   };
   const pager = last ? `<div class="file-pager">${pageTo(i - 1, -1)}<span class="step-at">File ${i + 1} of ${n.files.length}</span>${pageTo(i + 1, 1)}</div>` : '';
-  present(`${pager}<div class="tag" style="color:var(--muted)">Not changed · affected</div>
+  const o = f.origin, p = o && (stackPr(o.pr) ?? { url: META.url, published: false }), opens = p && !CARRIED && p.published;
+  const origin = o ? `<div class="links"><a class="button" href="${esc(prHref(p, o.card_id))}"${opens ? '' : ' target="_blank" rel="noopener"'}>${opens ? `Open #${o.pr}'s map${o.card_id ? ' at this file' : ''}` : `#${o.pr} on GitHub`} →</a></div>` : '';
+  const body = f.from ? `${section('Where it comes from', f.effect)}${origin}<h3>Built on by</h3>`
+    : `${section('What changes for it', f.effect)}${o ? `${section('Where it comes from', fromEffect(o))}${origin}` : ''}<h3>Affected by</h3>`;
+  present(`${pager}<div class="tag" style="color:var(--muted)">${esc(fileTag(f))}</div>
     <h2>${esc(name)}</h2>
     <div class="path">${codeLink(f.path, esc(f.path))}</div>
-    ${section('What changes for it', f.effect)}
-    <h3>Affected by</h3><div class="links"><button data-card="${n.source}">← ${esc(byId[n.source].title)}</button></div>`, 'var(--muted)', `${n.id}#${i}`);
+    ${body}<div class="links"><button data-card="${n.source}">← ${esc(byId[n.source].title)}</button></div>`, 'var(--muted)', `${n.id}#${i}`);
 }
 const openOverview = () => present(`<h2>${esc(META.title)}</h2><div class="path">${metaHtml()}</div>${storyHtml()}`, 'var(--core)', OVERVIEW);
 // while the modal is open the page behind it is inert, which keeps focus inside; closing returns focus to what opened it
@@ -1612,14 +1676,14 @@ function buildList() {
       <strong>${esc(name)}</strong><span class="path">${esc(f.path.slice(0, -name.length))}</span></button>`;
   };
   const cardRow = c => {
-    const n = reachNodes.find(r => r.source === c.id), count = n?.files.length;
+    const n = reachNodes.find(r => r.source === c.id);
     return `<button class="item" data-card="${c.id}" data-item="${c.id}" style="--accent:${KIND[c.kind].color}">
         <strong>${esc(c.title)}</strong>
         <span class="sub"><span class="tag">${KIND[c.kind].label}</span>
           ${statHtml(c)}</span>
       </button>
       ${n ? `<div class="tree-branch">
-        <button class="branch" data-branch="${n.id}" aria-expanded="true"><span class="chevron" aria-hidden="true">▾</span>${count} affected file${count > 1 ? 's' : ''} outside this PR</button>
+        <button class="branch" data-branch="${n.id}" aria-expanded="true"><span class="chevron" aria-hidden="true">▾</span>${esc(outsideLabel(n.files))}</button>
         <div class="tree-children" data-children="${n.id}"><div>${n.files.map((f, i) => fileRow(n, f, i)).join('')}</div></div>
       </div>` : ''}`;
   };
@@ -1651,7 +1715,7 @@ function setView(list) {
   for (const b of document.querySelectorAll('#viewswitch button')) b.setAttribute('aria-pressed', (b.dataset.view === 'list') === list);
   const url = new URL(location);
   if (list) url.searchParams.set('view', 'list'); else url.searchParams.delete('view');
-  history.replaceState(null, '', url);
+  history.replaceState(history.state, '', url);
   if (list) return openItem(selected);
   layoutEdges(); if (!touched) startView();
 }
@@ -1703,7 +1767,7 @@ function setDensity(compact) {
   for (const b of document.querySelectorAll('#densityswitch button')) b.setAttribute('aria-pressed', (b.dataset.density === 'compact') === compact);
   const url = new URL(location);
   if (compact) url.searchParams.set('cards', 'compact'); else url.searchParams.delete('cards');
-  history.replaceState(null, '', url);
+  history.replaceState(history.state, '', url);
 }
 $('#densityswitch').addEventListener('click', ev => {
   const b = ev.target.closest('[data-density]'), compact = document.body.classList.contains('compact');
@@ -1777,27 +1841,78 @@ $('#sharedl').addEventListener('click', () => {
   $('#share').hidePopover();
 });
 
+/* ---------- moving between maps ---------- */
+/* A stack's maps open in place and slide the way the stack runs: up the stack slides forward and down slides back.
+   The stack overview opens forward and closes back. A shared file has no server, so its links leave the page. */
+const fetchMap = async id => {
+  const res = await fetch(`data/${encodeURIComponent(id)}.json`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(res.status);
+  return res.text();
+};
+const placeOf = id => ((STACK_PAGE ?? META.stack)?.prs ?? []).findIndex(p => p.map_id === id);
+const forwardTo = id => !STACK_PAGE && (id === META.stack?.id || placeOf(id) >= placeOf(MAP_ID));
+let opening = 0;
+async function openMap(id, { card = null, push = true } = {}) {
+  const ticket = ++opening, forward = forwardTo(id);
+  const url = new URL(mapHref(id, card), location);
+  if (listView) url.searchParams.set('view', 'list');
+  if (document.body.classList.contains('compact')) url.searchParams.set('cards', 'compact');
+  let raw;
+  try { raw = await fetchMap(id); } catch { location.href = url; return; }
+  if (ticket !== opening) return;
+  if (push) history.pushState({ from: MAP_ID }, '', url);
+  // a page that draws no frames, such as a hidden tab, never starts the slide, so the map switches without it
+  let ran = false;
+  const update = () => { if (!ran) { ran = true; return show(id, raw); } };
+  morph(update, forward);
+  setTimeout(() => { if (!ran) { sliding?.skipTransition(); update(); } }, 1000);
+}
+// the overview's back arrow and Esc return to the map it was opened from, or to the bottom map when opened directly
+function leaveStack() {
+  if (history.state?.from) return history.back();
+  const first = STACK_PAGE.prs.find(p => p.published);
+  if (first) openMap(first.map_id);
+}
+document.addEventListener('click', ev => {
+  const a = ev.target.closest('a[href^="?map="]');
+  if (!a || CARRIED || a.target || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+  ev.preventDefault();
+  const p = new URLSearchParams(a.getAttribute('href'));
+  openMap(p.get('map'), { card: p.get('card') });
+});
+addEventListener('popstate', () => {
+  const p = new URLSearchParams(location.search), id = p.get('map');
+  if (id && !CARRIED && id !== MAP_ID) openMap(id, { card: p.get('card'), push: false });
+});
+addEventListener('keydown', ev => { if (ev.key === 'Escape' && STACK_PAGE && $('#stackback')) leaveStack(); });
+// on the map, ← and → step down and up the stack; the tree and the modal keep those keys for themselves
+addEventListener('keydown', ev => {
+  if (STACK_PAGE || listView || modalBg.classList.contains('open') || ev.target.closest?.('input, textarea, [contenteditable]')) return;
+  if (ev.altKey || ev.metaKey || ev.ctrlKey || ev.shiftKey) return;
+  const a = $(`#pstack [data-step-key="${ev.key}"]`);
+  if (a) { ev.preventDefault(); a.click(); }
+});
+
 /* ---------- boot ---------- */
-async function boot() {
-  // a shared file carries its map inside the page; a served page fetches it by the id in its address
-  const carried = $('#map-data');
-  const id = carried.textContent.trim() ? carried.dataset.map : new URLSearchParams(location.search).get('map');
-  let data;
-  try {
-    if (carried.textContent.trim()) {
-      RAW = carried.textContent;
-    } else {
-      const res = await fetch(`data/${encodeURIComponent(id)}.json`, { cache: 'no-store' });
-      if (!res.ok) throw new Error(res.status);
-      RAW = await res.text();
-    }
-    data = JSON.parse(RAW);
-    MAP_ID = id; CARRIED = !!carried.textContent.trim();
-  } catch (err) {
-    document.body.insertAdjacentHTML('beforeend', `<div style="position:fixed;inset:0;display:grid;place-items:center;text-align:center;padding:24px"><div><h2>No map found</h2><p>Ask Claude to map a PR, then open the link it gives you.</p></div></div>`);
-    return;
-  }
+// clears the map on screen so another can be drawn in its place
+function clearMap() {
+  hide();
+  STACK_PAGE = null;
+  document.body.classList.remove('stack-page');
+  $('#stackpage')?.remove();
+  for (const id in intentsOf) delete intentsOf[id];
+  svg.replaceChildren();
+  for (const el of world.querySelectorAll('.card, .pill, .hood')) el.remove();
+  for (const els of [cardEl, pillEl, grpEl]) for (const id in els) delete els[id];
+  reachNodes.length = 0;
+  selected = OVERVIEW; touched = false;
+}
+async function show(id, raw) {
+  const data = JSON.parse(raw);
+  RAW = raw; MAP_ID = id;
+  hide();
   if (data.kind === 'stack') return renderStackPage(data);
+  clearMap();
   STUBS = Object.fromEntries((data.stubs ?? []).map(s => [s.path, s]));
   // a one-file card is titled by its file; what the file holds stays for its intents' lists
   for (const c of data.cards) {
@@ -1812,19 +1927,34 @@ async function boot() {
   planCards();
   loadReviewed(id);
   document.title = `PR #${META.number} · MergeAtlas`;
-  $('#ptitle').textContent = META.title;
+  $('#ptitle').replaceChildren(Object.assign(document.createElement('span'), { textContent: META.title, title: META.title }));
   $('#pmeta').innerHTML = metaHtml();
   $('#pstack').innerHTML = stackStripHtml(); $('#pstack').hidden = !META.stack;
+  $('#ppinned').innerHTML = pinnedHtml(); $('#ppinned').hidden = !META.pinned;
   $('#pstory').innerHTML = storyHtml();
   setDensity(params.get('cards') === 'compact');
   build(); showReviewed();
-  if (innerWidth < 900) $('#ptoggle').click();
   await (document.fonts?.ready ?? Promise.resolve());
   autoLayout(); layoutEdges(); startView(); placeHint(); buildList(); showReviewed();
   setView(params.get('view') === 'list');
   // a "from #N" badge in another map opens this one at the card for that file
   if (byId[params.get('card')]) openItem(params.get('card'));
-  addEventListener('resize', () => { placeHint(); if (listView) return; layoutEdges(); if (!touched) startView(); });
+}
+async function boot() {
+  // a shared file carries its map inside the page; a served page fetches it by the id in its address
+  const carried = $('#map-data');
+  CARRIED = !!carried.textContent.trim();
+  const id = CARRIED ? carried.dataset.map : new URLSearchParams(location.search).get('map');
+  try {
+    const raw = CARRIED ? carried.textContent : await fetchMap(id);
+    JSON.parse(raw);
+    await show(id, raw);
+  } catch (err) {
+    document.body.insertAdjacentHTML('beforeend', `<div style="position:fixed;inset:0;display:grid;place-items:center;text-align:center;padding:24px"><div><h2>No map found</h2><p>Ask Claude to map a PR, then open the link it gives you.</p></div></div>`);
+    return;
+  }
+  if (innerWidth < 900 && !STACK_PAGE) $('#ptoggle').click();
+  addEventListener('resize', () => { if (STACK_PAGE) return; placeHint(); if (listView) return; layoutEdges(); if (!touched) startView(); });
 }
 let touched = false;
 for (const t of ['wheel', 'pointerdown']) viewport.addEventListener(t, () => { touched = true; }, { capture: true });
