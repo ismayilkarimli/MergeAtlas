@@ -610,6 +610,10 @@ def plan_lines(map_id, plan):
                         ("check against the delta", plan["recheck"])]:
         if items:
             lines.append(f"  {what}: {', '.join(items)}")
+    for found in plan.get("searches", []):
+        halves = [f"now also matches {', '.join(found['now'])}" if found["now"] else "",
+                  f"no longer matches {', '.join(found['gone'])}" if found["gone"] else ""]
+        lines.append(f"  search {found['term']!r} ({found['mode']}): {'; '.join(h for h in halves if h)}")
     if plan.get("words"):
         lines.append("  the PR's title, description or issues changed: check the story against them")
     if plan.get("problems"):
@@ -635,17 +639,27 @@ def matches_of(term, mode, commit):
     return matches
 
 
-def search(map_id, term, mode):
-    pr = json.loads((WORK / f"{map_id}.pr.json").read_text())
-    commit, changed = pr["headRefOid"], {f["path"] for f in pr["files"]}
+def matching(term, mode, commit, changed):
+    """Maps each unchanged file that holds the term, or whose path does, to its matching lines."""
     if mode == "paths":
         matches = {path: [] for path in files_at(commit) if term in path}
     else:
         matches = matches_of(term, mode, commit)
-    matches = {path: lines for path, lines in sorted(matches.items()) if path not in changed}
+    return {path: lines for path, lines in sorted(matches.items()) if path not in changed}
+
+
+def found_by(term, mode, commit, changed):
+    """Lists the files outside the PR that a search finds at a commit, as the search log keeps them."""
+    return sorted(matching(term, mode, commit, changed))
+
+
+def search(map_id, term, mode):
+    pr = json.loads((WORK / f"{map_id}.pr.json").read_text())
+    commit, changed = pr["headRefOid"], {f["path"] for f in pr["files"]}
+    matches = matching(term, mode, commit, changed)
     log_path = WORK / f"{map_id}.searches.json"
     log = [s for s in json.loads(log_path.read_text()) if (s["term"], s["mode"]) != (term, mode)]
-    log.append({"term": term, "mode": mode, "files": list(matches)})
+    log.append({"term": term, "mode": mode, "files": found_by(term, mode, commit, changed)})
     log_path.write_text(json.dumps(log, indent=2))
     note(map_id, "search", mode=mode, files=len(matches))
     record = stack_of_map(pr)
@@ -990,7 +1004,15 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
             return "partial", plan
     text, kind = delta_of(old, pr, old_rows, new_rows, old_pinned, built)
     work["delta.diff"].write_text(text)
-    plan.update({"delta": kind, "delta_lines": len(text.splitlines()), "from": old["headRefOid"]})
+    plan.update({"delta": kind, "delta_lines": len(text.splitlines())})
+    log, plan["searches"] = json.loads(work["searches.json"].read_text()), []
+    for entry in log:
+        files = found_by(entry["term"], entry["mode"], pr["headRefOid"], set(paths))
+        now, gone = sorted(set(files) - set(entry["files"])), sorted(set(entry["files"]) - set(files))
+        entry["files"] = files
+        if now or gone:
+            plan["searches"].append({"term": entry["term"], "mode": entry["mode"], "now": now, "gone": gone})
+    work["searches.json"].write_text(json.dumps(log, indent=2))
     work["cochange.json"].write_text(json.dumps(co_changes(set(paths), pr["headRefOid"]), indent=2))
     keep_read_marks(map_id)
     return "partial", plan

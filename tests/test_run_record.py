@@ -204,7 +204,9 @@ class Plan(Cache):
                 {"id": "ui", "whole": False, "changes": [], "links": True, "entered": 0, "left": 0},
             ],
             "keep": ["a", "b"], "added": ["new.py", "new.md"], "gone": ["old.py"], "fix": ["story", "intent i1"],
-            "recheck": ["story", "arrow a -> b"], "words": True, "problems": "Map rejected:\n  card a: missing result",
+            "recheck": ["story", "arrow a -> b"], "words": True,
+            "searches": [{"term": "foo", "mode": "word", "now": ["a.ts", "b.ts"], "gone": ["c.ts"]},
+                         {"term": "bar baz", "mode": "regex", "now": [], "gone": ["d.ts"]}], "problems": "Map rejected:\n  card a: missing result",
             "back": 5, "total": 8,
         }
         self.assertEqual(mergeatlas.plan_lines("o-r-7", plan), [
@@ -220,6 +222,8 @@ class Plan(Cache):
             "  drop the files no longer in the PR: old.py",
             "  fix the links in: story, intent i1",
             "  check against the delta: story, arrow a -> b",
+            "  search 'foo' (word): now also matches a.ts, b.ts; no longer matches c.ts",
+            "  search 'bar baz' (regex): no longer matches d.ts",
             "  the PR's title, description or issues changed: check the story against them",
             "  publish rejected the refreshed map:",
             "Map rejected:\n  card a: missing result",

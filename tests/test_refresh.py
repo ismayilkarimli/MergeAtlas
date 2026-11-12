@@ -19,6 +19,8 @@ The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
                                         -> the commit a PR's own changes start from
     redo_plan(data, old_rows, new_rows, old_paths, new_paths, broken)
                                         -> {redo, keep, added, gone, fix, recheck, back, total}
+    found_by(term, mode, commit, changed)
+                                        -> the files outside the PR that a search finds, as the search log keeps them
     plan_lines(map_id, plan)            -> the lines fetch prints under "map:" for a changed map
     lines_moved(old, new)               -> (indexes into new that entered the diff, indexes into old that left it)
     delta_of(old, pr, old_rows, new_rows, old_pinned, built)
@@ -443,12 +445,44 @@ class RefreshWork(unittest.TestCase):
         self.assertFalse((mergeatlas.WORK / "o-r-7.input.json").exists())
         self.assertFalse((mergeatlas.WORK / "o-r-7.delta.diff").exists())
 
-    def test_a_refresh_keeps_the_search_log(self):
+    def log_searches(self, files):
+        (mergeatlas.WORK / "o-r-7.searches.json").write_text(json.dumps([{"term": "read", "mode": "word", "files": files}]))
+
+    def logged_searches(self):
+        return json.loads((mergeatlas.WORK / "o-r-7.searches.json").read_text())
+
+    def test_a_changed_pr_keeps_its_searches_and_runs_them_again(self):
         self.first_map()
-        (mergeatlas.WORK / "o-r-7.searches.json").write_text('[{"term": "read", "mode": "word", "files": []}]')
+        self.log_searches(["old.py"])
         head2 = self.commit({"cfg.txt": "a\nBee\nc\n"}, "change b differently")
-        mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base)
-        self.assertEqual(json.loads((mergeatlas.WORK / "o-r-7.searches.json").read_text())[0]["term"], "read")
+        _, plan = mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base)
+        self.assertEqual(self.logged_searches(), [{"term": "read", "mode": "word", "files": ["app.py"]}])
+        self.assertEqual(plan["searches"], [{"term": "read", "mode": "word", "now": ["app.py"], "gone": ["old.py"]}])
+
+    def test_a_file_that_newly_matches_is_reported(self):
+        self.first_map()
+        self.log_searches(["app.py"])
+        head2 = self.commit({"cfg.txt": "a\nBee\nc\n", "caller.py": "read()\n"}, "change b differently")
+        _, plan = mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base)
+        self.assertEqual(plan["searches"], [{"term": "read", "mode": "word", "now": ["caller.py"], "gone": []}])
+        self.assertEqual(self.logged_searches()[0]["files"], ["app.py", "caller.py"])
+        self.assertIn("  search 'read' (word): now also matches caller.py", mergeatlas.plan_lines("o-r-7", plan))
+
+    def test_a_search_with_the_same_files_is_not_reported(self):
+        self.first_map()
+        self.log_searches(["app.py"])
+        head2 = self.commit({"cfg.txt": "a\nBee\nc\n"}, "change b differently")
+        _, plan = mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base)
+        self.assertEqual(plan["searches"], [])
+
+    def test_a_rebase_of_the_same_changes_runs_no_search(self):
+        self.first_map()
+        self.log_searches([])
+        git(self.repo, "checkout", "-q", self.base)
+        base2 = self.commit({"cfg.txt": "top\na\nb\nc\n"}, "rebase target")
+        head2 = self.commit({"cfg.txt": "top\na\nB\nc\n"}, "change b again")
+        self.assertEqual(mergeatlas.refresh_work("o-r-7", *self.pr(head2, base2), base2)[0], "refreshed")
+        self.assertEqual(self.logged_searches(), [{"term": "read", "mode": "word", "files": []}])
 
 
 if __name__ == "__main__":
