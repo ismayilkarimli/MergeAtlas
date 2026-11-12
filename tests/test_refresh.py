@@ -279,6 +279,38 @@ class RefreshWork(unittest.TestCase):
         mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base)
         self.assertFalse((mergeatlas.WORK / "o-r-7.read.json").exists())
 
+    def set_aside(self):
+        """The files a map left that a map started over must not keep."""
+        for suffix in ("read.json", "update.json", "delta.diff"):
+            (mergeatlas.WORK / f"o-r-7.{suffix}").write_text("{}")
+
+    def test_fresh_maps_a_known_pr_as_new(self):
+        self.first_map()
+        self.set_aside()
+        status, plan = mergeatlas.refresh_work("o-r-7", *self.pr(self.head, self.base), self.base, fresh=True)
+        self.assertEqual((status, plan), ("new", None))
+        for suffix in ("input.json", "read.json", "update.json", "delta.diff"):
+            self.assertFalse((mergeatlas.WORK / f"o-r-7.{suffix}").exists(), suffix)
+        self.assertEqual(json.loads((mergeatlas.WORK / "o-r-7.searches.json").read_text()), [])
+        self.assertEqual(json.loads((mergeatlas.WORK / "o-r-7.pr.json").read_text())["pinned"], self.base)
+
+    def test_fresh_leaves_the_published_map_in_place(self):
+        self.first_map()
+        before = self.published()
+        mergeatlas.refresh_work("o-r-7", *self.pr(self.head, self.base), self.base, fresh=True)
+        self.assertEqual(self.published(), before)
+
+    def test_a_map_in_an_old_format_starts_over_by_itself(self):
+        self.first_map()
+        self.set_aside()
+        old = self.saved_input()
+        del old["cards"][0]["changes"]
+        (mergeatlas.WORK / "o-r-7.input.json").write_text(json.dumps(old))
+        head2 = self.commit({"cfg.txt": "a\nBee\nc\n"}, "change b differently")
+        self.assertEqual(mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base), ("new", None))
+        self.assertFalse((mergeatlas.WORK / "o-r-7.input.json").exists())
+        self.assertFalse((mergeatlas.WORK / "o-r-7.delta.diff").exists())
+
     def test_a_refresh_keeps_the_search_log(self):
         self.first_map()
         (mergeatlas.WORK / "o-r-7.searches.json").write_text('[{"term": "read", "mode": "word", "files": []}]')

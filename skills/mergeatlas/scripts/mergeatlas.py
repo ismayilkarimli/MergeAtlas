@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mechanical half of the mergeatlas skill.
 
-  mergeatlas.py fetch [link...] [--stack]
+  mergeatlas.py fetch [link...] [--stack] [--fresh]
                                  Fetch PRs into the work directory. A link is a PR link, a PR number or a
                                  stack link; none means the current branch's PR. A stack link maps the whole
                                  stack, a PR link maps that PR, and --stack maps the whole stack a PR sits in.
@@ -456,7 +456,8 @@ def stack_page(data, record, maps):
 
 
 def fetch(args):
-    targets, whole_stack = parse_fetch_args(args)
+    fresh = "--fresh" in args
+    targets, whole_stack = parse_fetch_args([a for a in args if a != "--fresh"])
     github = GhGitHub()
     if not targets:
         try:
@@ -484,7 +485,7 @@ def fetch(args):
     for number in plan["map"]:
         print()
         context = stack_context(plan, number)
-        fetch_pr(plan["repo"], number, context and {**context, "id": record["id"]})
+        fetch_pr(plan["repo"], number, context and {**context, "id": record["id"]}, fresh)
     if record:
         refresh_stack(record)
 
@@ -516,7 +517,7 @@ def local_diff(built, head):
     return text_only(diff), files
 
 
-def fetch_pr(repo, number, stack):
+def fetch_pr(repo, number, stack, fresh=False):
     fields = "number,title,body,additions,deletions,files,headRefName,headRefOid,baseRefName,baseRefOid,url,closingIssuesReferences"
     pr = json.loads(gh("pr", "view", str(number), "--repo", repo, "--json", fields))
     pr["stack"] = stack
@@ -539,7 +540,7 @@ def fetch_pr(repo, number, stack):
     else:
         diff, pr["files"] = local_diff(built, head)
         pr["additions"], pr["deletions"] = sum(f["additions"] for f in pr["files"]), sum(f["deletions"] for f in pr["files"])
-    status, plan = refresh_work(map_id, pr, diff, built)
+    status, plan = refresh_work(map_id, pr, diff, built, fresh)
     note(map_id, "fetch", status=status, files=len(pr["files"]), additions=pr["additions"], deletions=pr["deletions"],
          diff_lines=len(diff.splitlines()))
     url = f"http://127.0.0.1:{PORT}/?map={map_id}"
@@ -836,13 +837,23 @@ def keep_read_marks(map_id):
         path.write_text(json.dumps(hashes_of(json.loads((WORK / f"{map_id}.input.json").read_text())), indent=2))
 
 
-def refresh_work(map_id, pr, diff, built):
+def outdated(data):
+    """Tells whether a map is in a format from before cards held changes, which cannot be reused card by card."""
+    return any("changes" not in card for card in data.get("cards", []))
+
+
+def refresh_work(map_id, pr, diff, built, fresh=False):
     """Brings the work directory up to a fetched PR. A PR mapped before keeps its map when it can: the same head commit
     changes nothing; the same changes on a new commit get their links shifted and are published again by the script;
-    otherwise the links are shifted where they still hold and the plan says which cards the agent writes again."""
+    otherwise the links are shifted where they still hold and the plan says which cards the agent writes again. A map
+    asked to start over, or in a format too old to reuse, is set aside and the PR mapped as if for the first time."""
     work = {k: WORK / f"{map_id}.{k}" for k in ("pr.json", "input.json", "diff", "searches.json", "cochange.json")}
     WORK.mkdir(parents=True, exist_ok=True)
     known = all(work[k].exists() for k in ("pr.json", "input.json", "diff")) and (DATA / f"{map_id}.json").exists()
+    if known and (fresh or outdated(json.loads(work["input.json"].read_text()))):
+        for k in ("input.json", "read.json", "update.json", "delta.diff"):
+            (WORK / f"{map_id}.{k}").unlink(missing_ok=True)
+        known = False
     old = json.loads(work["pr.json"].read_text()) if known else None
     paths = [f["path"] for f in pr["files"]]
     if old is None:
