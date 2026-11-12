@@ -4,6 +4,19 @@ What changed in each release of MergeAtlas, newest first. Versions follow [seman
 
 If you installed the Claude Code plugin, you stay on a release until the next one is published, then `/plugin marketplace update mergeatlas` brings it in. Installs through skills.sh or a clone follow the `main` branch.
 
+## 0.4.0 - 2026-11-12
+
+### Added
+
+- Every code link is checked against the lines it points at. `claims` writes each link's words and lines to a file for a checker, and `checked` records the links that hold. A link is checked again only when its words or its lines change.
+- A fixed set of three pull requests, in `evals/`, to measure a change to the skill against: what a map costs, how many of its links a checker rejects, and how many fixed questions it answers.
+
+### Changed
+
+- A first map is cold read in two rounds, where it took three. From the second round on, and on an update, a reader is asked only about the sentences written or edited since the card was last read.
+- A card that only lost sentences passes without a reader.
+- `report` says how many links were checked and how many were sent back.
+
 ## 0.3.0 - 2026-11-12
 
 ### Added
