@@ -21,14 +21,14 @@ The reader is a skilled engineer asked to review a change that spans across file
         - `write again`, or `write again changes N`: write that card, or those changes of it, again by the rules below.
         - `check the rest of the card against the delta`, and `check against the delta`: read that part beside the delta and edit only a statement the delta made untrue.
         - `N lines entered and M left its diff`: every line that entered belongs to a change. Add it to the change whose reason it shares, or write a new change for it, and give a new change its intent by the revert test.
-        - `check the links in changes N`, `check the links outside its changes` and `check the links in`: a line that part links to changed, so the script left that link as it was. Read the lines each such link names at the head. Point the link at the lines its words describe, and edit a statement only where those lines now make it untrue. A link and a statement that still hold stay as they are.
+        - `check the links in changes N`, `check the links outside its changes` and `check the links in`: a line that part links to changed, so the script left that link as it was. Read the lines each such link names at the head. Point the link at the lines its words describe, and edit a statement only where those lines now make it untrue. A link and a statement that still hold stay as they are. Moving a link changes no words, so it never sends a card back to a reader.
         - `add cards for the new files` and `drop the files no longer in the PR`: as they say. A file that joined the PR leaves any `reaches` or `unaffected` list that named it.
         - `search ... now also matches`: sort each such file into `reaches` or `unaffected`. `no longer matches`: check the entry that names that file.
         - `the PR's title, description or issues changed`: read them in fetch's output and check the story against them.
         - `publish rejected the refreshed map`: the changes are the same, so fix the problems it lists and nothing else.
         - `map it afresh`: ignore the other lines, run fetch again with the same targets and `--fresh`, and map the PR from step 3.
 
-        Search, as in step 4, only for the names, fields and values the delta adds or changes. Then run steps 7 to 9. Step 8 runs one round for an update: `readers` prints only the cards whose words you changed, and the rest of each card passed a reader before. So answer only a question about a statement you wrote or edited for this update, and leave every other statement as it is. Then read those edits yourself as step 8 says to after a third round, publish, and run `finish`.
+        Search, as in step 4, only for the names, fields and values the delta adds or changes. Then run steps 7 to 9. Step 8 runs one round for an update: `readers` prints only the cards whose words you changed, and the rest of each card passed a reader before. So answer only a question about a statement you wrote or edited for this update, and leave every other statement as it is. Then read those edits yourself as step 8 says to after a third round, publish, and run `finish`. Run again for the same update, `readers` says there is nothing more to read.
 
     No PRs to map: tell the user and stop.
 

@@ -88,6 +88,31 @@ class Readers(Cache):
         self.edit(lambda data: data["cards"][0]["changes"][0].update(change="This PR writes [B](cfg.txt#L9)."))
         self.assertEqual(self.unread(), [])
 
+    def test_an_update_is_read_in_one_round(self):
+        self.work(TWO)
+        self.run_command(mergeatlas.passed, "o-r-7", ["story", "cfg", "doc"])
+        update = mergeatlas.WORK / "o-r-7.update.json"
+        update.write_text(json.dumps({"from": "c" * 40, "touched": ["cfg"], "hashes": mergeatlas.hashes_of(TWO)}))
+        self.edit(lambda data: data["cards"][0]["changes"][0].update(result="B is upper case everywhere."))
+        self.assertEqual(self.unread(), ["cfg"])
+        self.edit(lambda data: data["cards"][0]["changes"][0].update(result="B is upper case in every file."))
+        self.assertEqual(self.run_command(mergeatlas.readers, "o-r-7"),
+                         "nothing more to read: an update is read once, so read your edits yourself, then run finish\n")
+        self.assertEqual([s["step"] for s in self.steps()], ["card"])
+        self.assertEqual([p.name for p in (mergeatlas.WORK / "o-r-7.readers").iterdir()], ["cfg.txt"])
+        # the next update starts its own round
+        update.write_text(json.dumps({"from": "d" * 40, "touched": ["cfg"], "hashes": mergeatlas.hashes_of(TWO)}))
+        self.assertEqual(self.unread(), ["cfg"])
+
+    def test_an_update_whose_words_all_passed_has_nothing_to_read(self):
+        self.work(TWO)
+        self.run_command(mergeatlas.passed, "o-r-7", ["story", "cfg", "doc"])
+        update = mergeatlas.WORK / "o-r-7.update.json"
+        update.write_text(json.dumps({"from": "c" * 40, "touched": [], "hashes": mergeatlas.hashes_of(TWO)}))
+        self.assertEqual(self.run_command(mergeatlas.readers, "o-r-7"),
+                         "nothing to read: the story and every card passed as they stand\n")
+        self.assertNotIn("read", json.loads(update.read_text()))
+
     def test_editing_an_arrow_sends_the_cards_at_both_ends_back(self):
         data = copy.deepcopy(TWO)
         data["cards"].append({**data["cards"][1], "id": "other", "paths": ["other.md"]})

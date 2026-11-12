@@ -1521,10 +1521,18 @@ def read_marks(map_id):
 
 
 def readers(map_id):
-    """Writes each card whose words no cold reader has passed to a file with the reader's instructions, and lists the files."""
+    """Writes each card whose words no cold reader has passed to a file with the reader's instructions, and lists the files.
+    A map updated for new commits is read in one round, so a second call for that update lists nothing."""
     data = json.loads((WORK / f"{map_id}.input.json").read_text())
     stack, read = (WORK / f"{map_id}.stack.json").exists(), read_marks(map_id)
     unread = [name for name, hashed in hashes_of(data, stack).items() if read.get(name) != hashed]
+    update_path = WORK / f"{map_id}.update.json"
+    update = json.loads(update_path.read_text()) if update_path.exists() else None
+    if unread and update and update.get("read"):
+        print("nothing more to read: an update is read once, so read your edits yourself, then run finish")
+        return
+    if unread and update:
+        update_path.write_text(json.dumps({**update, "read": True}, indent=2))
     folder = WORK / f"{map_id}.readers"
     if folder.exists():
         shutil.rmtree(folder)
