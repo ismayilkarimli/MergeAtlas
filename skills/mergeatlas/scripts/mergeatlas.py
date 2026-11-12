@@ -8,7 +8,8 @@
   mergeatlas.py search <map-id> [--substring | --regex | --paths] <term>
                                  Search the PR's head commit outside its changed files and log the result.
                                  Matches whole words unless --substring or --regex.
-  mergeatlas.py publish <map-id> Validate <map-id>.input.json, write the map, serve it.
+  mergeatlas.py publish <map-id> Validate <map-id>.input.json, write the map as a draft, serve it.
+  mergeatlas.py finish <map-id>  Say the map's cold read is done, so the viewer stops showing it as a draft.
   mergeatlas.py publish-stack <stack-id>
                                  Validate the stack story in <stack-id>.input.json, write the stack page, serve it.
   mergeatlas.py export <map-id> [path]
@@ -24,6 +25,7 @@
 """
 import difflib
 import hashlib
+import io
 import json
 import os
 import platform
@@ -39,10 +41,10 @@ from collections import Counter
 from functools import lru_cache, partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 # The release this file belongs to. .claude-plugin/plugin.json and CHANGELOG.md name the same one, and a test holds them to it.
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 OLDEST_PYTHON = (3, 9)
 
 HOME = Path.home() / ".cache" / "mergeatlas"
@@ -72,8 +74,12 @@ CHANGE_TEXT = ("problem", "change", "result")
 EDGE_TEXT = ("relationship", "connection", "flow", "effect")
 # An id is a slug: the story links to it, and the viewer writes it into the page as it is.
 SLUG = re.compile(r"[\w-]+")
-# All the viewer's server hands out: the viewer itself and the published maps.
+# The files the viewer's server hands out: the viewer itself and the published maps.
 SERVED = re.compile(r"/(index\.html)?|/data/[\w.-]+\.json")
+MAP_ID = re.compile(r"[\w.-]+")
+PR_URL = re.compile(r"https://([^/]+)/([^/]+)/([^/]+)/pull/(\d+)")
+# How long the server trusts what GitHub last said about a PR before asking again.
+PR_NOW_SECONDS = 60
 CARD_LINK = re.compile(r"\[[^\]]+\]\(([\w-]+)\)")
 LOCATION = r"([^)#\s]+)#L(\d+)(?:-L(\d+))?"
 CODE_LINK = re.compile(r"\[[^\]]+\]\(" + LOCATION + r"\)")
@@ -536,7 +542,11 @@ def fetch_pr(repo, number, stack):
     if status == "same-head":
         shutil.copy(VIEWER, HOME / "index.html")
         serve()
-        print(f"map id:      {map_id}\nmap:         unchanged since it was published (head {head[:7]}): {url}")
+        if is_draft(map_id):
+            print(f"map id:      {map_id}\nmap:         published as a draft whose cold read did not finish (head {head[:7]}): {url}")
+            print(f"work dir:    {WORK}")
+        else:
+            print(f"map id:      {map_id}\nmap:         unchanged since it was published (head {head[:7]}): {url}")
         return
     if status == "refreshed":
         print(f"map id:      {map_id}\nmap:         refreshed by the script: the same changes on head {head[:7]}; links into "
@@ -1152,8 +1162,10 @@ def summary_of(steps):
     if accepted:
         last = accepted[-1]
         lines.append(f"map            {last['cards']} cards, {last['intents']} intents, {last['arrows']} arrows, {last['words']} words")
-        lines.append(f"time           {minutes(accepted[0]['at'] - run[0]['at'])} to the first accepted publish, "
-                     f"{minutes(run[-1]['at'] - run[0]['at'])} to the last step")
+        done = of("finish")
+        end = f"{minutes(done[-1]['at'] - run[0]['at'])} to the finished map" if done else \
+            f"{minutes(run[-1]['at'] - run[0]['at'])} to the last step, and the cold read was not finished"
+        lines.append(f"time           {minutes(accepted[0]['at'] - run[0]['at'])} to the first accepted publish, {end}")
     return lines
 
 
@@ -1168,20 +1180,101 @@ def report(map_id):
     print("\n".join(summary_of(steps)))
 
 
+def published(map_id):
+    """A published map or stack page, {} when there is none to read."""
+    try:
+        return json.loads((DATA / f"{map_id}.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def is_draft(map_id):
+    return bool(published(map_id).get("pr", {}).get("draft"))
+
+
+def library():
+    """What the viewer's front page lists: every published map and stack page, the latest first."""
+    found = []
+    for path in DATA.glob("*.json"):
+        data = published(path.stem)
+        pr, stack = data.get("pr"), data.get("stack")
+        if data.get("kind") == "stack" and stack:
+            found.append({"id": path.stem, "kind": "stack", "repo": stack["repo"], "number": stack.get("number"),
+                          "url": stack.get("url"), "prs": len(data.get("prs", [])), "at": int(path.stat().st_mtime)})
+        elif pr:
+            link = PR_URL.fullmatch(pr["url"])
+            strip = pr.get("stack") or {}
+            found.append({
+                "id": path.stem, "kind": "map", "repo": f"{link[2]}/{link[3]}" if link else "", "number": pr["number"],
+                "title": pr["title"], "url": pr["url"], "files": pr["files"], "additions": pr["additions"],
+                "deletions": pr["deletions"], "draft": bool(pr.get("draft")),
+                # a map from before maps said when they were made takes the time its file was written
+                "at": (pr.get("mapped") or {}).get("at") or int(path.stat().st_mtime),
+                "stack": {"id": strip["id"], "number": strip.get("number"), "of": len(strip["prs"]),
+                          "part": next((i for i, p in enumerate(strip["prs"], 1) if p.get("current")), None)} if strip else None,
+            })
+    return sorted(found, key=lambda m: -m["at"])
+
+
+pr_now_known = {}
+
+
+def pr_now(map_id):
+    """Where a mapped PR stands on GitHub now, beside the commit its map was made at, so the viewer can say when the PR
+    has moved on. It asks through gh as fetch does, once a minute per map at most, and answers {} when it cannot tell."""
+    pr = published(map_id).get("pr", {}) if MAP_ID.fullmatch(map_id) else {}
+    link, mapped = PR_URL.fullmatch(pr.get("url", "")), (pr.get("mapped") or {}).get("head")
+    if not (link and mapped):
+        return {}
+    at, now, head = pr_now_known.get(map_id, (0, {}, None))
+    # a map made again describes a later commit, so what was heard for the earlier one no longer answers
+    if time.time() - at > PR_NOW_SECONDS or head != mapped:
+        host, owner, repo, number = link.groups()
+        try:
+            asked = subprocess.run(
+                ["gh", "api", *(["--hostname", host] if host != "github.com" else []), f"repos/{owner}/{repo}/pulls/{number}",
+                 "--jq", "{head: .head.sha, state: (if .merged then \"merged\" else .state end)}"],
+                capture_output=True, text=True, timeout=15)
+            now = json.loads(asked.stdout) if asked.returncode == 0 else {}
+        except (OSError, ValueError, subprocess.SubprocessError):
+            now = {}
+        pr_now_known[map_id] = (time.time(), now, mapped)
+    return {"mapped": mapped, **now} if now.get("head") else {}
+
+
 class ViewerHandler(SimpleHTTPRequestHandler):
     """Serves the viewer and the published maps to this machine alone. The cache also holds the diffs and PR text of
     private repositories, so nothing else in it is served. A request made under another host name is refused, since
-    that is how a web page whose own domain points at 127.0.0.1 would ask for them."""
+    that is how a web page whose own domain points at 127.0.0.1 would ask for them. Two more answers are worked out
+    when asked for: the list of maps for the front page, and where a mapped PR stands on GitHub now."""
 
     def send_head(self):
         port = self.server.server_address[1]
         if self.headers.get("Host") not in (f"127.0.0.1:{port}", f"localhost:{port}"):
             self.send_error(403, "MergeAtlas answers on 127.0.0.1 and localhost only")
             return None
-        if not SERVED.fullmatch(urlsplit(self.path).path):
+        asked = urlsplit(self.path)
+        if asked.path in ("/maps.json", "/pr-now.json"):
+            # the viewer alone asks for these: a browser says when another site's page is the one asking, and that page
+            # could otherwise have this machine call GitHub
+            if self.headers.get("Sec-Fetch-Site", "same-origin") != "same-origin":
+                self.send_error(403)
+                return None
+            if asked.path == "/maps.json":
+                return self.answer(library())
+            return self.answer(pr_now(parse_qs(asked.query).get("map", [""])[0]))
+        if not SERVED.fullmatch(asked.path):
             self.send_error(404)
             return None
         return super().send_head()
+
+    def answer(self, found):
+        body = json.dumps(found).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        return io.BytesIO(body)
 
     def end_headers(self):
         # no-store keeps browsers from pairing a cached viewer with a newly published map
@@ -1299,7 +1392,8 @@ def serve():
 
 
 def publish(map_id, asked=True):
-    """Checks the map and serves it. asked is False when fetch republishes a map by itself, which the run record leaves out."""
+    """Checks the map and serves it as a draft, which it stays until finish says its cold read is done. asked is False
+    when fetch republishes a map by itself: the run record leaves that out, and the map stays as finished as it was."""
     pr = json.loads((WORK / f"{map_id}.pr.json").read_text())
     data = json.loads((WORK / f"{map_id}.input.json").read_text())
     stats = {f["path"]: (f["additions"], f["deletions"]) for f in pr["files"]}
@@ -1337,6 +1431,8 @@ def publish(map_id, asked=True):
             "url": pr["url"],
             "blob": f"{pr['url'].split('/pull/')[0]}/blob/{pinned}/",
             "pinned": {"commit": pinned, "base": pr.get("baseRefName"), "below": (pr.get("stack") or {}).get("below")},
+            "mapped": {"at": int(time.time()), "head": pr["headRefOid"]},
+            "draft": asked or is_draft(map_id),
             "diffs": {p: hashlib.sha256(p.encode()).hexdigest() for p in stats},
             "issues": [
                 *({"label": f"#{i['number']}", "title": i["title"], "url": i["url"]} for i in pr["issues"]),
@@ -1359,6 +1455,17 @@ def publish(map_id, asked=True):
     serve()
     print(f"{len(data['cards'])} cards, {len(data['intents'])} intents, {len(data['edges'])} arrows")
     print(f"http://127.0.0.1:{PORT}/?map={map_id}")
+
+
+def finish(map_id):
+    """Ends a map's draft: its cold read is done. The viewer of an open draft picks the change up by itself."""
+    data = published(map_id)
+    if "pr" not in data:
+        sys.exit(f"no published map {map_id}: run publish first")
+    data["pr"]["draft"] = False
+    (DATA / f"{map_id}.json").write_text(json.dumps(data, indent=2))
+    note(map_id, "finish")
+    print(f"finished: http://127.0.0.1:{PORT}/?map={map_id}")
 
 
 def stack_of_map(pr):
@@ -1484,6 +1591,8 @@ def main():
         search(args[0], args[-1], args[1].removeprefix("--") if len(args) == 3 else "word")
     elif command == "publish" and len(args) == 1:
         publish(args[0])
+    elif command == "finish" and len(args) == 1:
+        finish(args[0])
     elif command == "publish-stack" and len(args) == 1:
         publish_stack(args[0])
     elif command == "export" and len(args) in (1, 2):

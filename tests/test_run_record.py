@@ -13,6 +13,7 @@ The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
     words_in(data)                      -> the words of prose a map holds, link targets left out
     summary_of(steps)                   -> the lines report prints for the latest run
     publish(map_id, asked=True)         -> notes the attempt, unless fetch republished the map by itself
+    finish(map_id)                      -> notes that the cold read is done, which ends the map's draft
 """
 import io
 import json
@@ -110,6 +111,13 @@ class Notes(Cache):
         self.publish(asked=False)
         self.assertEqual(self.steps(), [])
 
+    def test_finishing_a_map_is_noted(self):
+        self.work()
+        self.publish()
+        with redirect_stdout(io.StringIO()):
+            mergeatlas.finish("o-r-7")
+        self.assertEqual([s["step"] for s in self.steps()], ["publish", "finish"])
+
     def test_printing_a_card_for_a_cold_read_is_noted(self):
         self.work()
         with redirect_stdout(io.StringIO()):
@@ -121,6 +129,64 @@ class Notes(Cache):
         self.work()
         with self.assertRaises(SystemExit):
             mergeatlas.card_text("o-r-7", "nope")
+        self.assertEqual(self.steps(), [])
+
+
+class Drafts(Cache):
+    """A map is served as a draft from its first publish, so it can be read while its cards are cold read, and it stays
+    one until finish. The published map says so in pr.draft, beside the commit and time it was made at in pr.mapped."""
+
+    def map(self):
+        return json.loads((mergeatlas.DATA / "o-r-7.json").read_text())["pr"]
+
+    def finish(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            mergeatlas.finish("o-r-7")
+        return out.getvalue()
+
+    def test_a_published_map_is_a_draft_that_says_what_it_was_made_at(self):
+        self.work()
+        with mock.patch.object(mergeatlas.time, "time", return_value=1700000000.4):
+            self.publish()
+        self.assertEqual((self.map()["draft"], self.map()["mapped"]), (True, {"at": 1700000000, "head": "a" * 40}))
+        self.assertTrue(mergeatlas.is_draft("o-r-7"))
+
+    def test_finish_ends_the_draft_and_changes_nothing_else(self):
+        self.work()
+        self.publish()
+        before = json.loads((mergeatlas.DATA / "o-r-7.json").read_text())
+        self.assertIn("?map=o-r-7", self.finish())
+        after = json.loads((mergeatlas.DATA / "o-r-7.json").read_text())
+        self.assertFalse(mergeatlas.is_draft("o-r-7"))
+        before["pr"]["draft"] = False
+        self.assertEqual(after, before)
+
+    def test_publishing_again_after_finish_starts_a_new_draft(self):
+        self.work()
+        self.publish()
+        self.finish()
+        self.publish()
+        self.assertTrue(mergeatlas.is_draft("o-r-7"))
+
+    def test_a_map_fetch_republishes_by_itself_stays_as_finished_as_it_was(self):
+        self.work()
+        self.publish()
+        self.publish(asked=False)
+        self.assertTrue(mergeatlas.is_draft("o-r-7"))
+        self.finish()
+        self.publish(asked=False)
+        self.assertFalse(mergeatlas.is_draft("o-r-7"))
+
+    def test_a_map_from_before_drafts_is_finished(self):
+        mergeatlas.DATA.mkdir(parents=True)
+        (mergeatlas.DATA / "o-r-7.json").write_text(json.dumps({"pr": {"number": 7}, "cards": []}))
+        self.assertFalse(mergeatlas.is_draft("o-r-7"))
+
+    def test_finish_refuses_a_map_that_was_never_published(self):
+        with self.assertRaises(SystemExit) as stopped:
+            self.finish()
+        self.assertIn("run publish first", str(stopped.exception))
         self.assertEqual(self.steps(), [])
 
 
@@ -219,8 +285,13 @@ class Summary(Cache):
     def test_the_map_is_sized_as_last_published(self):
         self.assertEqual(self.line(RUN, "map"), "32 cards, 8 intents, 23 arrows, 7450 words")
 
-    def test_time_runs_from_the_fetch(self):
-        self.assertEqual(self.line(RUN, "time"), "15 min to the first accepted publish, 30 min to the last step")
+    def test_time_runs_from_the_fetch_to_the_finished_map(self):
+        done = RUN + [step(1860, "finish"), step(2400, "export")]
+        self.assertEqual(self.line(done, "time"), "15 min to the first accepted publish, 31 min to the finished map")
+
+    def test_a_run_whose_cold_read_was_not_finished_says_so(self):
+        self.assertEqual(self.line(RUN, "time"),
+                         "15 min to the first accepted publish, 30 min to the last step, and the cold read was not finished")
 
     def test_a_later_fetch_that_hands_back_work_starts_a_new_run(self):
         later = [step(90000, "fetch", status="partial", files=37, additions=2300, deletions=92, diff_lines=4400),
@@ -228,7 +299,8 @@ class Summary(Cache):
         self.assertEqual(self.line(RUN + later, "run"), "2 of 2 for this map, MergeAtlas 0.1.0")
         self.assertEqual(self.line(RUN + later, "pull request"), "37 files, +2300 -92, 4400 diff lines, changed since its last map")
         self.assertEqual(self.line(RUN + later, "publishes"), "1, of which 0 rejected")
-        self.assertEqual(self.line(RUN + later, "time"), "5 min to the first accepted publish, 5 min to the last step")
+        self.assertEqual(self.line(RUN + later, "time"),
+                         "5 min to the first accepted publish, 5 min to the last step, and the cold read was not finished")
 
     def test_a_fetch_that_finds_the_map_unchanged_starts_no_run(self):
         same = [step(90000, "fetch", status="same-head", files=36, additions=2199, deletions=92, diff_lines=4210)]

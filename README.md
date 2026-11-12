@@ -38,6 +38,9 @@ It works beside the diff, not instead of it: every claim links to the lines it c
 - **Code links:** claims link to their lines, in the pull request's Files changed tab or at the head commit.
 - **Review marks:** mark a file as reviewed and go straight to the next one. A progress bar counts the files that matter, and Previous and Next step through reading order.
 - **Jump to a file:** press ⌘K, or Ctrl K, to find a file by name.
+- **Read it while it is checked:** you get the link as soon as the map is written. It opens as a draft, takes in each later version by itself while your agent checks the cards for gaps, and marks the cards whose words changed.
+- **Your maps:** `http://127.0.0.1:8765` lists every map on your machine under its repository, with how far you have reviewed each.
+- **Still current?** A map shows the commit it describes, and says so when the pull request has moved on since.
 - **Share:** download the map as one HTML file that opens in any browser, with no MergeAtlas or setup.
 - **Light and dark themes:** the viewer follows your system setting.
 
@@ -96,7 +99,7 @@ This is the setup where `/mergeatlas` works without the plugin's prefix.
 
 ### Using it
 
-From inside the pull request's repository, ask your agent to map it. The map opens at `http://127.0.0.1:8765`.
+From inside the pull request's repository, ask your agent to map it. It gives you a link as soon as the map is written, and goes on checking the map while you read. Every map you have made is listed at `http://127.0.0.1:8765`.
 
 ### Choosing the cold readers' model
 
@@ -124,7 +127,7 @@ Ask your agent to "report this map". It runs `mergeatlas.py report`, which sums 
 
 The analysis comes from your agent, which reads the issue, the diff and the surrounding source. `skills/mergeatlas/scripts/mergeatlas.py` does the mechanical part: it fetches the pull request, runs the searches your agent chooses for affected files, checks the map against the diff, and serves it. Those searches are plain text, so MergeAtlas works in any language. Maps and working files stay on your machine in `~/.cache/mergeatlas`.
 
-The viewer's server listens on `127.0.0.1` alone. It hands out the viewer and the published maps and nothing else in that folder, and it refuses requests made under any other host name. To report a security problem, see [SECURITY.md](SECURITY.md).
+The viewer's server listens on `127.0.0.1` alone. It hands out the viewer, the published maps and a list of them, and nothing else in that folder, and it refuses requests made under any other host name. While a map is open, the server asks `gh` whether the pull request has new commits, once a minute at most. To report a security problem, see [SECURITY.md](SECURITY.md).
 
 ## Contributing
 

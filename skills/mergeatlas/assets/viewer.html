@@ -130,6 +130,24 @@
   #panel .pinned { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
   #panel .pinned a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
   #panel .pinned a.sha { font-family: var(--mono); }
+  #panel a.brand { text-decoration: none; }
+  #panel a.brand:hover { color: var(--ink); }
+  /* what the reader should know about the map itself: a draft still being checked, a PR that has moved on */
+  .notices { display: grid; gap: 6px; margin-top: 8px; }
+  .notices:empty { display: none; }
+  .notice { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--code-bg); color: var(--ink); font-size: 12px; line-height: 1.45; }
+  .notice::before { content: ""; width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; background: var(--muted); }
+  .notice.checking::before { animation: checking 1.6s ease-in-out infinite; }
+  .notice.moved::before { background: var(--cleanup); }
+  .notice code { font-family: var(--mono); font-size: 11px; }
+  .notice button { grid-column: 2; justify-self: start; margin-top: 3px; padding: 0; border: 0; background: none; color: var(--core);
+    font: inherit; font-weight: 600; cursor: pointer; }
+  .notice button:hover { text-decoration: underline; }
+  @keyframes checking { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .notice.checking::before { animation: none; } }
+  /* a card whose words changed while the map was open says so until it is opened */
+  [data-updated] .tag::after { content: " · updated"; color: var(--cleanup); }
   .from-pr { margin-left: .3em; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted);
     font: 11px var(--mono); text-decoration: none; white-space: nowrap; }
   .from-pr:hover { color: var(--core); border-color: var(--core); }
@@ -162,6 +180,16 @@
   #stackpage .pr .links { margin-top: 8px; font-size: 13px; display: flex; gap: 14px; }
   #stackpage .pr .links a, #stackpage .prlink { color: var(--core); font-weight: 600; text-decoration: none; }
   #stackpage .pr .links a:hover, #stackpage .prlink:hover { text-decoration: underline; }
+  /* the front page: every map on this machine, by repository */
+  #stackpage.library .brand { display: flex; align-items: center; gap: 6px; margin-bottom: 18px; color: var(--muted); font-size: 12px; font-weight: 600; }
+  #stackpage.library .brand img { width: 24px; height: 24px; }
+  #stackpage ol.maps { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
+  #stackpage ol.maps .pr { margin-left: 0; }
+  #stackpage ol.maps h3 a { color: inherit; text-decoration: none; }
+  #stackpage ol.maps h3 a:hover { color: var(--core); }
+  #stackpage ol.maps .facts { margin-top: 4px; color: var(--muted); font-size: 13px; }
+  #stackpage ol.maps .draft { color: var(--cleanup); }
+  #stackpage.library p.links { display: flex; gap: 16px; margin-top: 14px; font-size: 13px; }
   #panel button.toggle { float: right; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 12px; }
   #legend { position: fixed; inset: auto 16px 64px auto; margin: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px;
     background: var(--card); box-shadow: var(--shadow); color: var(--muted); font-size: 12px; }
@@ -544,13 +572,115 @@ function fromBadge(path) {
   return `<a class="from-pr" href="${esc(prHref(p, s.card_id))}" title="${esc(`${path} was changed in #${s.pr} below: ${s.title}. ${where}.`)}">from #${s.pr}</a>`;
 }
 // code outside the PR is linked at the commit the map was built on, so a rebase leaves those links where they were
-function pinnedHtml() {
-  const p = META.pinned; if (!p?.commit) return '';
-  const commit = `<a class="sha" href="${esc(META.blob.replace(/\/blob\/[^/]+\/$/, `/commit/${p.commit}`))}" target="_blank" rel="noopener">${esc(p.commit.slice(0, 7))}</a>`;
-  const repo = META.url.replace(/\/pull\/\d+.*$/, ''), link = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(text)}</a>`;
-  const base = p.below ? link(stackPr(p.below)?.url ?? `${repo}/pull/${p.below}`, `#${p.below}`) : p.base ? link(`${repo}/tree/${encodeURI(p.base)}`, p.base) : '';
-  return `<span title="Links to files this PR doesn't change open at this commit">Base: ${base ? `${base} @ ` : ''}${commit}</span>`;
+const UNITS = [['minute', 60], ['hour', 24], ['day', 30]];
+// "5 minutes ago", and past a month the date, so it reads after "Mapped" and "mapped"
+function ago(at) {
+  let n = Math.max(0, Math.round((Date.now() / 1000 - at) / 60));
+  if (n < 1) return 'just now';
+  for (const [unit, per] of UNITS) { if (n < per) return `${n} ${unit}${n === 1 ? '' : 's'} ago`; n = Math.round(n / per); }
+  return `on ${new Date(at * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
 }
+// the commit the map describes, then the commit its links to files outside the PR open at
+function pinnedHtml() {
+  const p = META.pinned, m = META.mapped, repo = META.url.replace(/\/pull\/\d+.*$/, ''), parts = [];
+  const commit = sha => `<a class="sha" href="${esc(`${repo}/commit/${sha}`)}" target="_blank" rel="noopener">${esc(sha.slice(0, 7))}</a>`;
+  const link = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(text)}</a>`;
+  if (m?.at) parts.push(`<span title="${esc(`This map describes the pull request as it stood at this commit, on ${new Date(m.at * 1000).toLocaleString()}`)}">Mapped ${esc(ago(m.at))} at ${commit(m.head)}</span>`);
+  if (p?.commit) {
+    const base = p.below ? link(stackPr(p.below)?.url ?? `${repo}/pull/${p.below}`, `#${p.below}`) : p.base ? link(`${repo}/tree/${encodeURI(p.base)}`, p.base) : '';
+    parts.push(`<span title="Links to files this PR doesn't change open at this commit">Base: ${base ? `${base} @ ` : ''}${commit(p.commit)}</span>`);
+  }
+  return parts.join(' · ');
+}
+/* ---------- the map's own standing ---------- */
+/* A map is published as a draft and stays one until its cards have been checked for gaps, so a reviewer can start
+   reading while that runs. The page fetches the map again while it is a draft and takes in what changed. The server
+   also says where the pull request stands on GitHub now, so a map made at an older commit says so. */
+let NOW = null, PENDING = null, LIBRARY = false, stalledShown = false;
+const UPDATED = new Set();
+const POLL_MS = 4000, DRAFT_STALLED_MS = 60 * 60 * 1000;
+const stalled = () => !!META.draft && Date.now() - (META.mapped?.at ?? 0) * 1000 > DRAFT_STALLED_MS;
+function noticesHtml() {
+  const notes = [];
+  if (PENDING) notes.push(`<div class="notice moved"><span>A newer version of this map is ready.</span><button data-take-update>Show it</button></div>`);
+  if (META.draft) notes.push(CARRIED ? `<div class="notice"><span><strong>Draft.</strong> This map was shared before its cards were checked for gaps.</span></div>`
+    : stalled() ? `<div class="notice moved"><span><strong>Draft.</strong> The check of its cards for gaps did not finish. Ask your agent to map this pull request again to finish it.</span></div>`
+    : `<div class="notice checking"><span><strong>Draft.</strong> The cards are still being checked for gaps, so some may gain detail. This page updates by itself.</span></div>`);
+  if (NOW?.head && META.mapped?.head && NOW.head !== META.mapped.head) {
+    const since = `since this map was made at <code>${esc(META.mapped.head.slice(0, 7))}</code>`;
+    notes.push(`<div class="notice moved"><span><strong>The pull request has moved on.</strong> ${NOW.state === 'open' ? `It has new commits ${since}.` : `It gained commits ${since}, and is now ${NOW.state === 'merged' ? 'merged' : 'closed'}.`} Ask your agent to map it again: it writes again only the cards that changed.</span></div>`);
+  }
+  return `<div class="notices">${notes.join('')}</div>`;
+}
+const showNotices = () => { stalledShown = stalled(); for (const el of document.querySelectorAll('.notices')) el.outerHTML = noticesHtml(); };
+function showStanding() {
+  $('#pstack').innerHTML = stackStripHtml(); $('#pstack').hidden = !META.stack;
+  $('#ppinned').innerHTML = pinnedHtml(); $('#ppinned').hidden = !$('#ppinned').innerHTML;
+  showNotices();
+}
+const markUpdated = () => {
+  for (const el of document.querySelectorAll('.item[data-card], [data-review-card]')) el.toggleAttribute('data-updated', UPDATED.has(el.dataset.card ?? el.dataset.reviewCard));
+};
+async function askNow() {
+  const id = MAP_ID;
+  if (!HOSTED || STACK_PAGE || LIBRARY || !META.mapped?.head) return;
+  try {
+    const res = await fetch(`pr-now.json?map=${encodeURIComponent(id)}`, { cache: 'no-store' });
+    const now = res.ok ? await res.json() : null;
+    if (id === MAP_ID && now?.head) { NOW = now; showNotices(); }
+  } catch {}
+}
+// what a reader would see change: everything but the map's standing
+const wordsOf = d => JSON.stringify({ ...d, pr: { ...d.pr, draft: 0, mapped: 0, stack: 0 } });
+const changedCards = (was, now) => {
+  const old = Object.fromEntries(was.cards.map(c => [c.id, JSON.stringify(c)]));
+  return now.cards.filter(c => old[c.id] !== JSON.stringify(c)).map(c => c.id);
+};
+// a reader inside a card keeps the words they are reading: the map waits for the card to close, and the tree asks first
+const reading = () => listView || modalBg.classList.contains('open') || !jump.hidden || panning || !!hoodDrag;
+async function takeUpdate() {
+  const raw = PENDING, was = JSON.parse(RAW), keep = { view: { ...view }, touched, item: listView ? selected : null };
+  if (!raw) return;
+  PENDING = null;
+  // a card named in the address opened once, when the link was followed
+  const url = new URL(location); url.searchParams.delete('card'); history.replaceState(history.state, '', url);
+  await show(MAP_ID, raw);
+  const changed = changedCards(was, JSON.parse(raw));
+  for (const id of changed) UPDATED.add(id);
+  markUpdated();
+  if (keep.touched) { Object.assign(view, keep.view); touched = true; apply(); }
+  const [node, file] = (keep.item ?? OVERVIEW).split('#');
+  if (keep.item !== OVERVIEW && byId[node] && (!file || byId[node].files?.[+file])) openItem(keep.item);
+  $('#announce').textContent = changed.length ? `Map updated: ${count(changed.length, 'card')} changed` : 'Map updated';
+}
+function arrive(raw) {
+  let was, now;
+  try { was = JSON.parse(RAW); now = JSON.parse(raw); } catch { return; }
+  if (!was.pr || !now.pr) return;
+  if (wordsOf(was) === wordsOf(now)) {
+    RAW = raw; PENDING = null;
+    for (const k of ['draft', 'mapped', 'stack']) META[k] = now.pr[k];
+    return showStanding();
+  }
+  PENDING = raw;
+  return reading() ? showNotices() : takeUpdate();
+}
+async function checkMap() {
+  const id = MAP_ID;
+  if (CARRIED || !id || STACK_PAGE || LIBRARY || document.hidden) return;
+  let raw;
+  try { raw = await fetchMap(id); } catch { return; }
+  if (id !== MAP_ID) return;
+  if (raw === RAW) { if (PENDING) { PENDING = null; showNotices(); } return; }
+  if (raw !== PENDING) return arrive(raw);
+  if (!reading()) takeUpdate();
+}
+setInterval(() => {
+  if (META.draft || PENDING) checkMap();
+  if (stalled() !== stalledShown) showNotices();
+}, POLL_MS);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkMap(); askNow(); } });
+document.addEventListener('click', ev => { if (ev.target.closest('[data-take-update]')) takeUpdate(); });
 const STRIP_SHOWN = 5;
 function stackStripHtml() {
   const st = META.stack; if (!st) return '';
@@ -603,6 +733,62 @@ function renderStackPage(page) {
     <ol class="prs">${page.prs.map(prHtml).join('')}</ol></div></main>`);
   $('#stackback')?.addEventListener('click', leaveStack);
 }
+const progressKey = id => `mergeatlas-progress:${id}`;
+let HOSTED = false;
+const loadLibrary = async () => {
+  try {
+    const res = await fetch('maps.json', { cache: 'no-store' });
+    if (!res.ok) return null;
+    HOSTED = true;
+    return await res.json();
+  } catch { return null; }
+};
+/* The front page lists every map on this machine, the latest first, under its repository. */
+function renderLibrary(maps) {
+  clearMap();
+  listView = false; document.body.classList.remove('list');
+  LIBRARY = true; MAP_ID = ''; RAW = ''; META = {}; NOW = PENDING = null; UPDATED.clear();
+  const reviewedOf = id => { try { return localStorage.getItem(progressKey(id)); } catch { return null; } };
+  const mapHtml = m => {
+    const pct = reviewedOf(m.id), st = m.stack;
+    const facts = [`${m.files} ${m.files === 1 ? 'file' : 'files'}`, `<span class="lines"><span class="a">+${m.additions}</span> <span class="d">\u2212${m.deletions}</span></span>`,
+      `mapped ${esc(ago(m.at))}`, st?.part ? `part ${st.part} of ${st.of} in ${st.number ? `stack #${st.number}` : 'a stack'}` : '', pct === null ? '' : `${esc(pct)}% reviewed`];
+    return `<li class="pr"><div class="top"><span class="num">#${m.number}</span><h3><a href="${esc(mapHref(m.id))}">${esc(m.title)}</a></h3>${m.draft ? '<span class="state draft">Draft</span>' : ''}</div>
+      <div class="facts">${facts.filter(Boolean).join(' \u00b7 ')}</div>
+      <div class="links"><a href="${esc(mapHref(m.id))}">Open map \u2192</a><a href="${esc(m.url)}" target="_blank" rel="noopener">Pull request on GitHub</a></div></li>`;
+  };
+  const stackHtml = m => `<li class="pr"><div class="top"><span class="num">Stack</span><h3><a href="${esc(mapHref(m.id))}">${m.number ? `Stack #${m.number}` : `Stack of ${m.prs} PRs`}</a></h3></div>
+      <div class="facts">The story of ${m.prs} pull requests as one change \u00b7 written ${esc(ago(m.at))}</div>
+      <div class="links"><a href="${esc(mapHref(m.id))}">Open stack overview \u2192</a>${m.url ? `<a href="${esc(m.url)}" target="_blank" rel="noopener">Stack on GitHub</a>` : ''}</div></li>`;
+  const repos = [...Map.groupBy(maps, m => m.repo)].map(([repo, list]) =>
+    `<h2 class="beat">${esc(repo)}</h2><ol class="maps">${list.map(m => (m.kind === 'stack' ? stackHtml(m) : mapHtml(m))).join('')}</ol>`);
+  const pulls = maps.filter(m => m.kind === 'map').length;
+  document.title = 'Your maps \u00b7 MergeAtlas';
+  document.body.classList.add('stack-page');
+  document.body.insertAdjacentHTML('beforeend', `<main id="stackpage" class="library"><div class="inner">
+    <div class="brand">${$('#panel .brand').innerHTML}</div>
+    <h1>Your maps</h1>
+    <div class="meta">${pulls ? `${pulls} ${pulls === 1 ? 'pull request' : 'pull requests'} mapped on this machine, the latest first` : 'No maps on this machine yet'}</div>
+    ${repos.join('') || '<p>Ask your agent to map a pull request, and its map will be listed here.</p>'}</div></main>`);
+}
+async function goHome(push = true) {
+  // a map asked for after this click wins, as a later map does in openMap
+  const ticket = ++opening, maps = await loadLibrary();
+  if (!maps || ticket !== opening) return;
+  if (push) history.pushState({ from: MAP_ID }, '', location.pathname);
+  slide(() => renderLibrary(maps), false);
+}
+// the brand in the panel leads to the front page where MergeAtlas's server lists the maps, so not on a site that
+// hosts one map, and not in a shared file
+function linkHome() {
+  const brand = $('#panel div.brand'); if (!HOSTED || !brand) return;
+  const a = Object.assign(document.createElement('a'), { className: 'brand', id: 'home', href: './', title: 'All your maps' });
+  a.append(...brand.childNodes); brand.replaceWith(a);
+}
+document.addEventListener('click', ev => {
+  if (!ev.target.closest('#home') || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+  ev.preventDefault(); goHome();
+});
 const story = t => fmt(t).replace(/\[([^\]]+)\]\(([\w-]+)\)/g, '<a class="cardlink" href="#" data-card="$2">$1</a>');
 document.addEventListener('click', ev => { if (ev.target.closest('.cardlink')) ev.preventDefault(); });
 
@@ -1202,7 +1388,7 @@ world.addEventListener('focusin', ev => {
 const modalBg = $('#modal-bg'), modal = $('#modal'), detail = $('#detail');
 const OVERVIEW = 'overview';
 let listView = false, selected = OVERVIEW, sequence = [], topOrder = [];
-const metaHtml = () => `<a class="codelink" href="${esc(META.url)}" target="_blank" rel="noopener">PR #${META.number}</a> \u00b7 ${META.files} files \u00b7 <span class="lines"><span class="a">+${META.additions}</span> <span class="d">\u2212${META.deletions}</span></span>${progressHtml()}`;
+const metaHtml = () => `<a class="codelink" href="${esc(META.url)}" target="_blank" rel="noopener">PR #${META.number}</a> \u00b7 ${META.files} files \u00b7 <span class="lines"><span class="a">+${META.additions}</span> <span class="d">\u2212${META.deletions}</span></span>${progressHtml()}${noticesHtml()}`;
 const section = (title, text, level = 3) => text ? `<h${level}>${title}</h${level}><p>${fmt(text)}</p>` : '';
 /* A mark covers one file's changes for one intent and stores the file's fingerprint, so a later push to that file
    shows as changed. A card is reviewed when every mark it covers is set, which keeps both views in step. */
@@ -1222,9 +1408,13 @@ const partLabel = c => {
 // tests, docs and files whose every change is mechanical stay out of the progress bar
 const mechanical = () => new Set(VIEWS.intents.cards.filter(g => g.mechanical).map(g => g.id));
 const matters = (f, mech) => !['test', 'docs'].includes(f.kind) && !f.changes.every(ch => mech.has(ch.intent));
-function progressHtml() {
+function progressPct() {
   const mech = mechanical(), files = VIEWS.files.cards.filter(f => matters(f, mech));
-  const done = files.filter(f => reviewState(f) === 'done').length, pct = files.length ? Math.round(100 * done / files.length) : 100;
+  const done = files.filter(f => reviewState(f) === 'done').length;
+  return files.length ? Math.round(100 * done / files.length) : 100;
+}
+function progressHtml() {
+  const pct = progressPct();
   return `<div class="progress" role="progressbar" aria-label="Review progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
     <div class="bar"><i style="width:${pct}%"></i></div><span>${pct}% reviewed</span></div>`;
 }
@@ -1271,6 +1461,8 @@ function showReviewed() {
     el.querySelector('.hood-progress').textContent = `${keys.filter(k => markState(k) === 'done').length} of ${count(keys.length, 'file')} reviewed`;
   }
   for (const el of document.querySelectorAll('.progress')) el.outerHTML = progressHtml();
+  // the front page shows how far each map has been reviewed
+  try { if (Object.keys(reviewed).length) localStorage.setItem(progressKey(MAP_ID), progressPct()); else localStorage.removeItem(progressKey(MAP_ID)); } catch {}
   for (const el of document.querySelectorAll('[data-badge]')) el.outerHTML = reviewBadge(byId[el.dataset.badge]);
   for (const el of document.querySelectorAll('[data-foot]')) el.outerHTML = reviewFooter(byId[el.dataset.foot]);
 }
@@ -1388,6 +1580,7 @@ function present(html, accent, item) {
   }
 }
 const openCard = id => {
+  if (UPDATED.delete(id)) markUpdated();
   if (listView && stackOf[id]) setBranch(byId[stackOf[id]], true);
   present(cardHtml(byId[id]), KIND[byId[id].kind].color, id);
 };
@@ -1508,6 +1701,7 @@ function jumpTo(c) {
   openCard(c.id);
 }
 addEventListener('keydown', ev => {
+  if (STACK_PAGE || LIBRARY) return;
   if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'k') { ev.preventDefault(); return jump.hidden ? openJump() : closeJump(); }
   if (jump.hidden) return;
   if (ev.key === 'Escape') { ev.stopImmediatePropagation(); return closeJump(); }
@@ -1853,10 +2047,19 @@ $('#sharedl').addEventListener('click', () => {
 const fetchMap = async id => {
   const res = await fetch(`data/${encodeURIComponent(id)}.json`, { cache: 'no-store' });
   if (!res.ok) throw new Error(res.status);
+  // MergeAtlas's own server names its release, and it is the one that lists the maps
+  if (res.headers.has('X-MergeAtlas-Version')) HOSTED = true;
   return res.text();
 };
 const placeOf = id => ((STACK_PAGE ?? META.stack)?.prs ?? []).findIndex(p => p.map_id === id);
-const forwardTo = id => !STACK_PAGE && (id === META.stack?.id || placeOf(id) >= placeOf(MAP_ID));
+const forwardTo = id => LIBRARY || (!STACK_PAGE && (id === META.stack?.id || placeOf(id) >= placeOf(MAP_ID)));
+// a page that draws no frames, such as a hidden tab, never starts the slide, so the page changes without it
+function slide(change, forward) {
+  let ran = false;
+  const update = () => { if (!ran) { ran = true; return change(); } };
+  morph(update, forward);
+  setTimeout(() => { if (!ran) { sliding?.skipTransition(); update(); } }, 1000);
+}
 let opening = 0;
 async function openMap(id, { card = null, push = true } = {}) {
   const ticket = ++opening, forward = forwardTo(id);
@@ -1866,12 +2069,8 @@ async function openMap(id, { card = null, push = true } = {}) {
   let raw;
   try { raw = await fetchMap(id); } catch { location.href = url; return; }
   if (ticket !== opening) return;
-  if (push) history.pushState({ from: MAP_ID }, '', url);
-  // a page that draws no frames, such as a hidden tab, never starts the slide, so the map switches without it
-  let ran = false;
-  const update = () => { if (!ran) { ran = true; return show(id, raw); } };
-  morph(update, forward);
-  setTimeout(() => { if (!ran) { sliding?.skipTransition(); update(); } }, 1000);
+  if (push) history.pushState({ from: MAP_ID || 'library' }, '', url);
+  slide(() => show(id, raw), forward);
 }
 // the overview's back arrow and Esc return to the map it was opened from, or to the bottom map when opened directly
 function leaveStack() {
@@ -1888,12 +2087,14 @@ document.addEventListener('click', ev => {
 });
 addEventListener('popstate', () => {
   const p = new URLSearchParams(location.search), id = p.get('map');
-  if (id && !CARRIED && id !== MAP_ID) openMap(id, { card: p.get('card'), push: false });
+  if (CARRIED) return;
+  if (!id) return goHome(false);
+  if (id !== MAP_ID) openMap(id, { card: p.get('card'), push: false });
 });
 addEventListener('keydown', ev => { if (ev.key === 'Escape' && STACK_PAGE && $('#stackback')) leaveStack(); });
 // on the map, ← and → step down and up the stack; the tree and the modal keep those keys for themselves
 addEventListener('keydown', ev => {
-  if (STACK_PAGE || listView || modalBg.classList.contains('open') || ev.target.closest?.('input, textarea, [contenteditable]')) return;
+  if (STACK_PAGE || LIBRARY || listView || modalBg.classList.contains('open') || ev.target.closest?.('input, textarea, [contenteditable]')) return;
   if (ev.altKey || ev.metaKey || ev.ctrlKey || ev.shiftKey) return;
   const a = $(`#pstack [data-step-key="${ev.key}"]`);
   if (a) { ev.preventDefault(); a.click(); }
@@ -1913,9 +2114,22 @@ function clearMap() {
   reachNodes.length = 0;
   selected = OVERVIEW; touched = false;
 }
+// a map this viewer cannot draw, such as one in the form an older release wrote, says so and leaves no empty canvas
+function renderUnreadable(pr) {
+  renderLibrary([]);
+  $('#stackpage h1').textContent = 'This map can\u2019t be shown';
+  $('#stackpage .meta').textContent = pr?.number ? `#${pr.number} ${pr.title ?? ''}` : '';
+  const links = [CARRIED ? '' : '<a class="prlink" href="./">\u2190 Your maps</a>', /^https:\/\//.test(pr?.url) ? `<a class="prlink" href="${esc(pr.url)}" target="_blank" rel="noopener">Pull request on GitHub</a>` : ''];
+  $('#stackpage p').outerHTML = `<p>It may have been written by an older release of MergeAtlas, in a form this viewer no longer reads.</p><p class="links">${links.join('')}</p>`;
+  document.title = 'MergeAtlas';
+}
 async function show(id, raw) {
   const data = JSON.parse(raw);
-  RAW = raw; MAP_ID = id;
+  try { await draw(id, raw, data); } catch (err) { console.error(err); renderUnreadable(data.pr); }
+}
+async function draw(id, raw, data) {
+  if (id !== MAP_ID) { NOW = PENDING = null; UPDATED.clear(); }
+  RAW = raw; MAP_ID = id; LIBRARY = false;
   hide();
   if (data.kind === 'stack') return renderStackPage(data);
   clearMap();
@@ -1935,8 +2149,7 @@ async function show(id, raw) {
   document.title = `PR #${META.number} · MergeAtlas`;
   $('#ptitle').replaceChildren(Object.assign(document.createElement('span'), { textContent: META.title, title: META.title }));
   $('#pmeta').innerHTML = metaHtml();
-  $('#pstack').innerHTML = stackStripHtml(); $('#pstack').hidden = !META.stack;
-  $('#ppinned').innerHTML = pinnedHtml(); $('#ppinned').hidden = !META.pinned;
+  showStanding();
   $('#pstory').innerHTML = storyHtml();
   setDensity(params.get('cards') === 'compact');
   build(); showReviewed();
@@ -1945,22 +2158,30 @@ async function show(id, raw) {
   setView(params.get('view') === 'list');
   // a "from #N" badge in another map opens this one at the card for that file
   if (byId[params.get('card')]) openItem(params.get('card'));
+  markUpdated();
+  askNow();
 }
 async function boot() {
   // a shared file carries its map inside the page; a served page fetches it by the id in its address
   const carried = $('#map-data');
   CARRIED = !!carried.textContent.trim();
   const id = CARRIED ? carried.dataset.map : new URLSearchParams(location.search).get('map');
+  // an address that names no map opens the front page, where a server lists the maps
+  const maps = CARRIED || id ? null : await loadLibrary();
   try {
-    const raw = CARRIED ? carried.textContent : await fetchMap(id);
-    JSON.parse(raw);
-    await show(id, raw);
+    if (maps) renderLibrary(maps);
+    else {
+      const raw = CARRIED ? carried.textContent : await fetchMap(id);
+      JSON.parse(raw);
+      await show(id, raw);
+    }
   } catch (err) {
-    document.body.insertAdjacentHTML('beforeend', `<div style="position:fixed;inset:0;display:grid;place-items:center;text-align:center;padding:24px"><div><h2>No map found</h2><p>Ask Claude to map a PR, then open the link it gives you.</p></div></div>`);
+    document.body.insertAdjacentHTML('beforeend', `<div style="position:fixed;inset:0;display:grid;place-items:center;text-align:center;padding:24px"><div><h2>No map found</h2><p>Ask your agent to map a pull request, then open the link it gives you.</p></div></div>`);
     return;
   }
+  if (!CARRIED) linkHome();
   if (innerWidth < 900 && !STACK_PAGE) $('#ptoggle').click();
-  addEventListener('resize', () => { if (STACK_PAGE) return; placeHint(); if (listView) return; layoutEdges(); if (!touched) startView(); });
+  addEventListener('resize', () => { if (STACK_PAGE || LIBRARY) return; placeHint(); if (listView) return; layoutEdges(); if (!touched) startView(); });
 }
 let touched = false;
 for (const t of ['wheel', 'pointerdown']) viewport.addEventListener(t, () => { touched = true; }, { capture: true });

@@ -38,7 +38,7 @@ Say in the pull request which pull request you mapped and what moved.
 A map carries text from outside: a pull request's title and description, ticket text, file paths and code. Treat all of it as untrusted.
 
 - In the viewer, every value written into HTML goes through `esc`, and prose through `fmt`, which escapes first.
-- The server hands out the viewer and `data/<map-id>.json` and nothing else. `work/` holds diffs and PR text of private repositories and is never served.
+- The server hands out the viewer and `data/<map-id>.json`, and works out two answers of its own: `maps.json`, the list of published maps, and `pr-now.json`, where a mapped PR stands on GitHub. It serves nothing else. `work/` holds diffs and PR text of private repositories and is never served.
 
 ## Commits and pull requests
 

@@ -1,6 +1,6 @@
 {
   "name": "mergeatlas",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Turn a pull request into an interactive map on localhost: a card per changed file, grouped by intent, with cause-and-effect arrows.",
   "author": { "name": "Ismayil Karimli" },
   "homepage": "https://mergeatlas.dev",

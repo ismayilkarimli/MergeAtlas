@@ -12,7 +12,8 @@ from outside, such as a pull request's title, and the viewer writes that text in
 
 What is under test:
     mergeatlas.VERSION, .claude-plugin/plugin.json, .claude-plugin/marketplace.json, CHANGELOG.md, README.md
-    skills/mergeatlas/assets/viewer.html: the map slot export fills, the mark serve knows the viewer by, esc and unesc
+    skills/mergeatlas/assets/viewer.html: the map slot export fills, the mark serve knows the viewer by, what it asks
+    the server for, esc and unesc, and ago, which says how long ago a map was made
 """
 import json
 import re
@@ -57,8 +58,8 @@ class WhatTheScriptNeedsOfTheViewer(unittest.TestCase):
         self.assertIn('id="world"', VIEWER)
 
     def test_the_viewer_asks_the_server_only_for_what_it_hands_out(self):
-        asked = re.findall(r"fetch\(`([^`]*)`", VIEWER)
-        self.assertEqual(asked, ["data/${encodeURIComponent(id)}.json"])
+        asked = set(re.findall(r"fetch\([`']([^`']*)[`']", VIEWER))
+        self.assertEqual(asked, {"data/${encodeURIComponent(id)}.json", "maps.json", "pr-now.json?map=${encodeURIComponent(id)}"})
         self.assertTrue(mergeatlas.SERVED.fullmatch("/data/owner-repo.name_1-42.json"))
 
 
@@ -94,6 +95,17 @@ class ViewerScript(unittest.TestCase):
         for character in '"\'<>':
             self.assertNotIn(character, escaped)
         self.assertEqual(escaped, "Fix &quot;quotes&quot; &amp; &lt;tags&gt; &apos; onmouseover=&apos;alert(1)")
+
+    def test_how_long_ago_a_map_was_made_reads_in_the_largest_unit_that_fits(self):
+        ago = re.search(r"const UNITS = .*?\n}\n", VIEWER, re.S)
+        self.assertTrue(ago)
+        asked = [20, 60, 59 * 60, 3 * 3600, 26 * 3600, 20 * 86400]
+        ran = self.node(f"{ago[0]}\nconst now = Date.now() / 1000;\n"
+                        f"for (const s of {json.dumps(asked)}) console.log(ago(now - s));\nconsole.log(ago(86400));")
+        self.assertEqual(ran.returncode, 0, ran.stderr)
+        *recent, dated = ran.stdout.splitlines()
+        self.assertEqual(recent, ["just now", "1 minute ago", "59 minutes ago", "3 hours ago", "1 day ago", "20 days ago"])
+        self.assertRegex(dated, r"^on .*1970")
 
     def test_a_link_target_comes_back_as_it_was_written(self):
         path = '''src/a&b/it's "x".ts#L1-L2'''
