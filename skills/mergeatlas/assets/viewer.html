@@ -606,6 +606,10 @@ function noticesHtml() {
   if (META.draft) notes.push(CARRIED ? `<div class="notice"><span><strong>Draft.</strong> This map was shared before its cards were checked for gaps.</span></div>`
     : stalled() ? `<div class="notice moved"><span><strong>Draft.</strong> The check of its cards for gaps did not finish. Ask your agent to map this pull request again to finish it.</span></div>`
     : `<div class="notice checking"><span><strong>Draft.</strong> The cards are still being checked for gaps, so some may gain detail. This page updates by itself.</span></div>`);
+  if (META.update && (META.update.cards.length || META.update.story)) {
+    const n = META.update.cards.length, sha = esc(META.update.from.slice(0, 7));
+    notes.push(`<div class="notice"><span><strong>Updated since ${sha}:</strong> ${n ? `${count(n, 'card')} changed, marked "updated" until you open ${n === 1 ? 'it' : 'them'}.${META.update.story ? ' The story changed too.' : ''}` : 'the story changed.'}</span></div>`);
+  }
   if (NOW?.head && META.mapped?.head && NOW.head !== META.mapped.head) {
     const since = `since this map was made at <code>${esc(META.mapped.head.slice(0, 7))}</code>`;
     notes.push(`<div class="notice moved"><span><strong>The pull request has moved on.</strong> ${NOW.state === 'open' ? `It has new commits ${since}.` : `It gained commits ${since}, and is now ${NOW.state === 'merged' ? 'merged' : 'closed'}.`} Ask your agent to map it again: it writes again only the cards that changed.</span></div>`);
@@ -734,6 +738,14 @@ function renderStackPage(page) {
   $('#stackback')?.addEventListener('click', leaveStack);
 }
 const progressKey = id => `mergeatlas-progress:${id}`;
+const seenKey = id => `mergeatlas-seen:${id}`;
+// the cards of an update the reader has opened, kept only for the update they belong to
+const seenCards = () => {
+  try { const seen = JSON.parse(localStorage.getItem(seenKey(MAP_ID))); return seen?.from === META.update?.from ? seen.cards ?? [] : []; } catch { return []; }
+};
+const markSeen = id => {
+  try { localStorage.setItem(seenKey(MAP_ID), JSON.stringify({ from: META.update.from, cards: [...new Set([...seenCards(), id])] })); } catch {}
+};
 let HOSTED = false;
 const loadLibrary = async () => {
   try {
@@ -1581,6 +1593,7 @@ function present(html, accent, item) {
 }
 const openCard = id => {
   if (UPDATED.delete(id)) markUpdated();
+  if (META.update?.cards.includes(id)) markSeen(id);
   if (listView && stackOf[id]) setBranch(byId[stackOf[id]], true);
   present(cardHtml(byId[id]), KIND[byId[id].kind].color, id);
 };
@@ -2140,6 +2153,7 @@ async function draw(id, raw, data) {
     if (c.paths.length === 1) c.title = c.paths[0].split('/').pop();
   }
   META = data.pr; byId = Object.fromEntries(data.cards.map(c => [c.id, c]));
+  if (META.update) { const seen = seenCards(); for (const card of META.update.cards) if (!seen.includes(card)) UPDATED.add(card); }
   VIEWS = { files: { cards: data.cards, edges: data.edges } };
   const params = new URLSearchParams(location.search), intents = data.intents ?? [];
   VIEWS.intents = intentView(intents, data.cards);

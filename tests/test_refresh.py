@@ -413,6 +413,13 @@ class RefreshWork(unittest.TestCase):
         pr["issues"] = [{"number": 3, "title": "b", "body": "b is lower case", "url": "https://github.com/o/r/issues/3"}]
         self.assertTrue(mergeatlas.refresh_work("o-r-7", pr, diff, self.base)[1]["words"])
 
+    def test_a_changed_pr_notes_the_words_the_map_had_when_it_was_handed_back(self):
+        self.first_map()
+        head2 = self.commit({"cfg.txt": "a\nBee\nc\n"}, "change b differently")
+        mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base)
+        noted = json.loads((mergeatlas.WORK / "o-r-7.update.json").read_text())
+        self.assertEqual(noted, {"from": self.head, "hashes": mergeatlas.hashes_of(self.saved_input())})
+
     def set_aside(self):
         """The files a map left that a map started over must not keep."""
         for suffix in ("read.json", "update.json", "delta.diff"):

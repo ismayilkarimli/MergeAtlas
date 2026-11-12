@@ -15,7 +15,10 @@ The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
     plan_lines(map_id, plan)            -> the lines fetch prints under "map:" for a map whose pull request changed
     publish(map_id, asked=True)         -> notes the attempt, unless fetch republished the map by itself
     finish(map_id)                      -> notes that the cold read is done, which ends the map's draft
+    publish(map_id) with <map-id>.update.json
+                                        -> gives the map pr.update: the commit it was updated from, the cards and story changed
 """
+import copy
 import io
 import json
 import shutil
@@ -239,6 +242,57 @@ class Plan(Cache):
 
     def test_a_map_that_is_new_prints_nothing_under_the_map(self):
         self.assertEqual(mergeatlas.plan_lines("o-r-7", None), [])
+
+
+class Updates(Cache):
+    """A map updated for new commits says which commit it was updated from, and which cards and whether the story changed
+    since fetch handed the work back, by comparing the words of each card then and at publish."""
+
+    FROM = "c" * 40
+
+    def setUp(self):
+        super().setUp()
+        self.data = copy.deepcopy(MAP)
+        self.data["cards"].append({"id": "doc", "kind": "docs", "title": "doc.md", "paths": ["doc.md"], "summary": "Names the file.",
+                                   "bullets": ["One line"],
+                                   "changes": [{"intent": "i1", "problem": "The file is unnamed.", "change": "This PR names [it](doc.md#L1).",
+                                                "result": "The file has a name.", "snippets": ["+# name"]}]})
+        self.work(self.data)
+        pr = {**PR, "files": [*PR["files"], {"path": "doc.md", "additions": 1, "deletions": 0}]}
+        (mergeatlas.WORK / "o-r-7.pr.json").write_text(json.dumps(pr))
+
+    def fetched(self):
+        """What fetch notes when it hands the map's work back."""
+        (mergeatlas.WORK / "o-r-7.update.json").write_text(json.dumps({"from": self.FROM, "hashes": mergeatlas.hashes_of(self.data)}))
+
+    def edit(self, change):
+        change(self.data)
+        (mergeatlas.WORK / "o-r-7.input.json").write_text(json.dumps(self.data))
+
+    def update(self):
+        return json.loads((mergeatlas.DATA / "o-r-7.json").read_text())["pr"].get("update")
+
+    def test_publish_names_the_cards_whose_words_changed_since_the_fetch(self):
+        self.fetched()
+        self.edit(lambda data: data["cards"][1]["changes"][0].update(result="The file has a name, and the name is its title."))
+        self.publish()
+        self.assertEqual(self.update(), {"from": self.FROM, "cards": ["doc"], "story": False})
+
+    def test_publish_says_when_the_story_changed(self):
+        self.fetched()
+        self.edit(lambda data: data.update(problem="b is lower case, and so is c."))
+        self.publish()
+        self.assertEqual(self.update(), {"from": self.FROM, "cards": [], "story": True})
+
+    def test_a_card_that_moved_a_link_alone_has_not_changed(self):
+        self.fetched()
+        self.edit(lambda data: data["cards"][1]["changes"][0].update(change="This PR names [it](doc.md#L2)."))
+        self.publish()
+        self.assertEqual(self.update(), {"from": self.FROM, "cards": [], "story": False})
+
+    def test_a_map_never_updated_carries_no_update(self):
+        self.publish()
+        self.assertNotIn("update", json.loads((mergeatlas.DATA / "o-r-7.json").read_text())["pr"])
 
 
 class Rules(unittest.TestCase):

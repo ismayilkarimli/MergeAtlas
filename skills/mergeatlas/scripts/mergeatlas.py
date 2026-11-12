@@ -928,6 +928,12 @@ def cited_paths(data):
     return found | {at[1] for e in data.get("edges", []) if (at := re.fullmatch(LOCATION, e.get("connection_at", "")))}
 
 
+def mark_update(map_id, old):
+    """Notes the head a changed map was updated from and the words of its cards then, so publish can say which changed since."""
+    data = json.loads((WORK / f"{map_id}.input.json").read_text())
+    (WORK / f"{map_id}.update.json").write_text(json.dumps({"from": old["headRefOid"], "hashes": hashes_of(data)}, indent=2))
+
+
 def keep_read_marks(map_id):
     """Counts a map finished before it had read marks as read, at its words as they stand."""
     path = WORK / f"{map_id}.read.json"
@@ -1001,6 +1007,7 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
             plan = {**plan, "redo": [], "keep": [c["id"] for c in data["cards"]], "added": [], "gone": [], "fix": [],
                     "recheck": [], "back": 0, "problems": str(rejected)}
             keep_read_marks(map_id)
+            mark_update(map_id, old)
             return "partial", plan
     text, kind = delta_of(old, pr, old_rows, new_rows, old_pinned, built)
     work["delta.diff"].write_text(text)
@@ -1015,6 +1022,7 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
     work["searches.json"].write_text(json.dumps(log, indent=2))
     work["cochange.json"].write_text(json.dumps(co_changes(set(paths), pr["headRefOid"]), indent=2))
     keep_read_marks(map_id)
+    mark_update(map_id, old)
     return "partial", plan
 
 
@@ -1607,6 +1615,8 @@ def publish(map_id, asked=True):
         if asked:
             note(map_id, "publish", accepted=False, rejected_for=Counter(rule_of(p) for p in problems))
         sys.exit("Map rejected:\n" + "\n".join(f"  {p}" for p in problems))
+    now, update_path = hashes_of(data), WORK / f"{map_id}.update.json"
+    was = json.loads(update_path.read_text()) if update_path.exists() else None
     if asked:
         note(map_id, "publish", accepted=True, cards=len(data["cards"]), intents=len(data["intents"]),
              arrows=len(data["edges"]), words=words_in(data))
@@ -1642,6 +1652,10 @@ def publish(map_id, asked=True):
         "edges": data["edges"],
         "intents": data["intents"],
     }
+    if was:
+        output["pr"]["update"] = {"from": was["from"],
+                                  "cards": [c["id"] for c in data["cards"] if was["hashes"].get(c["id"]) != now[c["id"]]],
+                                  "story": was["hashes"].get("story") != now["story"]}
     record = stack_of_map(pr)
     if record:
         output["stubs"] = stubs_for(data, record, pr["number"], published_maps(record))
