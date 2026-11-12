@@ -20,6 +20,10 @@
                                  Write each card no cold reader has passed to a file with the reader's instructions.
   mergeatlas.py passed <map-id | stack-id> <card-id | story>...
                                  Record the cards a cold reader found nothing in, so they are not read again.
+  mergeatlas.py claims <map-id> [--all]
+                                 Write each code link not yet checked to a file with its lines and a checker's instructions.
+  mergeatlas.py checked <map-id> <name>[:<n>,<n>...]...
+                                 Record the links a checker found to hold; the numbers after a name are the ones that did not.
   mergeatlas.py serve            Run the viewer server; publish starts it when needed.
   mergeatlas.py config           Print the config file's path and the model each agent gives its cold readers.
   mergeatlas.py config set <agent> <model | own> [effort]
@@ -86,6 +90,8 @@ PR_URL = re.compile(r"https://([^/]+)/([^/]+)/([^/]+)/pull/(\d+)")
 PR_NOW_SECONDS = 60
 CARD_LINK = re.compile(r"\[[^\]]+\]\(([\w-]+)\)")
 LOCATION = r"([^)#\s]+)#L(\d+)(?:-L(\d+))?"
+CLAIM = re.compile(r"\[([^\]]+)\]\(" + LOCATION + r"\)")
+CLAIM_CONTEXT = 6
 CODE_LINK = re.compile(r"\[[^\]]+\]\(" + LOCATION + r"\)")
 SHIFTABLE = re.compile(r"(\[[^\]]+\]\()" + LOCATION + r"\)")
 STACK_LINK = re.compile(r"\[[^\]]+\]\(#(\d+)\)")
@@ -690,6 +696,13 @@ def source_at(commit):
     return read
 
 
+def reader_of(pr):
+    """Returns a reader for the lines a map's links cite: a pull request's own files at its head, every other file at the commit the map was built on."""
+    changed = {f["path"] for f in pr["files"]}
+    head_read, pinned_read = source_at(pr["headRefOid"]), source_at(pr.get("pinned") or pr["headRefOid"])
+    return lambda path: head_read(path) if path in changed else pinned_read(path)
+
+
 def cited_lines(read, path, first, last):
     lines = read(path)
     last = last or first
@@ -942,9 +955,13 @@ def mark_update(map_id, old, plan):
 
 def keep_read_marks(map_id):
     """Counts a map finished before it had read marks as read, at its words as they stand."""
-    path = WORK / f"{map_id}.read.json"
-    if not path.exists() and not is_draft(map_id):
-        path.write_text(json.dumps(hashes_of(json.loads((WORK / f"{map_id}.input.json").read_text())), indent=2))
+    if is_draft(map_id):
+        return
+    data = json.loads((WORK / f"{map_id}.input.json").read_text())
+    if not (WORK / f"{map_id}.read.json").exists():
+        (WORK / f"{map_id}.read.json").write_text(json.dumps(hashes_of(data), indent=2))
+    if not (WORK / f"{map_id}.checked.json").exists():
+        write_checked(map_id, data)
 
 
 def outdated(data):
@@ -961,7 +978,7 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
     WORK.mkdir(parents=True, exist_ok=True)
     known = all(work[k].exists() for k in ("pr.json", "input.json", "diff")) and (DATA / f"{map_id}.json").exists()
     if known and (fresh or outdated(json.loads(work["input.json"].read_text()))):
-        for k in ("input.json", "read.json", "update.json", "delta.diff"):
+        for k in ("input.json", "read.json", "checked.json", "update.json", "delta.diff"):
             (WORK / f"{map_id}.{k}").unlink(missing_ok=True)
         known = False
     old = json.loads(work["pr.json"].read_text()) if known else None
@@ -1312,6 +1329,9 @@ def summary_of(steps):
     rounds = sum(1 for before, s in zip([None, *run], run) if s["step"] == "card" and (before or {}).get("step") != "card")
     if rounds:
         lines.append(f"cold reads     {len(of('card'))} cards and stories printed, over {rounds} rounds")
+    if of("claims"):
+        lines.append(f"claim checks   {sum(s['links'] for s in of('claims'))} links checked over {len(of('claims'))} rounds, "
+                     f"{sum(s['sent_back'] for s in of('checked'))} sent back")
     accepted = [a for a in publishes if a["accepted"]]
     if accepted:
         last = accepted[-1]
@@ -1557,6 +1577,117 @@ def passed(map_id, names):
     print(f"passed: {', '.join(names)}")
 
 
+CHECKER = """You are checking a description of a code change against the code. Below the line are numbered claims. Each gives a statement, the words in it that link to the code, and the lines that link points at, marked with >, with a few lines around them as they stand after the change. Read no other file and run no command. Decide for each claim:
+- ok: the marked lines do what the linked words say. When the linked words are only a name, the marked lines declare or use that name.
+- wrong: the marked lines do something that contradicts the linked words.
+- elsewhere: the marked lines neither show nor contradict what the linked words say, so the link points at the wrong place or the words say more than those lines do.
+
+Judge the linked words alone: the rest of the statement is there so you can read them. Judge what the code does, never why it was written. Use the unmarked lines only to make sense of the marked ones. Reply with one line for each claim that is not ok: its number, then wrong or elsewhere, then what the marked lines do, in one sentence. If every claim is ok, reply "none".
+
+---"""
+
+
+def claims_in(text, read):
+    """Lists the code links of one piece of prose with the sentence each sits in and a hash of its words and the lines it cites."""
+    sentences = [s.strip() for s in SENTENCE_END.split(text or "") if s.strip()]
+    found = []
+    for m in CLAIM.finditer(text or ""):
+        words, path, first, last = m[1], m[2], int(m[3]), int(m[4] or m[3])
+        lines = cited_lines(read, path, first, last)
+        if lines is None:
+            continue
+        sentence = next((s for s in sentences if m[0] in s), text)
+        digest = hashlib.sha256("\n".join([words, path, "\n".join(lines)]).encode()).hexdigest()
+        found.append({"words": words, "sentence": sentence, "path": path, "first": first, "last": last, "hash": digest})
+    return found
+
+
+def claims_of(data, read):
+    """Gives the code links of the story and of each card, in reading order, each link under the first name that holds it."""
+    texts = {"story": [data.get(k, "") for k in ("background", "problem", "solution")]}
+    for g in data.get("intents", []):
+        texts["story"] += [g.get("outcome", ""), *(base.get("how", "") for base in g.get("builds_on", []))]
+    for c in data.get("cards", []):
+        texts[c["id"]] = [*card_texts(c), *(e.get(k, "") for e in data.get("edges", []) if e["from"] == c["id"] for k in EDGE_TEXT)]
+    found, seen = {}, set()
+    for name, parts in texts.items():
+        found[name] = [claim for text in parts for claim in claims_in(text, read) if claim["hash"] not in seen]
+        seen |= {claim["hash"] for claim in found[name]}
+    return found
+
+
+def claim_block(number, claim, read):
+    """Shows one link as a checker sees it: the statement, the linked words and the cited lines among the lines around them."""
+    lines = read(claim["path"])
+    shown = range(max(1, claim["first"] - CLAIM_CONTEXT), min(len(lines), claim["last"] + CLAIM_CONTEXT) + 1)
+    width = len(str(shown[-1]))
+    rows = [f"{'> ' if claim['first'] <= n <= claim['last'] else '  '}{n:>{width}} | {lines[n - 1]}" for n in shown]
+    return "\n".join([f"claim {number}", f"statement: {plain(claim['sentence'])}", f"linked words: {claim['words']}", claim["path"], *rows])
+
+
+def write_checked(map_id, data):
+    """Records every code link of a map as it stands as checked."""
+    read = reader_of(json.loads((WORK / f"{map_id}.pr.json").read_text()))
+    hashes = sorted({claim["hash"] for found in claims_of(data, read).values() for claim in found})
+    (WORK / f"{map_id}.checked.json").write_text(json.dumps(hashes, indent=2))
+
+
+def checked_hashes(map_id):
+    """The hashes of the code links a checker has found to hold."""
+    path = WORK / f"{map_id}.checked.json"
+    return set(json.loads(path.read_text())) if path.exists() else set()
+
+
+def claims(map_id, everything=False):
+    """Writes each code link not yet checked to a file with the lines it cites and a checker's instructions, and lists the files."""
+    if (WORK / f"{map_id}.stack.json").exists():
+        print("nothing to check: a stack story links pull requests, not code")
+        return
+    data = json.loads((WORK / f"{map_id}.input.json").read_text())
+    read = reader_of(json.loads((WORK / f"{map_id}.pr.json").read_text()))
+    done = set() if everything else checked_hashes(map_id)
+    folder = WORK / f"{map_id}.claims"
+    if folder.exists():
+        shutil.rmtree(folder)
+    folder.mkdir()
+    written = 0
+    for name, found in claims_of(data, read).items():
+        todo = [claim for claim in found if claim["hash"] not in done]
+        if not todo:
+            continue
+        blocks = [claim_block(number, claim, read) for number, claim in enumerate(todo, 1)]
+        (folder / f"{name}.txt").write_text(CHECKER + "\n\n" + "\n\n".join(blocks), encoding="utf-8")
+        (folder / f"{name}.json").write_text(json.dumps([claim["hash"] for claim in todo]))
+        written += len(todo)
+        print(f"{name}\t{folder / f'{name}.txt'}")
+    if not written:
+        print("nothing to check: every code link was checked against its lines")
+    elif not everything:
+        note(map_id, "claims", links=written)
+
+
+def checked(map_id, args):
+    """Records the code links a checker found to hold; the numbers after a name are the links that did not."""
+    held, ok, failed = set(), 0, 0
+    for arg in args:
+        name, _, numbers = arg.partition(":")
+        path = WORK / f"{map_id}.claims" / f"{name}.json"
+        if not path.exists():
+            sys.exit(f"no claims file for {name}: run claims first")
+        hashes = json.loads(path.read_text())
+        bad = set()
+        for n in (n.strip() for n in numbers.split(",") if n.strip()):
+            if not n.isdigit() or not 1 <= int(n) <= len(hashes):
+                sys.exit(f"{name} has no claim {n}")
+            bad.add(int(n))
+        held |= {h for i, h in enumerate(hashes, 1) if i not in bad}
+        ok += len(hashes) - len(bad)
+        failed += len(bad)
+    (WORK / f"{map_id}.checked.json").write_text(json.dumps(sorted(checked_hashes(map_id) | held), indent=2))
+    note(map_id, "checked", ok=ok, sent_back=failed)
+    print(f"checked: {ok} links hold, {failed} sent back")
+
+
 def run_server():
     ThreadingHTTPServer(("127.0.0.1", PORT), partial(ViewerHandler, directory=HOME)).serve_forever()
 
@@ -1619,8 +1750,7 @@ def publish(map_id, asked=True):
     stats = {f["path"]: (f["additions"], f["deletions"]) for f in pr["files"]}
     # the PR's own files are read at its head; every other file at the commit the map was built on
     pinned = pr.get("pinned") or pr["headRefOid"]
-    head_read, pinned_read = source_at(pr["headRefOid"]), source_at(pinned)
-    read = lambda path: head_read(path) if path in stats else pinned_read(path)
+    read = reader_of(pr)
     rows = diff_rows((WORK / f"{map_id}.diff").read_text())
     searches = json.loads((WORK / f"{map_id}.searches.json").read_text())
     together = json.loads((WORK / f"{map_id}.cochange.json").read_text())
@@ -1691,7 +1821,9 @@ def finish(map_id):
         sys.exit(f"no published map {map_id}: run publish first")
     data["pr"]["draft"] = False
     (DATA / f"{map_id}.json").write_text(json.dumps(data, indent=2))
-    (WORK / f"{map_id}.read.json").write_text(json.dumps(hashes_of(json.loads((WORK / f"{map_id}.input.json").read_text())), indent=2))
+    done = json.loads((WORK / f"{map_id}.input.json").read_text())
+    (WORK / f"{map_id}.read.json").write_text(json.dumps(hashes_of(done), indent=2))
+    write_checked(map_id, done)
     note(map_id, "finish")
     print(f"finished: http://127.0.0.1:{PORT}/?map={map_id}")
 
@@ -1831,6 +1963,10 @@ def main():
         readers(args[0])
     elif command == "passed" and len(args) >= 2:
         passed(args[0], args[1:])
+    elif command == "claims" and len(args) in (1, 2) and args[1:] in ([], ["--all"]):
+        claims(args[0], bool(args[1:]))
+    elif command == "checked" and len(args) >= 2:
+        checked(args[0], args[1:])
     elif command == "serve" and not args:
         run_server()
     elif command == "config" and not args:
