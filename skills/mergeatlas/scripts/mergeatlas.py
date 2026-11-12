@@ -600,13 +600,15 @@ def plan_lines(map_id, plan):
         else:
             if card["changes"]:
                 phrases.append(f"write again changes {', '.join(map(str, card['changes']))}")
+            if card["linked"]:
+                phrases.append(f"check the links in changes {', '.join(map(str, card['linked']))}")
             if card["links"]:
-                phrases.append("fix the links outside its changes")
+                phrases.append("check the links outside its changes")
             if card["entered"] or card["left"]:
                 phrases += ["check the rest of the card against the delta", f"{card['entered']} lines entered and {card['left']} left its diff"]
         lines.append(f"  card {card['id']}: {'; '.join(phrases)}")
     for what, items in [("keep the cards", plan["keep"]), ("add cards for the new files", plan["added"]),
-                        ("drop the files no longer in the PR", plan["gone"]), ("fix the links in", plan["fix"]),
+                        ("drop the files no longer in the PR", plan["gone"]), ("check the links in", plan["fix"]),
                         ("check against the delta", plan["recheck"])]:
         if items:
             lines.append(f"  {what}: {', '.join(items)}")
@@ -801,7 +803,7 @@ def line_map(old, new):
 
 def shift_links(data, maps):
     """Moves every code link and connection into a mapped file to where its lines are now. A link whose lines are gone,
-    or no longer sit together, stays as it was and its owner is reported, so the agent rewrites that part. A card's
+    or no longer sit together, stays as it was and its owner is reported, so the agent checks that part. A card's
     changes are owners of their own, apart from the rest of the card."""
     broken = []
 
@@ -861,22 +863,24 @@ def built_on(merge_base, pinned, head, is_ancestor):
 
 def redo_plan(data, old_rows, new_rows, old_paths, new_paths, broken):
     """Splits a map into the cards and changes whose words the agent writes again and those it keeps, and lists the story,
-    intents and arrows to check beside them."""
+    intents and arrows to check beside them. A change goes back when its key lines left the diff. One that only links to
+    a line that changed may still be true, so its links are checked and its words stay."""
     redo, keep, back, total, intents = [], [], 0, 0, set()
     for c in data["cards"]:
         changes = c.get("changes", [])
         whole = any(p not in new_paths for p in c["paths"])
-        gone = [n for n, change in enumerate(changes, 1)
-                if f"card {c['id']} change {n}" in broken or any(key_lines(c, code, new_rows) is None for code in change.get("snippets", []))]
+        gone = [n for n, change in enumerate(changes, 1) if any(key_lines(c, code, new_rows) is None for code in change.get("snippets", []))]
+        linked = [n for n in range(1, len(changes) + 1) if n not in gone and f"card {c['id']} change {n}" in broken]
         moved = [lines_moved(changed_lines(old_rows, p), changed_lines(new_rows, p)) for p in c["paths"]]
         entered, left = sum(len(m[0]) for m in moved), sum(len(m[1]) for m in moved)
         links = f"card {c['id']}" in broken
         total += len(changes)
-        if whole or gone or links or entered or left:
-            redo.append({"id": c["id"], "whole": whole, "changes": gone, "links": links, "entered": entered, "left": left})
+        if whole or gone or linked or links or entered or left:
+            redo.append({"id": c["id"], "whole": whole, "changes": gone, "linked": [] if whole else linked, "links": links,
+                         "entered": entered, "left": left})
             sent = range(1, len(changes) + 1) if whole else gone
             back += len(sent)
-            intents.update(changes[n - 1].get("intent") for n in sent)
+            intents.update(changes[n - 1].get("intent") for n in (sent if whole else gone + linked))
         else:
             keep.append(c["id"])
     touched = {r["id"] for r in redo}
@@ -928,10 +932,12 @@ def cited_paths(data):
     return found | {at[1] for e in data.get("edges", []) if (at := re.fullmatch(LOCATION, e.get("connection_at", "")))}
 
 
-def mark_update(map_id, old):
-    """Notes the head a changed map was updated from and the words of its cards then, so publish can say which changed since."""
+def mark_update(map_id, old, plan):
+    """Notes the head a changed map was updated from, the cards its new changes touch and the words of every card then,
+    so publish can say which cards changed with the pull request."""
     data = json.loads((WORK / f"{map_id}.input.json").read_text())
-    (WORK / f"{map_id}.update.json").write_text(json.dumps({"from": old["headRefOid"], "hashes": hashes_of(data)}, indent=2))
+    noted = {"from": old["headRefOid"], "touched": [card["id"] for card in plan["redo"]], "hashes": hashes_of(data)}
+    (WORK / f"{map_id}.update.json").write_text(json.dumps(noted, indent=2))
 
 
 def keep_read_marks(map_id):
@@ -1007,7 +1013,7 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
             plan = {**plan, "redo": [], "keep": [c["id"] for c in data["cards"]], "added": [], "gone": [], "fix": [],
                     "recheck": [], "back": 0, "problems": str(rejected)}
             keep_read_marks(map_id)
-            mark_update(map_id, old)
+            mark_update(map_id, old, plan)
             return "partial", plan
     text, kind = delta_of(old, pr, old_rows, new_rows, old_pinned, built)
     work["delta.diff"].write_text(text)
@@ -1022,7 +1028,7 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
     work["searches.json"].write_text(json.dumps(log, indent=2))
     work["cochange.json"].write_text(json.dumps(co_changes(set(paths), pr["headRefOid"]), indent=2))
     keep_read_marks(map_id)
-    mark_update(map_id, old)
+    mark_update(map_id, old, plan)
     return "partial", plan
 
 
@@ -1653,9 +1659,10 @@ def publish(map_id, asked=True):
         "intents": data["intents"],
     }
     if was:
-        output["pr"]["update"] = {"from": was["from"],
-                                  "cards": [c["id"] for c in data["cards"] if was["hashes"].get(c["id"]) != now[c["id"]]],
-                                  "story": was["hashes"].get("story") != now["story"]}
+        # a card changed with the pull request when it is new or its changes were touched; one reworded for a reader did not
+        changed = [c["id"] for c in data["cards"] if c["id"] not in was["hashes"]
+                   or (c["id"] in was["touched"] and was["hashes"][c["id"]] != now[c["id"]])]
+        output["pr"]["update"] = {"from": was["from"], "cards": changed, "story": was["hashes"].get("story") != now["story"]}
     record = stack_of_map(pr)
     if record:
         output["stubs"] = stubs_for(data, record, pr["number"], published_maps(record))

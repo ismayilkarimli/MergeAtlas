@@ -201,10 +201,11 @@ class Plan(Cache):
         plan = {
             "from": "0123456789abcdef", "delta": "lines", "delta_lines": 14,
             "redo": [
-                {"id": "api", "whole": True, "changes": [1, 2], "links": True, "entered": 4, "left": 1},
-                {"id": "cfg", "whole": False, "changes": [2, 5], "links": True, "entered": 3, "left": 2},
-                {"id": "docs", "whole": False, "changes": [], "links": False, "entered": 0, "left": 1},
-                {"id": "ui", "whole": False, "changes": [], "links": True, "entered": 0, "left": 0},
+                {"id": "api", "whole": True, "changes": [1, 2], "linked": [], "links": True, "entered": 4, "left": 1},
+                {"id": "cfg", "whole": False, "changes": [2, 5], "linked": [1, 3], "links": True, "entered": 3, "left": 2},
+                {"id": "docs", "whole": False, "changes": [], "linked": [], "links": False, "entered": 0, "left": 1},
+                {"id": "ui", "whole": False, "changes": [], "linked": [], "links": True, "entered": 0, "left": 0},
+                {"id": "css", "whole": False, "changes": [], "linked": [2], "links": False, "entered": 0, "left": 0},
             ],
             "keep": ["a", "b"], "added": ["new.py", "new.md"], "gone": ["old.py"], "fix": ["story", "intent i1"],
             "recheck": ["story", "arrow a -> b"], "words": True,
@@ -216,14 +217,15 @@ class Plan(Cache):
             f"map:         changed since it was published at 0123456; keep the rest of {mergeatlas.WORK / 'o-r-7.input.json'} as it is",
             f"  delta:     {mergeatlas.WORK / 'o-r-7.delta.diff'} (14 lines, the lines that entered or left the PR's diff since then)",
             "  card api: write again",
-            "  card cfg: write again changes 2, 5; fix the links outside its changes; check the rest of the card against the delta; "
-            "3 lines entered and 2 left its diff",
+            "  card cfg: write again changes 2, 5; check the links in changes 1, 3; check the links outside its changes; "
+            "check the rest of the card against the delta; 3 lines entered and 2 left its diff",
             "  card docs: check the rest of the card against the delta; 0 lines entered and 1 left its diff",
-            "  card ui: fix the links outside its changes",
+            "  card ui: check the links outside its changes",
+            "  card css: check the links in changes 2",
             "  keep the cards: a, b",
             "  add cards for the new files: new.py, new.md",
             "  drop the files no longer in the PR: old.py",
-            "  fix the links in: story, intent i1",
+            "  check the links in: story, intent i1",
             "  check against the delta: story, arrow a -> b",
             "  search 'foo' (word): now also matches a.ts, b.ts; no longer matches c.ts",
             "  search 'bar baz' (regex): no longer matches d.ts",
@@ -246,7 +248,7 @@ class Plan(Cache):
 
 class Updates(Cache):
     """A map updated for new commits says which commit it was updated from, and which cards and whether the story changed
-    since fetch handed the work back, by comparing the words of each card then and at publish."""
+    with the pull request: a card is named when fetch's plan touched it and its words differ at publish, or when it is new."""
 
     FROM = "c" * 40
 
@@ -261,9 +263,10 @@ class Updates(Cache):
         pr = {**PR, "files": [*PR["files"], {"path": "doc.md", "additions": 1, "deletions": 0}]}
         (mergeatlas.WORK / "o-r-7.pr.json").write_text(json.dumps(pr))
 
-    def fetched(self):
+    def fetched(self, touched=("doc",)):
         """What fetch notes when it hands the map's work back."""
-        (mergeatlas.WORK / "o-r-7.update.json").write_text(json.dumps({"from": self.FROM, "hashes": mergeatlas.hashes_of(self.data)}))
+        noted = {"from": self.FROM, "touched": list(touched), "hashes": mergeatlas.hashes_of(self.data)}
+        (mergeatlas.WORK / "o-r-7.update.json").write_text(json.dumps(noted))
 
     def edit(self, change):
         change(self.data)
@@ -275,6 +278,18 @@ class Updates(Cache):
     def test_publish_names_the_cards_whose_words_changed_since_the_fetch(self):
         self.fetched()
         self.edit(lambda data: data["cards"][1]["changes"][0].update(result="The file has a name, and the name is its title."))
+        self.publish()
+        self.assertEqual(self.update(), {"from": self.FROM, "cards": ["doc"], "story": False})
+
+    def test_a_card_reworded_though_the_new_commits_left_it_alone_is_not_named(self):
+        self.fetched(touched=[])
+        self.edit(lambda data: data["cards"][1]["changes"][0].update(result="The file has a name, and the name is its title."))
+        self.publish()
+        self.assertEqual(self.update(), {"from": self.FROM, "cards": [], "story": False})
+
+    def test_a_card_added_since_the_fetch_is_named(self):
+        (mergeatlas.WORK / "o-r-7.update.json").write_text(json.dumps(
+            {"from": self.FROM, "touched": [], "hashes": {k: v for k, v in mergeatlas.hashes_of(self.data).items() if k != "doc"}}))
         self.publish()
         self.assertEqual(self.update(), {"from": self.FROM, "cards": ["doc"], "story": False})
 

@@ -178,15 +178,15 @@ class RedoPlan(unittest.TestCase):
         plan = self.plan(map_of(CFG, card_with("b", "b.txt", "-x\n+y")), ONE + b, OTHER + b,
                          old_paths=["cfg.txt", "b.txt"], new_paths=["cfg.txt", "b.txt", "new.txt"])
         self.assertEqual(plan, {
-            "redo": [{"id": "cfg", "whole": False, "changes": [1], "links": False, "entered": 1, "left": 1}], "keep": ["b"],
+            "redo": [{"id": "cfg", "whole": False, "changes": [1], "linked": [], "links": False, "entered": 1, "left": 1}], "keep": ["b"],
             "added": ["new.txt"], "gone": [], "fix": [], "recheck": ["story", "intent i-cfg-1"], "back": 1, "total": 2})
 
-    def test_cards_with_broken_links_go_back_and_the_rest_are_listed_to_fix(self):
+    def test_cards_with_broken_links_are_listed_and_so_are_the_other_parts_with_them(self):
         edge = {"from": "cfg", "to": "doc"}
         plan = self.plan(map_of(CFG, edges=[edge]), ONE, ONE_MOVED, ["card cfg", "story", "arrow cfg -> doc"],
                          old_paths=["cfg.txt", "old.txt"])
         self.assertEqual(plan, {
-            "redo": [{"id": "cfg", "whole": False, "changes": [], "links": True, "entered": 0, "left": 0}], "keep": [],
+            "redo": [{"id": "cfg", "whole": False, "changes": [], "linked": [], "links": True, "entered": 0, "left": 0}], "keep": [],
             "added": [], "gone": ["old.txt"], "fix": ["story", "arrow cfg -> doc"], "recheck": [], "back": 0, "total": 1})
 
     def test_a_change_whose_key_lines_are_gone_goes_back_alone(self):
@@ -196,15 +196,23 @@ class RedoPlan(unittest.TestCase):
         self.assertEqual((plan["back"], plan["total"]), (1, 2))
         self.assertEqual(plan["recheck"], ["story", "intent i-cfg-2"])
 
-    def test_a_change_with_a_broken_link_goes_back_alone(self):
+    def test_a_change_with_a_broken_link_has_its_links_checked_and_does_not_go_back(self):
         data = map_of(card_with("cfg", "cfg.txt", "-b\n+B", "-x\n+y"))
         plan = self.plan(data, TWO_HUNKS, TWO_HUNKS, ["card cfg change 1"])
-        self.assertEqual([(r["whole"], r["changes"], r["links"]) for r in plan["redo"]], [(False, [1], False)])
+        self.assertEqual([(r["whole"], r["changes"], r["linked"], r["links"]) for r in plan["redo"]], [(False, [], [1], False)])
+        self.assertEqual((plan["back"], plan["total"]), (0, 2))
+        self.assertEqual(plan["recheck"], ["story", "intent i-cfg-1"])
+
+    def test_a_change_that_goes_back_is_not_also_listed_for_its_links(self):
+        data = map_of(card_with("cfg", "cfg.txt", "-b\n+B", "-x\n+y"))
+        plan = self.plan(data, TWO_HUNKS, TWO_HUNKS_SECOND_CHANGED, ["card cfg change 1", "card cfg change 2"])
+        self.assertEqual([(r["changes"], r["linked"]) for r in plan["redo"]], [([2], [1])])
+        self.assertEqual(plan["back"], 1)
 
     def test_lines_that_enter_a_cards_diff_are_counted(self):
         more = diff_of("cfg.txt", ["@@ -1,3 +1,3 @@\n a\n-b\n+B\n c\n", "@@ -10,1 +10,2 @@\n x\n+n\n"])
         plan = self.plan(map_of(CFG), ONE, more)
-        self.assertEqual(plan["redo"], [{"id": "cfg", "whole": False, "changes": [], "links": False, "entered": 1, "left": 0}])
+        self.assertEqual(plan["redo"], [{"id": "cfg", "whole": False, "changes": [], "linked": [], "links": False, "entered": 1, "left": 0}])
         self.assertEqual(plan["back"], 0)
 
     def test_a_card_that_lost_a_file_goes_back_whole(self):
@@ -356,7 +364,7 @@ class RefreshWork(unittest.TestCase):
         pr, diff = self.pr(head2, self.base)
         status, plan = mergeatlas.refresh_work("o-r-7", pr, diff, self.base)
         self.assertEqual(status, "partial")
-        self.assertEqual(plan["redo"], [{"id": "cfg", "whole": False, "changes": [1], "links": True, "entered": 1, "left": 1}])
+        self.assertEqual(plan["redo"], [{"id": "cfg", "whole": False, "changes": [1], "linked": [], "links": True, "entered": 1, "left": 1}])
         self.assertEqual((plan["keep"], plan["back"], plan["total"]), ([], 1, 1))
         self.assertEqual(json.loads((mergeatlas.WORK / "o-r-7.pr.json").read_text())["headRefOid"], head2)
 
@@ -418,7 +426,7 @@ class RefreshWork(unittest.TestCase):
         head2 = self.commit({"cfg.txt": "a\nBee\nc\n"}, "change b differently")
         mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base)
         noted = json.loads((mergeatlas.WORK / "o-r-7.update.json").read_text())
-        self.assertEqual(noted, {"from": self.head, "hashes": mergeatlas.hashes_of(self.saved_input())})
+        self.assertEqual(noted, {"from": self.head, "touched": ["cfg"], "hashes": mergeatlas.hashes_of(self.saved_input())})
 
     def set_aside(self):
         """The files a map left that a map started over must not keep."""

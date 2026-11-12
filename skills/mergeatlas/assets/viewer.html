@@ -607,8 +607,11 @@ function noticesHtml() {
     : stalled() ? `<div class="notice moved"><span><strong>Draft.</strong> The check of its cards for gaps did not finish. Ask your agent to map this pull request again to finish it.</span></div>`
     : `<div class="notice checking"><span><strong>Draft.</strong> The cards are still being checked for gaps, so some may gain detail. This page updates by itself.</span></div>`);
   if (META.update && (META.update.cards.length || META.update.story)) {
-    const n = META.update.cards.length, sha = esc(META.update.from.slice(0, 7));
-    notes.push(`<div class="notice"><span><strong>Updated since ${sha}:</strong> ${n ? `${count(n, 'card')} changed, marked "updated" until you open ${n === 1 ? 'it' : 'them'}.${META.update.story ? ' The story changed too.' : ''}` : 'the story changed.'}</span></div>`);
+    const n = META.update.cards.length, left = META.update.cards.filter(id => UPDATED.has(id)).length, sha = esc(META.update.from.slice(0, 7));
+    const marked = left === n ? `, marked "updated" until you open ${n === 1 ? 'it' : 'them'}.`
+      : left ? `, and ${left} ${left === 1 ? 'is' : 'are'} still marked "updated" until you open ${left === 1 ? 'it' : 'them'}.`
+      : `, and you have opened ${n === 1 ? 'it' : 'them all'}.`;
+    notes.push(`<div class="notice"><span><strong>Updated since ${sha}:</strong> ${n ? `${count(n, 'card')} changed${marked}${META.update.story ? ' The story changed too.' : ''}` : 'the story changed.'}</span></div>`);
   }
   if (NOW?.head && META.mapped?.head && NOW.head !== META.mapped.head) {
     const since = `since this map was made at <code>${esc(META.mapped.head.slice(0, 7))}</code>`;
@@ -1593,7 +1596,7 @@ function present(html, accent, item) {
 }
 const openCard = id => {
   if (UPDATED.delete(id)) markUpdated();
-  if (META.update?.cards.includes(id)) markSeen(id);
+  if (META.update?.cards.includes(id)) { markSeen(id); showNotices(); }
   if (listView && stackOf[id]) setBranch(byId[stackOf[id]], true);
   present(cardHtml(byId[id]), KIND[byId[id].kind].color, id);
 };
