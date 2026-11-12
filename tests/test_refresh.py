@@ -22,6 +22,8 @@ The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
     refresh_work(map_id, pr, diff, built)
                                         -> (status, plan): status is new, same-head, refreshed or partial
 """
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -259,6 +261,23 @@ class RefreshWork(unittest.TestCase):
         self.assertEqual(status, "partial")
         self.assertEqual(plan["redo"], ["cfg"])
         self.assertEqual(json.loads((mergeatlas.WORK / "o-r-7.pr.json").read_text())["headRefOid"], head2)
+
+    def test_a_finished_map_counts_as_read_when_its_pr_changes(self):
+        self.first_map()
+        with contextlib.redirect_stdout(io.StringIO()):
+            mergeatlas.finish("o-r-7")
+        # a map finished by a release from before read marks had none
+        (mergeatlas.WORK / "o-r-7.read.json").unlink()
+        head2 = self.commit({"cfg.txt": "a\nBee\nc\n"}, "change b differently")
+        self.assertEqual(mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base)[0], "partial")
+        marks = json.loads((mergeatlas.WORK / "o-r-7.read.json").read_text())
+        self.assertEqual(marks, mergeatlas.hashes_of(self.saved_input()))
+
+    def test_a_draft_has_no_read_marks_when_its_pr_changes(self):
+        self.first_map()
+        head2 = self.commit({"cfg.txt": "a\nBee\nc\n"}, "change b differently")
+        mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base)
+        self.assertFalse((mergeatlas.WORK / "o-r-7.read.json").exists())
 
     def test_a_refresh_keeps_the_search_log(self):
         self.first_map()

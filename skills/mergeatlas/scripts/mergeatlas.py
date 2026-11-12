@@ -15,7 +15,11 @@
   mergeatlas.py export <map-id> [path]
                                  Write the published map as one HTML file that opens in any browser, for sharing.
   mergeatlas.py card <map-id | stack-id> <card-id | story>
-                                 Print one card as a cold reader sees it, for the cold read.
+                                 Print one card as a cold reader sees it, for a cold read done by hand.
+  mergeatlas.py readers <map-id | stack-id>
+                                 Write each card no cold reader has passed to a file with the reader's instructions.
+  mergeatlas.py passed <map-id | stack-id> <card-id | story>...
+                                 Record the cards a cold reader found nothing in, so they are not read again.
   mergeatlas.py serve            Run the viewer server; publish starts it when needed.
   mergeatlas.py config           Print the config file's path and the model each agent gives its cold readers.
   mergeatlas.py config set <agent> <model | own> [effort]
@@ -825,6 +829,13 @@ def cited_paths(data):
     return found | {at[1] for e in data.get("edges", []) if (at := re.fullmatch(LOCATION, e.get("connection_at", "")))}
 
 
+def keep_read_marks(map_id):
+    """Counts a map finished before it had read marks as read, at its words as they stand."""
+    path = WORK / f"{map_id}.read.json"
+    if not path.exists() and not is_draft(map_id):
+        path.write_text(json.dumps(hashes_of(json.loads((WORK / f"{map_id}.input.json").read_text())), indent=2))
+
+
 def refresh_work(map_id, pr, diff, built):
     """Brings the work directory up to a fetched PR. A PR mapped before keeps its map when it can: the same head commit
     changes nothing; the same changes on a new commit get their links shifted and are published again by the script;
@@ -874,8 +885,11 @@ def refresh_work(map_id, pr, diff, built):
             publish(map_id, asked=False)
             return "refreshed", None
         except SystemExit as rejected:
-            return "partial", {**plan, "redo": [c["id"] for c in data["cards"]], "keep": [], "problems": str(rejected)}
+            plan = {**plan, "redo": [c["id"] for c in data["cards"]], "keep": [], "problems": str(rejected)}
+            keep_read_marks(map_id)
+            return "partial", plan
     work["cochange.json"].write_text(json.dumps(co_changes(set(paths), pr["headRefOid"]), indent=2))
+    keep_read_marks(map_id)
     return "partial", plan
 
 
@@ -1293,48 +1307,106 @@ def plain(text):
     return ANY_LINK.sub(r"\1 [→ card]", text)
 
 
-def card_text(map_id, card_id):
-    """Prints one card as a cold reader sees it: link targets give way to a mark, so only the words count."""
-    data = json.loads((WORK / f"{map_id}.input.json").read_text())
-    if (WORK / f"{map_id}.stack.json").exists():
-        if card_id != "story":
+READER = """You are a skilled engineer who has never seen this project, and the card below the line is all you have. Read no other file and run no command. Find the places where it leaves you unable to follow what the code does:
+- a statement whose how or why the card does not give, so you cannot see how it follows;
+- a project term or name the card uses without saying what it is;
+- a statement that contradicts another statement or the key lines on this card.
+
+Words marked [→ code] link to the source, so accept what they state unless the card contradicts it. Words marked [→ card] link to another card, and words marked [→ PR #N] link to another pull request. Skip what a skilled engineer knows from the language and its common libraries. Do not ask why the change was wanted or designed this way, about alternatives, about whether it was tested or verified, about versions or tooling, or about code the card does not mention. For each one, quote the statement and say which step is missing or which statements disagree. Most important first. If nothing is missing, reply "none".
+
+---"""
+
+
+def card_words(data, name, stack=False):
+    """Gives one card as a cold reader sees it: link targets give way to a mark, so only the words count."""
+    story = lambda: "\n\n".join(plain(data.get(k)) for k in ("background", "problem", "solution"))
+    if stack:
+        if name != "story":
             sys.exit("a stack has only its story to read")
-        note(map_id, "card", story=True)
-        print("\n\n".join(plain(data.get(k)) for k in ("background", "problem", "solution")))
-        return
-    if card_id == "story":
-        note(map_id, "card", story=True)
-        print("\n\n".join(plain(data.get(k)) for k in ("background", "problem", "solution")))
+        return story()
+    lines = []
+    if name == "story":
+        lines.append(story())
         for g in data.get("intents", []):
-            print(f"\nintent {g['id']}: {g['title']}\noutcome: {plain(g['outcome'])}")
+            lines.append(f"\nintent {g['id']}: {g['title']}\noutcome: {plain(g['outcome'])}")
             for base in g.get("builds_on", []):
-                print(f"builds on {base['intent']}: {plain(base['how'])}")
-        return
+                lines.append(f"builds on {base['intent']}: {plain(base['how'])}")
+        return "\n".join(lines)
     cards = {c["id"]: c for c in data["cards"]}
-    if card_id not in cards:
-        sys.exit(f"no card {card_id}: choose from story, {', '.join(cards)}")
-    c = cards[card_id]
-    note(map_id, "card", story=False)
-    print(f"# {', '.join(c['paths'])}")
-    print(f"\nsummary: {plain(c['summary'])}")
+    if name not in cards:
+        sys.exit(f"no card {name}: choose from story, {', '.join(cards)}")
+    c = cards[name]
+    lines.append(f"# {', '.join(c['paths'])}")
+    lines.append(f"\nsummary: {plain(c['summary'])}")
     for number, change in enumerate(c["changes"], 1):
-        print(f"\nchange {number}, intent {change['intent']}")
+        lines.append(f"\nchange {number}, intent {change['intent']}")
         for field in CHANGE_TEXT:
-            print(f"{field}: {plain(change[field])}")
+            lines.append(f"{field}: {plain(change[field])}")
         for code in change.get("snippets", []):
-            print(f"key lines:\n{code}")
+            lines.append(f"key lines:\n{code}")
     for r in c.get("reaches", []):
-        print(f"\nalso reaches {', '.join(r['paths'])}: {plain(r['effect'])}")
+        lines.append(f"\nalso reaches {', '.join(r['paths'])}: {plain(r['effect'])}")
     for u in c.get("unaffected", []):
-        print(f"\nunaffected {', '.join(u['paths'])}: {plain(u['reason'])}")
+        lines.append(f"\nunaffected {', '.join(u['paths'])}: {plain(u['reason'])}")
     for e in data["edges"]:
-        if card_id in (e["from"], e["to"]):
-            other = cards[e["to"] if e["from"] == card_id else e["from"]]
-            direction = "to" if e["from"] == card_id else "from"
-            print(f"\narrow {direction} {', '.join(other['paths'])}: {e['label']}\n{e['connection_code']}")
+        if name in (e["from"], e["to"]):
+            other = cards[e["to"] if e["from"] == name else e["from"]]
+            direction = "to" if e["from"] == name else "from"
+            lines.append(f"\narrow {direction} {', '.join(other['paths'])}: {e['label']}\n{e['connection_code']}")
             for field in EDGE_TEXT:
                 if e.get(field):
-                    print(f"{field}: {plain(e[field])}")
+                    lines.append(f"{field}: {plain(e[field])}")
+    return "\n".join(lines)
+
+
+def hashes_of(data, stack=False):
+    """Fingerprints the words of the story and of every card, which is what a cold reader passes or does not."""
+    names = ["story"] if stack else ["story", *(c["id"] for c in data["cards"])]
+    return {name: hashlib.sha256(card_words(data, name, stack).encode()).hexdigest() for name in names}
+
+
+def card_text(map_id, card_id):
+    """Prints one card as a cold reader sees it, for a cold read done by hand."""
+    data = json.loads((WORK / f"{map_id}.input.json").read_text())
+    stack = (WORK / f"{map_id}.stack.json").exists()
+    words = card_words(data, card_id, stack)
+    note(map_id, "card", story=card_id == "story")
+    print(words)
+
+
+def read_marks(map_id):
+    """The hash of the words that last passed, for each name of a map."""
+    path = WORK / f"{map_id}.read.json"
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
+def readers(map_id):
+    """Writes each card whose words no cold reader has passed to a file with the reader's instructions, and lists the files."""
+    data = json.loads((WORK / f"{map_id}.input.json").read_text())
+    stack, read = (WORK / f"{map_id}.stack.json").exists(), read_marks(map_id)
+    unread = [name for name, hashed in hashes_of(data, stack).items() if read.get(name) != hashed]
+    folder = WORK / f"{map_id}.readers"
+    if folder.exists():
+        shutil.rmtree(folder)
+    folder.mkdir()
+    if not unread:
+        print("nothing to read: the story and every card passed as they stand")
+    for name in unread:
+        path = folder / f"{name}.txt"
+        path.write_text(f"{READER}\n\n{card_words(data, name, stack)}", encoding="utf-8")
+        note(map_id, "card", story=name == "story")
+        print(f"{name}\t{path}")
+
+
+def passed(map_id, names):
+    """Records that a cold reader found nothing in the story or these cards as their words stand."""
+    data = json.loads((WORK / f"{map_id}.input.json").read_text())
+    stack = (WORK / f"{map_id}.stack.json").exists()
+    for name in names:
+        card_words(data, name, stack)
+    now = hashes_of(data, stack)
+    (WORK / f"{map_id}.read.json").write_text(json.dumps({**read_marks(map_id), **{name: now[name] for name in names}}, indent=2))
+    print(f"passed: {', '.join(names)}")
 
 
 def run_server():
@@ -1458,12 +1530,13 @@ def publish(map_id, asked=True):
 
 
 def finish(map_id):
-    """Ends a map's draft: its cold read is done. The viewer of an open draft picks the change up by itself."""
+    """Ends a map's draft: its cold read is done, so every card counts as passed. The viewer of an open draft picks the change up by itself."""
     data = published(map_id)
     if "pr" not in data:
         sys.exit(f"no published map {map_id}: run publish first")
     data["pr"]["draft"] = False
     (DATA / f"{map_id}.json").write_text(json.dumps(data, indent=2))
+    (WORK / f"{map_id}.read.json").write_text(json.dumps(hashes_of(json.loads((WORK / f"{map_id}.input.json").read_text())), indent=2))
     note(map_id, "finish")
     print(f"finished: http://127.0.0.1:{PORT}/?map={map_id}")
 
@@ -1599,6 +1672,10 @@ def main():
         export(*args)
     elif command == "card" and len(args) == 2:
         card_text(*args)
+    elif command == "readers" and len(args) == 1:
+        readers(args[0])
+    elif command == "passed" and len(args) >= 2:
+        passed(args[0], args[1:])
     elif command == "serve" and not args:
         run_server()
     elif command == "config" and not args:
