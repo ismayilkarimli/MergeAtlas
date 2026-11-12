@@ -14,14 +14,21 @@ The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
     passed(map_id, names)               -> records the names as read at their words as they stand
     finish(map_id)                      -> records every name as read
     card_text(map_id, name)             -> prints the words of a name, as it always has
+
+A first map is read in two rounds and an update in one. <map-id>.seen.json holds the rounds so far and the hash of each
+sentence a reader was given; from the second round on a reader gets the REREADER instructions and the sentences new since
+marked with ⟦ ⟧, and a card that gained no sentence passes without a reader:
+    card_words(data, name, stack, seen) -> the same words, new sentences marked when seen is given
+    sentences_in(data, name, stack)     -> the hash of every sentence of a name
 """
 import copy
 import io
 import json
 import unittest
 from contextlib import redirect_stdout
+from unittest import mock
 
-from test_run_record import MAP, Cache, mergeatlas
+from test_run_record import MAP, PR, Cache, mergeatlas
 
 TWO = copy.deepcopy(MAP)
 TWO["cards"].append({"id": "doc", "kind": "docs", "title": "doc.md", "paths": ["doc.md"], "summary": "Names the file.",
@@ -69,7 +76,6 @@ class Readers(Cache):
 
     def test_a_passed_card_is_not_read_again(self):
         self.work(TWO)
-        self.assertEqual(self.unread(), ["story", "cfg", "doc"])
         self.assertEqual(self.run_command(mergeatlas.passed, "o-r-7", ["story", "cfg"]), "passed: story, cfg\n")
         self.assertEqual(self.unread(), ["doc"])
         self.assertEqual([p.name for p in (mergeatlas.WORK / "o-r-7.readers").iterdir()], ["doc.txt"])
@@ -102,6 +108,7 @@ class Readers(Cache):
         self.assertEqual([p.name for p in (mergeatlas.WORK / "o-r-7.readers").iterdir()], ["cfg.txt"])
         # the next update starts its own round
         update.write_text(json.dumps({"from": "d" * 40, "touched": ["cfg"], "hashes": mergeatlas.hashes_of(TWO)}))
+        (mergeatlas.WORK / "o-r-7.seen.json").write_text(json.dumps({"rounds": 0, "seen": {}}))
         self.assertEqual(self.unread(), ["cfg"])
 
     def test_an_update_whose_words_all_passed_has_nothing_to_read(self):
@@ -111,7 +118,7 @@ class Readers(Cache):
         update.write_text(json.dumps({"from": "c" * 40, "touched": [], "hashes": mergeatlas.hashes_of(TWO)}))
         self.assertEqual(self.run_command(mergeatlas.readers, "o-r-7"),
                          "nothing to read: the story and every card passed as they stand\n")
-        self.assertNotIn("read", json.loads(update.read_text()))
+        self.assertFalse((mergeatlas.WORK / "o-r-7.seen.json").exists())
 
     def test_editing_an_arrow_sends_the_cards_at_both_ends_back(self):
         data = copy.deepcopy(TWO)
@@ -167,6 +174,114 @@ class Readers(Cache):
             "change: This PR names it [→ code].\nresult: The file has a name.\nkey lines:\n+# name\n"
             "\narrow from cfg.txt: Describes the setting\n# name\nrelationship: Both name b.\n"
             "connection: doc.md names the setting.\nflow: The setting is described.\n"))
+
+    def round(self, edits=()):
+        """Edits the cards, then runs readers; returns the names it prints."""
+        for edit in edits:
+            self.edit(edit)
+        return self.unread()
+
+    def seen(self):
+        return json.loads((mergeatlas.WORK / "o-r-7.seen.json").read_text())
+
+    def test_a_first_round_reader_gets_the_whole_card_unmarked(self):
+        self.work(TWO)
+        self.assertEqual(self.unread(), ["story", "cfg", "doc"])
+        written = (mergeatlas.WORK / "o-r-7.readers" / "cfg.txt").read_text(encoding="utf-8")
+        self.assertEqual(written, mergeatlas.READER + "\n\n" + mergeatlas.card_words(TWO, "cfg"))
+        self.assertNotIn("⟦", written)
+        self.assertEqual(self.seen()["rounds"], 1)
+        self.assertEqual(sorted(self.seen()["seen"]), ["cfg", "doc", "story"])
+        self.assertEqual(self.seen()["seen"]["cfg"], mergeatlas.sentences_in(TWO, "cfg"))
+
+    def test_a_second_round_marks_only_the_new_sentences(self):
+        self.work(TWO)
+        self.unread()
+        self.assertEqual(self.round([lambda d: d["cards"][0]["changes"][0].update(result="B is upper case everywhere.")]), ["cfg"])
+        written = (mergeatlas.WORK / "o-r-7.readers" / "cfg.txt").read_text(encoding="utf-8")
+        self.assertIn("result: ⟦B is upper case everywhere.⟧\n", written)
+        self.assertIn("change: This PR writes B [→ code].\n", written)
+        self.assertEqual(written.count("⟦") - mergeatlas.REREADER.count("⟦"), 1)
+        self.assertEqual(self.seen()["rounds"], 2)
+        self.assertEqual(len(self.seen()["seen"]["cfg"]), len(mergeatlas.sentences_in(TWO, "cfg")) + 1)
+
+    def test_a_second_round_reader_gets_the_rereader_s_instructions(self):
+        self.work(TWO)
+        self.unread()
+        self.round([lambda d: d["cards"][0].update(summary="Holds the setting twice.")])
+        written = (mergeatlas.WORK / "o-r-7.readers" / "cfg.txt").read_text(encoding="utf-8")
+        self.assertTrue(written.startswith(mergeatlas.REREADER + "\n\n"))
+        self.assertIn("the sentences inside ⟦ ⟧ were written or edited since", mergeatlas.REREADER)
+        self.assertIn('If the marked sentences leave nothing open, reply "none".', mergeatlas.REREADER)
+        self.assertNotIn("Find the places where it leaves you", mergeatlas.REREADER)
+        self.assertEqual(mergeatlas.REREADER.split("\n- ", 1)[1], mergeatlas.READER.split("\n- ", 1)[1].replace(
+            'If nothing is missing, reply "none".', 'If the marked sentences leave nothing open, reply "none".'))
+
+    def test_a_card_that_only_lost_a_sentence_passes_without_a_reader(self):
+        self.work(TWO)
+        self.edit(lambda d: d["cards"][0].update(summary="Holds the setting. It is read at start."))
+        self.unread()
+        self.edit(lambda d: d["cards"][0].update(summary="Holds the setting."))
+        self.assertEqual(self.run_command(mergeatlas.readers, "o-r-7"), "nothing to read: the story and every card passed as they stand\n")
+        data = json.loads((mergeatlas.WORK / "o-r-7.input.json").read_text())
+        self.assertEqual(json.loads((mergeatlas.WORK / "o-r-7.read.json").read_text()), mergeatlas.hashes_of(data))
+        self.assertEqual(self.seen()["rounds"], 1)
+        self.assertEqual(len(self.steps()), 3)
+
+    def test_a_third_round_of_a_first_map_has_nothing_more_to_read(self):
+        self.work(TWO)
+        self.unread()
+        self.assertEqual(self.round([lambda d: d["cards"][0].update(summary="Holds the setting twice.")]), ["cfg"])
+        self.edit(lambda d: d["cards"][0].update(summary="Holds the setting three times."))
+        self.assertEqual(self.run_command(mergeatlas.readers, "o-r-7"),
+                         "nothing more to read: a map is read in two rounds, so read your last edits yourself, then run finish\n")
+        self.assertEqual([p.name for p in (mergeatlas.WORK / "o-r-7.readers").iterdir()], ["cfg.txt"])
+        self.assertEqual(self.seen()["rounds"], 2)
+
+    def test_an_update_marks_only_the_sentences_written_for_it(self):
+        self.work(TWO)
+        self.run_command(mergeatlas.passed, "o-r-7", ["story", "cfg", "doc"])
+        mergeatlas.mark_update("o-r-7", {"headRefOid": "c" * 40}, {"redo": [{"id": "cfg"}]})
+        self.assertEqual(self.seen(), {"rounds": 0, "seen": {name: mergeatlas.sentences_in(TWO, name) for name in ("story", "cfg", "doc")}})
+        self.edit(lambda d: d["cards"][0]["changes"][0].update(result="B is upper case everywhere."))
+        self.assertEqual(self.unread(), ["cfg"])
+        written = (mergeatlas.WORK / "o-r-7.readers" / "cfg.txt").read_text(encoding="utf-8")
+        self.assertTrue(written.startswith(mergeatlas.REREADER))
+        self.assertEqual(written.count("⟦") - mergeatlas.REREADER.count("⟦"), 1)
+        self.assertIn("result: ⟦B is upper case everywhere.⟧", written)
+
+    def test_an_update_is_still_read_once(self):
+        self.work(TWO)
+        self.run_command(mergeatlas.passed, "o-r-7", ["story", "cfg", "doc"])
+        mergeatlas.mark_update("o-r-7", {"headRefOid": "c" * 40}, {"redo": [{"id": "cfg"}]})
+        self.assertEqual(self.round([lambda d: d["cards"][0]["changes"][0].update(result="B is upper case everywhere.")]), ["cfg"])
+        self.edit(lambda d: d["cards"][0]["changes"][0].update(result="B is upper case in every file."))
+        self.assertEqual(self.run_command(mergeatlas.readers, "o-r-7"),
+                         "nothing more to read: an update is read once, so read your edits yourself, then run finish\n")
+
+    def test_card_words_are_unchanged_when_nothing_is_marked(self):
+        self.work(TWO)
+        for name in ("story", "cfg", "doc"):
+            self.assertEqual(mergeatlas.card_words(TWO, name, seen=None), mergeatlas.card_words(TWO, name))
+        self.assertEqual(mergeatlas.card_words(TWO, "doc"), (
+            "# doc.md\n\nsummary: Names the file.\n\nchange 1, intent i1\nproblem: The file is unnamed.\n"
+            "change: This PR names it [→ code].\nresult: The file has a name.\nkey lines:\n+# name\n"
+            "\narrow from cfg.txt: Describes the setting\n# name\nrelationship: Both name b.\n"
+            "connection: doc.md names the setting.\nflow: The setting is described."))
+        known = set(mergeatlas.sentences_in(TWO, "doc"))
+        self.assertNotIn("⟦", mergeatlas.card_words(TWO, "doc", seen=known))
+        self.assertEqual(mergeatlas.mark_new("One. Two.", None), "One. Two.")
+        self.assertEqual(mergeatlas.mark_new("One.  Two.", {mergeatlas.sentence_hash("One.")}), "One. ⟦Two.⟧")
+
+    def test_a_map_started_over_forgets_its_rounds(self):
+        self.work(TWO)
+        self.unread()
+        (mergeatlas.DATA).mkdir(parents=True)
+        (mergeatlas.DATA / "o-r-7.json").write_text("{}")
+        with mock.patch.object(mergeatlas, "co_changes", return_value={}):
+            self.assertEqual(mergeatlas.refresh_work("o-r-7", dict(PR), "", "b" * 40, fresh=True), ("new", None))
+        self.assertFalse((mergeatlas.WORK / "o-r-7.seen.json").exists())
+        self.assertFalse((mergeatlas.WORK / "o-r-7.read.json").exists())
 
 
 if __name__ == "__main__":

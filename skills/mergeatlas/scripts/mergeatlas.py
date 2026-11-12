@@ -951,6 +951,8 @@ def mark_update(map_id, old, plan):
     data = json.loads((WORK / f"{map_id}.input.json").read_text())
     noted = {"from": old["headRefOid"], "touched": [card["id"] for card in plan["redo"]], "hashes": hashes_of(data)}
     (WORK / f"{map_id}.update.json").write_text(json.dumps(noted, indent=2))
+    seen = {"rounds": 0, "seen": {name: sentences_in(data, name) for name in noted["hashes"]}}
+    (WORK / f"{map_id}.seen.json").write_text(json.dumps(seen, indent=2))
 
 
 def keep_read_marks(map_id):
@@ -978,7 +980,7 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
     WORK.mkdir(parents=True, exist_ok=True)
     known = all(work[k].exists() for k in ("pr.json", "input.json", "diff")) and (DATA / f"{map_id}.json").exists()
     if known and (fresh or outdated(json.loads(work["input.json"].read_text()))):
-        for k in ("input.json", "read.json", "checked.json", "update.json", "delta.diff"):
+        for k in ("input.json", "read.json", "checked.json", "seen.json", "update.json", "delta.diff"):
             (WORK / f"{map_id}.{k}").unlink(missing_ok=True)
         known = False
     old = json.loads(work["pr.json"].read_text()) if known else None
@@ -1475,11 +1477,17 @@ READER = """You are a skilled engineer who has never seen this project, and the 
 Words marked [→ code] link to the source, so accept what they state unless the card contradicts it. Words marked [→ card] link to another card, and words marked [→ PR #N] link to another pull request. Skip what a skilled engineer knows from the language and its common libraries. Do not ask why the change was wanted or designed this way, about alternatives, about whether it was tested or verified, about versions or tooling, or about code the card does not mention. For each one, quote the statement and say which step is missing or which statements disagree. Most important first. If nothing is missing, reply "none".
 
 ---"""
+REREADER = READER.replace(
+    "Find the places where it leaves you unable to follow what the code does:",
+    "This card was read before, and the sentences inside ⟦ ⟧ were written or edited since. Find the places where those sentences leave you "
+    "unable to follow what the code does, and report nothing about a sentence outside ⟦ ⟧, which is there so you can follow the marked ones:",
+).replace('If nothing is missing, reply "none".', 'If the marked sentences leave nothing open, reply "none".')
 
 
-def card_words(data, name, stack=False):
-    """Gives one card as a cold reader sees it: link targets give way to a mark, so only the words count."""
-    story = lambda: "\n\n".join(plain(data.get(k)) for k in ("background", "problem", "solution"))
+def words_of(data, name, stack, via):
+    """Gives one card as a cold reader sees it, each piece of prose passed through via after its link targets gave way to a mark."""
+    words = lambda text: via(plain(text))
+    story = lambda: "\n\n".join(words(data.get(k)) for k in ("background", "problem", "solution"))
     if stack:
         if name != "story":
             sys.exit("a stack has only its story to read")
@@ -1488,26 +1496,26 @@ def card_words(data, name, stack=False):
     if name == "story":
         lines.append(story())
         for g in data.get("intents", []):
-            lines.append(f"\nintent {g['id']}: {g['title']}\noutcome: {plain(g['outcome'])}")
+            lines.append(f"\nintent {g['id']}: {g['title']}\noutcome: {words(g['outcome'])}")
             for base in g.get("builds_on", []):
-                lines.append(f"builds on {base['intent']}: {plain(base['how'])}")
+                lines.append(f"builds on {base['intent']}: {words(base['how'])}")
         return "\n".join(lines)
     cards = {c["id"]: c for c in data["cards"]}
     if name not in cards:
         sys.exit(f"no card {name}: choose from story, {', '.join(cards)}")
     c = cards[name]
     lines.append(f"# {', '.join(c['paths'])}")
-    lines.append(f"\nsummary: {plain(c['summary'])}")
+    lines.append(f"\nsummary: {words(c['summary'])}")
     for number, change in enumerate(c["changes"], 1):
         lines.append(f"\nchange {number}, intent {change['intent']}")
         for field in CHANGE_TEXT:
-            lines.append(f"{field}: {plain(change[field])}")
+            lines.append(f"{field}: {words(change[field])}")
         for code in change.get("snippets", []):
             lines.append(f"key lines:\n{code}")
     for r in c.get("reaches", []):
-        lines.append(f"\nalso reaches {', '.join(r['paths'])}: {plain(r['effect'])}")
+        lines.append(f"\nalso reaches {', '.join(r['paths'])}: {words(r['effect'])}")
     for u in c.get("unaffected", []):
-        lines.append(f"\nunaffected {', '.join(u['paths'])}: {plain(u['reason'])}")
+        lines.append(f"\nunaffected {', '.join(u['paths'])}: {words(u['reason'])}")
     for e in data["edges"]:
         if name in (e["from"], e["to"]):
             other = cards[e["to"] if e["from"] == name else e["from"]]
@@ -1515,8 +1523,35 @@ def card_words(data, name, stack=False):
             lines.append(f"\narrow {direction} {', '.join(other['paths'])}: {e['label']}\n{e['connection_code']}")
             for field in EDGE_TEXT:
                 if e.get(field):
-                    lines.append(f"{field}: {plain(e[field])}")
+                    lines.append(f"{field}: {words(e[field])}")
     return "\n".join(lines)
+
+
+def card_words(data, name, stack=False, seen=None):
+    """Gives one card as a cold reader sees it: link targets give way to a mark, so only the words count, and with seen the sentences it has not held before are marked."""
+    return words_of(data, name, stack, lambda text: mark_new(text, seen))
+
+
+def sentence_hash(sentence):
+    return hashlib.sha256(sentence.encode()).hexdigest()[:16]
+
+
+def sentences_of(text):
+    return [part.strip() for part in SENTENCE_END.split(text or "") if part.strip()]
+
+
+def mark_new(text, seen):
+    """Marks each sentence of a text that a reader has not seen with ⟦ ⟧, and leaves the text alone when there is no record of what was seen."""
+    if seen is None:
+        return text
+    return " ".join(sentence if sentence_hash(sentence) in seen else f"⟦{sentence}⟧" for sentence in sentences_of(text))
+
+
+def sentences_in(data, name, stack=False):
+    """Lists the hash of every sentence a card or the story holds, which is what a reader that read them has seen."""
+    found = set()
+    words_of(data, name, stack, lambda text: found.update(sentence_hash(x) for x in sentences_of(text)) or text)
+    return sorted(found)
 
 
 def hashes_of(data, stack=False):
@@ -1540,30 +1575,53 @@ def read_marks(map_id):
     return json.loads(path.read_text()) if path.exists() else {}
 
 
+def seen_marks(map_id):
+    """How many rounds of cold readers a map has had and the hash of each sentence of each name that a reader has been given."""
+    path = WORK / f"{map_id}.seen.json"
+    return json.loads(path.read_text()) if path.exists() else {"rounds": 0, "seen": {}}
+
+
 def readers(map_id):
     """Writes each card whose words no cold reader has passed to a file with the reader's instructions, and lists the files.
-    A map updated for new commits is read in one round, so a second call for that update lists nothing."""
+    A first map is read in two rounds and an update in one; from the second round on a reader is asked only about the sentences new since."""
     data = json.loads((WORK / f"{map_id}.input.json").read_text())
     stack, read = (WORK / f"{map_id}.stack.json").exists(), read_marks(map_id)
-    unread = [name for name, hashed in hashes_of(data, stack).items() if read.get(name) != hashed]
-    update_path = WORK / f"{map_id}.update.json"
-    update = json.loads(update_path.read_text()) if update_path.exists() else None
-    if unread and update and update.get("read"):
-        print("nothing more to read: an update is read once, so read your edits yourself, then run finish")
+    now = hashes_of(data, stack)
+    unread = [name for name, hashed in now.items() if read.get(name) != hashed]
+    marks = seen_marks(map_id)
+    update = (WORK / f"{map_id}.update.json").exists()
+    if unread and marks["rounds"] >= (1 if update else 2):
+        print("nothing more to read: an update is read once, so read your edits yourself, then run finish" if update else
+              "nothing more to read: a map is read in two rounds, so read your last edits yourself, then run finish")
         return
-    if unread and update:
-        update_path.write_text(json.dumps({**update, "read": True}, indent=2))
     folder = WORK / f"{map_id}.readers"
     if folder.exists():
         shutil.rmtree(folder)
     folder.mkdir()
-    if not unread:
-        print("nothing to read: the story and every card passed as they stand")
+    given = []
     for name in unread:
+        before = marks["seen"].get(name)
+        if before is not None and set(sentences_in(data, name, stack)) <= set(before):
+            read[name] = now[name]
+            continue
         path = folder / f"{name}.txt"
-        path.write_text(f"{READER}\n\n{card_words(data, name, stack)}", encoding="utf-8")
+        if before is None:
+            text = f"{READER}\n\n{card_words(data, name, stack)}"
+        else:
+            text = f"{REREADER}\n\n{card_words(data, name, stack, seen=set(before))}"
+        path.write_text(text, encoding="utf-8")
         note(map_id, "card", story=name == "story")
         print(f"{name}\t{path}")
+        given.append(name)
+    if len(given) < len(unread):
+        (WORK / f"{map_id}.read.json").write_text(json.dumps(read, indent=2))
+    if given:
+        marks["rounds"] += 1
+        for name in given:
+            marks["seen"][name] = sorted(set(marks["seen"].get(name, [])) | set(sentences_in(data, name, stack)))
+        (WORK / f"{map_id}.seen.json").write_text(json.dumps(marks, indent=2))
+    else:
+        print("nothing to read: the story and every card passed as they stand")
 
 
 def passed(map_id, names):
