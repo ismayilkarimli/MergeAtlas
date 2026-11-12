@@ -824,6 +824,37 @@ def redo_plan(cards, old_rows, new_rows, old_paths, new_paths, broken):
     }
 
 
+def lines_moved(old, new):
+    """Tells which of a file's changed lines entered the diff and which left it, as indexes into the new and the old list."""
+    entered, left = [], []
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes():
+        if tag != "equal":
+            left.extend(range(i1, i2))
+            entered.extend(range(j1, j2))
+    return entered, left
+
+
+def delta_of(old, pr, old_rows, new_rows, old_pinned, built):
+    """Writes up what changed in a PR since its last map, as the commits added on top, or else the lines that entered or left its diff."""
+    if is_ancestor(old["headRefOid"], pr["headRefOid"]) and old_pinned == built:
+        shown = subprocess.run(["git", "diff", "-M", old["headRefOid"], pr["headRefOid"]], capture_output=True, text=True, check=True)
+        return text_only(shown.stdout), "commits"
+    changed = lambda rows, path: [row for row in rows.get(path, []) if row[0].startswith(("+", "-"))]
+    files = []
+    for path in sorted(set(old_rows) | set(new_rows)):
+        before, after = changed(old_rows, path), changed(new_rows, path)
+        entered, left = lines_moved([row[0] for row in before], [row[0] for row in after])
+        if not entered and not left:
+            continue
+        lines = [f"== {path}"]
+        if entered:
+            lines += ["entered the PR's diff:", *(f"{after[i][1]}\t{after[i][0]}" for i in entered)]
+        if left:
+            lines += ["left the PR's diff:", *(before[i][0] for i in left)]
+        files.append("\n".join(lines))
+    return "\n\n".join(files) + "\n" if files else "", "lines"
+
+
 def cited_paths(data):
     """Every file a map links to, in its prose or in an arrow's connection."""
     found = {m[2] for m in SHIFTABLE.finditer(json.dumps(data))}
@@ -847,7 +878,7 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
     changes nothing; the same changes on a new commit get their links shifted and are published again by the script;
     otherwise the links are shifted where they still hold and the plan says which cards the agent writes again. A map
     asked to start over, or in a format too old to reuse, is set aside and the PR mapped as if for the first time."""
-    work = {k: WORK / f"{map_id}.{k}" for k in ("pr.json", "input.json", "diff", "searches.json", "cochange.json")}
+    work = {k: WORK / f"{map_id}.{k}" for k in ("pr.json", "input.json", "diff", "searches.json", "cochange.json", "delta.diff")}
     WORK.mkdir(parents=True, exist_ok=True)
     known = all(work[k].exists() for k in ("pr.json", "input.json", "diff")) and (DATA / f"{map_id}.json").exists()
     if known and (fresh or outdated(json.loads(work["input.json"].read_text()))):
@@ -891,6 +922,9 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
     work["diff"].write_text(diff)
     work["pr.json"].write_text(json.dumps(pr))
     plan = redo_plan(data["cards"], old_rows, new_rows, old_paths, paths, broken)
+    if (old["title"], old["body"], [(i["number"], i["title"], i["body"]) for i in old["issues"]]) != \
+            (pr["title"], pr["body"], [(i["number"], i["title"], i["body"]) for i in pr["issues"]]):
+        plan["words"] = True
     if same and not broken:
         try:
             publish(map_id, asked=False)
@@ -899,6 +933,9 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
             plan = {**plan, "redo": [c["id"] for c in data["cards"]], "keep": [], "problems": str(rejected)}
             keep_read_marks(map_id)
             return "partial", plan
+    text, kind = delta_of(old, pr, old_rows, new_rows, old_pinned, built)
+    work["delta.diff"].write_text(text)
+    plan.update({"delta": kind, "delta_lines": len(text.splitlines()), "from": old["headRefOid"]})
     work["cochange.json"].write_text(json.dumps(co_changes(set(paths), pr["headRefOid"]), indent=2))
     keep_read_marks(map_id)
     return "partial", plan

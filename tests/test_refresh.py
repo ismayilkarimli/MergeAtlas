@@ -19,6 +19,9 @@ The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
                                         -> the commit a PR's own changes start from
     redo_plan(cards, old_rows, new_rows, old_paths, new_paths, broken)
                                         -> {redo, keep, added, gone, fix}
+    lines_moved(old, new)               -> (indexes into new that entered the diff, indexes into old that left it)
+    delta_of(old, pr, old_rows, new_rows, old_pinned, built)
+                                        -> (text, kind): what changed since the last map, as commits or as lines
     refresh_work(map_id, pr, diff, built)
                                         -> (status, plan): status is new, same-head, refreshed or partial
 """
@@ -112,6 +115,17 @@ class ShiftLinks(unittest.TestCase):
         self.assertEqual(broken, ["story", "card cfg"])
         _, broken = mergeatlas.shift_links(map_data(), {"cfg.txt": {2: 2, 3: 3}})
         self.assertEqual(broken, ["intent i1"])
+
+
+class LinesMoved(unittest.TestCase):
+    def test_a_line_new_to_the_diff_has_entered(self):
+        self.assertEqual(mergeatlas.lines_moved(["-b", "+B"], ["-b", "+B", "+c"]), ([2], []))
+
+    def test_a_line_dropped_from_the_diff_has_left(self):
+        self.assertEqual(mergeatlas.lines_moved(["-b", "+B", "+c"], ["-b", "+c"]), ([], [1]))
+
+    def test_the_same_lines_have_not_moved(self):
+        self.assertEqual(mergeatlas.lines_moved(["-b", "+B"], ["-b", "+B"]), ([], []))
 
 
 class BuiltOn(unittest.TestCase):
@@ -278,6 +292,42 @@ class RefreshWork(unittest.TestCase):
         head2 = self.commit({"cfg.txt": "a\nBee\nc\n"}, "change b differently")
         mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base)
         self.assertFalse((mergeatlas.WORK / "o-r-7.read.json").exists())
+
+    def test_a_new_commit_on_top_is_the_delta(self):
+        self.first_map()
+        head2 = self.commit({"cfg.txt": "a\nBee\nc\n"}, "change b differently")
+        status, plan = mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base)
+        self.assertEqual(status, "partial")
+        text = (mergeatlas.WORK / "o-r-7.delta.diff").read_text()
+        self.assertEqual(text, mergeatlas.text_only(git(self.repo, "diff", "-M", self.head, head2) + "\n"))
+        self.assertIn("-B\n+Bee", text)
+        self.assertEqual((plan["delta"], plan["delta_lines"], plan["from"]), ("commits", len(text.splitlines()), self.head))
+
+    def test_after_a_rebase_the_delta_lists_lines_that_entered_and_left(self):
+        self.first_map()
+        git(self.repo, "checkout", "-q", self.base)
+        base2 = self.commit({"cfg.txt": "top\na\nb\nc\n"}, "rebase target")
+        head2 = self.commit({"cfg.txt": "top\na\nBee\nc\n"}, "change b differently")
+        status, plan = mergeatlas.refresh_work("o-r-7", *self.pr(head2, base2), base2)
+        self.assertEqual(status, "partial")
+        text = (mergeatlas.WORK / "o-r-7.delta.diff").read_text()
+        self.assertEqual(text, "== cfg.txt\nentered the PR's diff:\nR3\t+Bee\nleft the PR's diff:\n+B\n")
+        self.assertEqual((plan["delta"], plan["delta_lines"], plan["from"]), ("lines", 5, self.head))
+
+    def test_changed_pr_words_are_reported(self):
+        self.first_map()
+        head2 = self.commit({"cfg.txt": "a\nBee\nc\n"}, "change b differently")
+        pr, diff = self.pr(head2, self.base)
+        self.assertNotIn("words", mergeatlas.refresh_work("o-r-7", pr, diff, self.base)[1])
+        head3 = self.commit({"cfg.txt": "a\nBeee\nc\n"}, "change b once more")
+        pr, diff = self.pr(head3, self.base)
+        pr["title"] = "Change b once more"
+        self.assertTrue(mergeatlas.refresh_work("o-r-7", pr, diff, self.base)[1]["words"])
+        head4 = self.commit({"cfg.txt": "a\nBeeee\nc\n"}, "and again")
+        pr, diff = self.pr(head4, self.base)
+        pr["title"] = "Change b once more"
+        pr["issues"] = [{"number": 3, "title": "b", "body": "b is lower case", "url": "https://github.com/o/r/issues/3"}]
+        self.assertTrue(mergeatlas.refresh_work("o-r-7", pr, diff, self.base)[1]["words"])
 
     def set_aside(self):
         """The files a map left that a map started over must not keep."""
