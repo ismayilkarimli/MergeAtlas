@@ -48,7 +48,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
 # The release this file belongs to. .claude-plugin/plugin.json and CHANGELOG.md name the same one, and a test holds them to it.
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 OLDEST_PYTHON = (3, 9)
 
 HOME = Path.home() / ".cache" / "mergeatlas"

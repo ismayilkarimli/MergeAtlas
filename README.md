@@ -41,6 +41,7 @@ It works beside the diff, not instead of it: every claim links to the lines it c
 - **Read it while it is checked:** you get the link as soon as the map is written. It opens as a draft, takes in each later version by itself while your agent checks the cards for gaps, and marks the cards whose words changed.
 - **Your maps:** `http://127.0.0.1:8765` lists every map on your machine under its repository, with how far you have reviewed each.
 - **Still current?** A map shows the commit it describes, and says so when the pull request has moved on since.
+- **Follows the pull request:** after new commits, mapping the pull request again rewrites only the parts they touched and marks the cards that changed.
 - **Share:** download the map as one HTML file that opens in any browser, with no MergeAtlas or setup.
 - **Light and dark themes:** the viewer follows your system setting.
 
@@ -99,7 +100,7 @@ This is the setup where `/mergeatlas` works without the plugin's prefix.
 
 ### Using it
 
-From inside the pull request's repository, ask your agent to map it. It gives you a link as soon as the map is written, and goes on checking the map while you read. Every map you have made is listed at `http://127.0.0.1:8765`.
+From inside the pull request's repository, ask your agent to map it. It gives you a link as soon as the map is written, and goes on checking the map while you read. Every map you have made is listed at `http://127.0.0.1:8765`. After new commits, ask it to map the pull request again: it updates the map you have. To start over, ask it to map the pull request afresh.
 
 ### Choosing the cold readers' model
 

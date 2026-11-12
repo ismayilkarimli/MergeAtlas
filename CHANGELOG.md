@@ -4,6 +4,23 @@ What changed in each release of MergeAtlas, newest first. Versions follow [seman
 
 If you installed the Claude Code plugin, you stay on a release until the next one is published, then `/plugin marketplace update mergeatlas` brings it in. Installs through skills.sh or a clone follow the `main` branch.
 
+## 0.3.0 - 2026-11-12
+
+### Added
+
+- When a mapped pull request gets new commits, fetch writes a delta file holding only what changed since the last map, and the agent reads that in place of the whole diff.
+- A map is now reused change by change: fetch sends back the single changes whose key lines or links no longer hold, counts the lines that entered and left each card's diff, and lists the story, intents and arrows to check beside them.
+- Fetch runs a changed pull request's logged searches again at the new head and reports the files that newly match or no longer match.
+- `readers` writes each unread card to a file for its cold reader, and `passed` records the cards a reader found nothing in, so a card is read again only when its words change.
+- `fetch --fresh` maps a pull request again from scratch. A map in a format too old to show starts over by itself.
+- A map updated for new commits says which commit it was updated from and marks the cards that changed until you open them.
+
+### Changed
+
+- The cold reader's instructions now live in the script, and the agent hands each reader a file path where it used to paste the card.
+- When more than half of a map's changes would be rewritten, fetch says to map the pull request afresh.
+- `report` says how many of a changed map's changes were sent back.
+
 ## 0.2.0 - 2026-11-12
 
 ### Added
