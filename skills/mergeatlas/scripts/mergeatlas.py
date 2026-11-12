@@ -541,8 +541,9 @@ def fetch_pr(repo, number, stack, fresh=False):
         diff, pr["files"] = local_diff(built, head)
         pr["additions"], pr["deletions"] = sum(f["additions"] for f in pr["files"]), sum(f["deletions"] for f in pr["files"])
     status, plan = refresh_work(map_id, pr, diff, built, fresh)
+    sent = {"back": plan["back"], "total": plan["total"]} if status == "partial" else {}
     note(map_id, "fetch", status=status, files=len(pr["files"]), additions=pr["additions"], deletions=pr["deletions"],
-         diff_lines=len(diff.splitlines()))
+         diff_lines=len(diff.splitlines()), **sent)
     url = f"http://127.0.0.1:{PORT}/?map={map_id}"
     if status == "same-head":
         shutil.copy(VIEWER, HOME / "index.html")
@@ -560,15 +561,8 @@ def fetch_pr(repo, number, stack, fresh=False):
     diff_path, cochange_path = WORK / f"{map_id}.diff", WORK / f"{map_id}.cochange.json"
     together = json.loads(cochange_path.read_text())
     print(f"map id:      {map_id}")
-    if plan:
-        print(f"map:         changed since it was published; keep the rest of {WORK / f'{map_id}.input.json'} as it is")
-        for what, items in [("write again the cards", plan["redo"]), ("keep the cards", plan["keep"]),
-                            ("add cards for the new files", plan["added"]), ("drop the files no longer in the PR", plan["gone"]),
-                            ("fix the links in", plan["fix"])]:
-            if items:
-                print(f"  {what}: {', '.join(items)}")
-        if plan.get("problems"):
-            print(f"  publish rejected the refreshed map:\n{plan['problems']}")
+    for line in plan_lines(map_id, plan):
+        print(line)
     if stack:
         neighbours = [f"below it #{stack['below']}" if stack["below"] else "at the bottom",
                       f"above it #{stack['above']}" if stack["above"] else "at the top"]
@@ -589,6 +583,40 @@ def fetch_pr(repo, number, stack, fresh=False):
     print(f"files ({len(pr['files'])}):")
     for f in pr["files"]:
         print(f"  +{f['additions']} -{f['deletions']} {f['path']}")
+
+
+def plan_lines(map_id, plan):
+    """Tells the agent what to do with each part of a map whose PR changed, and leaves out a part there is nothing to say of."""
+    if not plan:
+        return []
+    lines = [f"map:         changed since it was published at {plan['from'][:7]}; keep the rest of {WORK / f'{map_id}.input.json'} as it is"]
+    if "delta" in plan:
+        what = "the commits added since then" if plan["delta"] == "commits" else "the lines that entered or left the PR's diff since then"
+        lines.append(f"  delta:     {WORK / f'{map_id}.delta.diff'} ({plan['delta_lines']} lines, {what})")
+    for card in plan["redo"]:
+        phrases = []
+        if card["whole"]:
+            phrases.append("write again")
+        else:
+            if card["changes"]:
+                phrases.append(f"write again changes {', '.join(map(str, card['changes']))}")
+            if card["links"]:
+                phrases.append("fix the links outside its changes")
+            if card["entered"] or card["left"]:
+                phrases += ["check the rest of the card against the delta", f"{card['entered']} lines entered and {card['left']} left its diff"]
+        lines.append(f"  card {card['id']}: {'; '.join(phrases)}")
+    for what, items in [("keep the cards", plan["keep"]), ("add cards for the new files", plan["added"]),
+                        ("drop the files no longer in the PR", plan["gone"]), ("fix the links in", plan["fix"]),
+                        ("check against the delta", plan["recheck"])]:
+        if items:
+            lines.append(f"  {what}: {', '.join(items)}")
+    if plan.get("words"):
+        lines.append("  the PR's title, description or issues changed: check the story against them")
+    if plan.get("problems"):
+        lines += ["  publish rejected the refreshed map:", plan["problems"]]
+    if plan["back"] * 2 > plan["total"]:
+        lines.append("  map it afresh: more than half of the map's changes go back")
+    return lines
 
 
 def matches_of(term, mode, commit):
@@ -759,7 +787,8 @@ def line_map(old, new):
 
 def shift_links(data, maps):
     """Moves every code link and connection into a mapped file to where its lines are now. A link whose lines are gone,
-    or no longer sit together, stays as it was and its owner is reported, so the agent rewrites that part."""
+    or no longer sit together, stays as it was and its owner is reported, so the agent rewrites that part. A card's
+    changes are owners of their own, apart from the rest of the card."""
     broken = []
 
     def moved(path, first, last):
@@ -789,10 +818,15 @@ def shift_links(data, maps):
             return shift(*at.groups(), item)
         return SHIFTABLE.sub(lambda m: f"{m[1]}{shift(m[2], m[3], m[4], m[0][len(m[1]):-1])})", item)
 
+    def walk_card(card):
+        owner = f"card {card.get('id')}"
+        return {k: [walk(change, f"{owner} change {n}") for n, change in enumerate(v, 1)] if k == "changes" and isinstance(v, list)
+                else walk(v, owner, k) for k, v in card.items()}
+
     shifted = {}
     for key, value in data.items():
         if key == "cards":
-            shifted[key] = [walk(c, f"card {c.get('id')}") for c in value]
+            shifted[key] = [walk_card(c) for c in value]
         elif key == "edges":
             shifted[key] = [walk(e, f"arrow {e.get('from')} -> {e.get('to')}") for e in value]
         elif key == "intents":
@@ -811,16 +845,35 @@ def built_on(merge_base, pinned, head, is_ancestor):
     return merge_base
 
 
-def redo_plan(cards, old_rows, new_rows, old_paths, new_paths, broken):
-    """Splits a map's cards into those whose changes are the same, which stay, and those the agent writes again."""
-    owners = {f"card {c['id']}" for c in cards}
-    redo = [c["id"] for c in cards
-            if fingerprint(c, old_rows) != fingerprint(c, new_rows) or f"card {c['id']}" in broken
-            or any(p not in new_paths for p in c["paths"])]
+def redo_plan(data, old_rows, new_rows, old_paths, new_paths, broken):
+    """Splits a map into the cards and changes whose words the agent writes again and those it keeps, and lists the story,
+    intents and arrows to check beside them."""
+    redo, keep, back, total, intents = [], [], 0, 0, set()
+    for c in data["cards"]:
+        changes = c.get("changes", [])
+        whole = any(p not in new_paths for p in c["paths"])
+        gone = [n for n, change in enumerate(changes, 1)
+                if f"card {c['id']} change {n}" in broken or any(key_lines(c, code, new_rows) is None for code in change.get("snippets", []))]
+        moved = [lines_moved(changed_lines(old_rows, p), changed_lines(new_rows, p)) for p in c["paths"]]
+        entered, left = sum(len(m[0]) for m in moved), sum(len(m[1]) for m in moved)
+        links = f"card {c['id']}" in broken
+        total += len(changes)
+        if whole or gone or links or entered or left:
+            redo.append({"id": c["id"], "whole": whole, "changes": gone, "links": links, "entered": entered, "left": left})
+            sent = range(1, len(changes) + 1) if whole else gone
+            back += len(sent)
+            intents.update(changes[n - 1].get("intent") for n in sent)
+        else:
+            keep.append(c["id"])
+    touched = {r["id"] for r in redo}
+    added, dropped = [p for p in new_paths if p not in old_paths], [p for p in old_paths if p not in new_paths]
+    fix = [o for o in broken if not o.startswith("card ")]
+    recheck = ["story"] if redo or added or dropped else []
+    recheck += [f"intent {g.get('id')}" for g in data.get("intents", []) if g.get("id") in intents]
+    recheck += [f"arrow {e.get('from')} -> {e.get('to')}" for e in data.get("edges", []) if {e.get("from"), e.get("to")} & touched]
     return {
-        "redo": redo, "keep": [c["id"] for c in cards if c["id"] not in redo],
-        "added": [p for p in new_paths if p not in old_paths], "gone": [p for p in old_paths if p not in new_paths],
-        "fix": [o for o in broken if o not in owners],
+        "redo": redo, "keep": keep, "added": added, "gone": dropped, "fix": fix,
+        "recheck": [o for o in recheck if o not in fix], "back": back, "total": total,
     }
 
 
@@ -921,7 +974,8 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
     work["input.json"].write_text(json.dumps(data, indent=2))
     work["diff"].write_text(diff)
     work["pr.json"].write_text(json.dumps(pr))
-    plan = redo_plan(data["cards"], old_rows, new_rows, old_paths, paths, broken)
+    plan = redo_plan(data, old_rows, new_rows, old_paths, paths, broken)
+    plan["from"] = old["headRefOid"]
     if (old["title"], old["body"], [(i["number"], i["title"], i["body"]) for i in old["issues"]]) != \
             (pr["title"], pr["body"], [(i["number"], i["title"], i["body"]) for i in pr["issues"]]):
         plan["words"] = True
@@ -930,7 +984,8 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
             publish(map_id, asked=False)
             return "refreshed", None
         except SystemExit as rejected:
-            plan = {**plan, "redo": [c["id"] for c in data["cards"]], "keep": [], "problems": str(rejected)}
+            plan = {**plan, "redo": [], "keep": [c["id"] for c in data["cards"]], "added": [], "gone": [], "fix": [],
+                    "recheck": [], "back": 0, "problems": str(rejected)}
             keep_read_marks(map_id)
             return "partial", plan
     text, kind = delta_of(old, pr, old_rows, new_rows, old_pinned, built)
@@ -1203,7 +1258,8 @@ def summary_of(steps):
     lines = [f"run            {len(starts) or 1} of {len(starts) or 1} for this map, MergeAtlas {', '.join(sorted({s['version'] for s in run}))}"]
     for f in of("fetch")[:1]:
         again = "new" if f["status"] == "new" else "changed since its last map"
-        lines.append(f"pull request   {f['files']} files, +{f['additions']} -{f['deletions']}, {f['diff_lines']} diff lines, {again}")
+        sent = f", {f['back']} of {f['total']} changes sent back" if "back" in f else ""
+        lines.append(f"pull request   {f['files']} files, +{f['additions']} -{f['deletions']}, {f['diff_lines']} diff lines, {again}{sent}")
     searches = of("search")
     if searches:
         modes = Counter(s["mode"] for s in searches)

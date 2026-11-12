@@ -6,7 +6,7 @@ Run from the repository root:
 A map is regenerated only when the user runs MergeAtlas, and the script handles every case it can alone:
     same head commit                 -> the map stands; fetch prints its URL
     same changes on a new commit     -> the script shifts links into the PR's own files and republishes
-    changes that differ              -> only the cards whose changes differ, or whose links broke, go back to the agent
+    changes that differ              -> only the changes whose key lines or links broke go back to the agent
 
 Code outside a PR's own files is pinned to the commit the PR was built on, so a rebase leaves those links alone.
 
@@ -17,8 +17,9 @@ The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
     shift_links(data, maps)             -> (data with code links moved by maps[path], [owners of links that broke])
     built_on(merge_base, pinned, head, is_ancestor)
                                         -> the commit a PR's own changes start from
-    redo_plan(cards, old_rows, new_rows, old_paths, new_paths, broken)
-                                        -> {redo, keep, added, gone, fix}
+    redo_plan(data, old_rows, new_rows, old_paths, new_paths, broken)
+                                        -> {redo, keep, added, gone, fix, recheck, back, total}
+    plan_lines(map_id, plan)            -> the lines fetch prints under "map:" for a changed map
     lines_moved(old, new)               -> (indexes into new that entered the diff, indexes into old that left it)
     delta_of(old, pr, old_rows, new_rows, old_pinned, built)
                                         -> (text, kind): what changed since the last map, as commits or as lines
@@ -103,16 +104,22 @@ class ShiftLinks(unittest.TestCase):
     def test_a_link_whose_lines_are_gone_breaks_and_names_its_owner(self):
         data, broken = mergeatlas.shift_links(map_data(), {"cfg.txt": {1: 1, 3: 2}})
         self.assertEqual(data["cards"][0]["summary"], "Holds [a setting](cfg.txt#L2).")
-        self.assertEqual(broken, ["card cfg", "arrow cfg -> doc"])
+        self.assertEqual(broken, ["card cfg", "card cfg change 1", "arrow cfg -> doc"])
         self.assertEqual(data["edges"][0]["flow"], "Read at [x](cfg.txt#L2).")
 
     def test_a_range_that_comes_apart_breaks(self):
         _, broken = mergeatlas.shift_links(map_data(), {"cfg.txt": {1: 1, 2: 2, 3: 5}})
-        self.assertIn("card cfg", broken)
+        self.assertIn("card cfg change 1", broken)
+
+    def test_a_broken_link_in_a_change_names_that_change(self):
+        data = map_data()
+        data["cards"][0]["changes"].append({"problem": "p", "change": "Reads [it](cfg.txt#L1).", "result": "r"})
+        _, broken = mergeatlas.shift_links(data, {"cfg.txt": {1: 1, 2: 2, 3: 5}})
+        self.assertEqual(broken, ["card cfg change 1", "arrow cfg -> doc"])
 
     def test_story_and_intents_name_themselves(self):
         _, broken = mergeatlas.shift_links(map_data(), {"app.py": {}, "cfg.txt": {1: 1, 2: 2, 3: 3}})
-        self.assertEqual(broken, ["story", "card cfg"])
+        self.assertEqual(broken, ["story", "card cfg change 1"])
         _, broken = mergeatlas.shift_links(map_data(), {"cfg.txt": {2: 2, 3: 3}})
         self.assertEqual(broken, ["intent i1"])
 
@@ -144,19 +151,93 @@ class BuiltOn(unittest.TestCase):
         self.assertEqual(mergeatlas.built_on("main0", "p1", "head", self.ancestors({("main0", "p1"), ("p1", "head")})), "p1")
 
 
+def card_with(id, path, *snippets):
+    """A card of one file with a change for each snippet, the change i-<id>-<n> being the intent of its own."""
+    return {"id": id, "paths": [path],
+            "changes": [{"intent": f"i-{id}-{n}", "snippets": [code]} for n, code in enumerate(snippets, 1)]}
+
+
+def map_of(*cards, edges=()):
+    return {"cards": list(cards), "edges": list(edges),
+            "intents": [{"id": c["intent"]} for card in cards for c in card["changes"]]}
+
+
+TWO_HUNKS = diff_of("cfg.txt", ["@@ -1,3 +1,3 @@\n a\n-b\n+B\n c\n", "@@ -10,2 +10,2 @@\n-x\n+y\n"])
+TWO_HUNKS_SECOND_CHANGED = diff_of("cfg.txt", ["@@ -1,3 +1,3 @@\n a\n-b\n+B\n c\n", "@@ -10,2 +10,2 @@\n-x\n+z\n"])
+CFG = card_with("cfg", "cfg.txt", "-b\n+B")
+
+
 class RedoPlan(unittest.TestCase):
+    def plan(self, data, old, new, broken=(), old_paths=("cfg.txt",), new_paths=("cfg.txt",)):
+        return mergeatlas.redo_plan(data, mergeatlas.diff_rows(old), mergeatlas.diff_rows(new), list(old_paths), list(new_paths), list(broken))
+
     def test_only_cards_whose_changes_differ_go_back(self):
-        cards = [CARD, {"id": "b", "paths": ["b.txt"]}]
         b = diff_of("b.txt", ["@@ -1 +1 @@\n-x\n+y\n"])
-        plan = mergeatlas.redo_plan(cards, mergeatlas.diff_rows(ONE + b), mergeatlas.diff_rows(OTHER + b),
-                                    ["cfg.txt", "b.txt"], ["cfg.txt", "b.txt", "new.txt"], [])
-        self.assertEqual(plan, {"redo": ["cfg"], "keep": ["b"], "added": ["new.txt"], "gone": [], "fix": []})
+        plan = self.plan(map_of(CFG, card_with("b", "b.txt", "-x\n+y")), ONE + b, OTHER + b,
+                         old_paths=["cfg.txt", "b.txt"], new_paths=["cfg.txt", "b.txt", "new.txt"])
+        self.assertEqual(plan, {
+            "redo": [{"id": "cfg", "whole": False, "changes": [1], "links": False, "entered": 1, "left": 1}], "keep": ["b"],
+            "added": ["new.txt"], "gone": [], "fix": [], "recheck": ["story", "intent i-cfg-1"], "back": 1, "total": 2})
 
     def test_cards_with_broken_links_go_back_and_the_rest_are_listed_to_fix(self):
-        plan = mergeatlas.redo_plan([CARD], mergeatlas.diff_rows(ONE), mergeatlas.diff_rows(ONE_MOVED),
-                                    ["cfg.txt", "old.txt"], ["cfg.txt"], ["card cfg", "story", "arrow cfg -> doc"])
-        self.assertEqual(plan, {"redo": ["cfg"], "keep": [], "added": [], "gone": ["old.txt"],
-                                "fix": ["story", "arrow cfg -> doc"]})
+        edge = {"from": "cfg", "to": "doc"}
+        plan = self.plan(map_of(CFG, edges=[edge]), ONE, ONE_MOVED, ["card cfg", "story", "arrow cfg -> doc"],
+                         old_paths=["cfg.txt", "old.txt"])
+        self.assertEqual(plan, {
+            "redo": [{"id": "cfg", "whole": False, "changes": [], "links": True, "entered": 0, "left": 0}], "keep": [],
+            "added": [], "gone": ["old.txt"], "fix": ["story", "arrow cfg -> doc"], "recheck": [], "back": 0, "total": 1})
+
+    def test_a_change_whose_key_lines_are_gone_goes_back_alone(self):
+        data = map_of(card_with("cfg", "cfg.txt", "-b\n+B", "-x\n+y"))
+        plan = self.plan(data, TWO_HUNKS, TWO_HUNKS_SECOND_CHANGED)
+        self.assertEqual([(r["whole"], r["changes"], r["links"]) for r in plan["redo"]], [(False, [2], False)])
+        self.assertEqual((plan["back"], plan["total"]), (1, 2))
+        self.assertEqual(plan["recheck"], ["story", "intent i-cfg-2"])
+
+    def test_a_change_with_a_broken_link_goes_back_alone(self):
+        data = map_of(card_with("cfg", "cfg.txt", "-b\n+B", "-x\n+y"))
+        plan = self.plan(data, TWO_HUNKS, TWO_HUNKS, ["card cfg change 1"])
+        self.assertEqual([(r["whole"], r["changes"], r["links"]) for r in plan["redo"]], [(False, [1], False)])
+
+    def test_lines_that_enter_a_cards_diff_are_counted(self):
+        more = diff_of("cfg.txt", ["@@ -1,3 +1,3 @@\n a\n-b\n+B\n c\n", "@@ -10,1 +10,2 @@\n x\n+n\n"])
+        plan = self.plan(map_of(CFG), ONE, more)
+        self.assertEqual(plan["redo"], [{"id": "cfg", "whole": False, "changes": [], "links": False, "entered": 1, "left": 0}])
+        self.assertEqual(plan["back"], 0)
+
+    def test_a_card_that_lost_a_file_goes_back_whole(self):
+        data = map_of({**card_with("cfg", "cfg.txt", "-b\n+B", "-x\n+y"), "paths": ["cfg.txt", "old.txt"]})
+        plan = self.plan(data, TWO_HUNKS, TWO_HUNKS, old_paths=["cfg.txt", "old.txt"])
+        self.assertEqual([(r["whole"], r["changes"]) for r in plan["redo"]], [(True, [])])
+        self.assertEqual((plan["back"], plan["total"]), (2, 2))
+        self.assertEqual(plan["recheck"], ["story", "intent i-cfg-1", "intent i-cfg-2"])
+
+    def test_an_untouched_card_is_kept(self):
+        plan = self.plan(map_of(CFG), ONE, ONE_MOVED)
+        self.assertEqual((plan["redo"], plan["keep"], plan["recheck"], plan["back"], plan["total"]), ([], ["cfg"], [], 0, 1))
+
+    def test_the_story_intents_and_arrows_of_touched_cards_are_listed_to_check(self):
+        b, c = diff_of("b.txt", ["@@ -1 +1 @@\n-x\n+y\n"]), diff_of("c.txt", ["@@ -1 +1 @@\n-p\n+q\n"])
+        edges = [{"from": "b", "to": "c"}, {"from": "cfg", "to": "b"}, {"from": "c", "to": "b"}]
+        data = map_of(CFG, card_with("b", "b.txt", "-x\n+y"), card_with("c", "c.txt", "-p\n+q"), edges=edges)
+        paths = ["cfg.txt", "b.txt", "c.txt"]
+        plan = self.plan(data, ONE + b + c, OTHER + b + c, old_paths=paths, new_paths=paths)
+        self.assertEqual(plan["recheck"], ["story", "intent i-cfg-1", "arrow cfg -> b"])
+
+    def test_a_part_to_fix_is_not_also_listed_to_check(self):
+        edges = [{"from": "cfg", "to": "doc"}]
+        broken = ["story", "intent i-cfg-1", "arrow cfg -> doc"]
+        plan = self.plan(map_of(CFG, edges=edges), ONE, OTHER, broken)
+        self.assertEqual(plan["fix"], broken)
+        self.assertEqual(plan["recheck"], [])
+
+    def test_back_counts_the_changes_going_back(self):
+        whole = {**card_with("old", "old.txt", "-p\n+q", "-r\n+s", "-t\n+u"), "paths": ["old.txt", "gone.txt"]}
+        data = map_of(whole, card_with("cfg", "cfg.txt", "-b\n+B", "-x\n+y"))
+        old = TWO_HUNKS + diff_of("old.txt", ["@@ -1 +1 @@\n-p\n+q\n"])
+        new = TWO_HUNKS_SECOND_CHANGED + diff_of("old.txt", ["@@ -1 +1 @@\n-p\n+q\n"])
+        plan = self.plan(data, old, new, old_paths=["cfg.txt", "old.txt", "gone.txt"], new_paths=["cfg.txt", "old.txt"])
+        self.assertEqual((plan["back"], plan["total"]), (4, 5))
 
 
 def git(repo, *args):
@@ -273,7 +354,8 @@ class RefreshWork(unittest.TestCase):
         pr, diff = self.pr(head2, self.base)
         status, plan = mergeatlas.refresh_work("o-r-7", pr, diff, self.base)
         self.assertEqual(status, "partial")
-        self.assertEqual(plan["redo"], ["cfg"])
+        self.assertEqual(plan["redo"], [{"id": "cfg", "whole": False, "changes": [1], "links": True, "entered": 1, "left": 1}])
+        self.assertEqual((plan["keep"], plan["back"], plan["total"]), ([], 1, 1))
         self.assertEqual(json.loads((mergeatlas.WORK / "o-r-7.pr.json").read_text())["headRefOid"], head2)
 
     def test_a_finished_map_counts_as_read_when_its_pr_changes(self):

@@ -12,6 +12,7 @@ The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
     rule_of(problem)                    -> the rule a publish rejection was for, "other" when no rule names it
     words_in(data)                      -> the words of prose a map holds, link targets left out
     summary_of(steps)                   -> the lines report prints for the latest run
+    plan_lines(map_id, plan)            -> the lines fetch prints under "map:" for a map whose pull request changed
     publish(map_id, asked=True)         -> notes the attempt, unless fetch republished the map by itself
     finish(map_id)                      -> notes that the cold read is done, which ends the map's draft
 """
@@ -190,6 +191,52 @@ class Drafts(Cache):
         self.assertEqual(self.steps(), [])
 
 
+class Plan(Cache):
+    """What fetch prints under "map:" for a map whose pull request changed."""
+
+    def test_every_kind_of_line_is_printed_in_order(self):
+        plan = {
+            "from": "0123456789abcdef", "delta": "lines", "delta_lines": 14,
+            "redo": [
+                {"id": "api", "whole": True, "changes": [1, 2], "links": True, "entered": 4, "left": 1},
+                {"id": "cfg", "whole": False, "changes": [2, 5], "links": True, "entered": 3, "left": 2},
+                {"id": "docs", "whole": False, "changes": [], "links": False, "entered": 0, "left": 1},
+                {"id": "ui", "whole": False, "changes": [], "links": True, "entered": 0, "left": 0},
+            ],
+            "keep": ["a", "b"], "added": ["new.py", "new.md"], "gone": ["old.py"], "fix": ["story", "intent i1"],
+            "recheck": ["story", "arrow a -> b"], "words": True, "problems": "Map rejected:\n  card a: missing result",
+            "back": 5, "total": 8,
+        }
+        self.assertEqual(mergeatlas.plan_lines("o-r-7", plan), [
+            f"map:         changed since it was published at 0123456; keep the rest of {mergeatlas.WORK / 'o-r-7.input.json'} as it is",
+            f"  delta:     {mergeatlas.WORK / 'o-r-7.delta.diff'} (14 lines, the lines that entered or left the PR's diff since then)",
+            "  card api: write again",
+            "  card cfg: write again changes 2, 5; fix the links outside its changes; check the rest of the card against the delta; "
+            "3 lines entered and 2 left its diff",
+            "  card docs: check the rest of the card against the delta; 0 lines entered and 1 left its diff",
+            "  card ui: fix the links outside its changes",
+            "  keep the cards: a, b",
+            "  add cards for the new files: new.py, new.md",
+            "  drop the files no longer in the PR: old.py",
+            "  fix the links in: story, intent i1",
+            "  check against the delta: story, arrow a -> b",
+            "  the PR's title, description or issues changed: check the story against them",
+            "  publish rejected the refreshed map:",
+            "Map rejected:\n  card a: missing result",
+            "  map it afresh: more than half of the map's changes go back",
+        ])
+
+    def test_a_delta_of_commits_says_so_and_a_small_change_leaves_the_rest_out(self):
+        plan = {"from": "f" * 40, "delta": "commits", "delta_lines": 9,
+                "redo": [], "keep": ["a"], "added": [], "gone": [], "fix": [], "recheck": [], "back": 2, "total": 4}
+        lines = mergeatlas.plan_lines("o-r-7", plan)
+        self.assertEqual(lines[1], f"  delta:     {mergeatlas.WORK / 'o-r-7.delta.diff'} (9 lines, the commits added since then)")
+        self.assertEqual(lines[2:], ["  keep the cards: a"])
+
+    def test_a_map_that_is_new_prints_nothing_under_the_map(self):
+        self.assertEqual(mergeatlas.plan_lines("o-r-7", None), [])
+
+
 class Rules(unittest.TestCase):
     def test_a_rejection_is_named_by_its_rule(self):
         for problem, rule in [
@@ -301,6 +348,12 @@ class Summary(Cache):
         self.assertEqual(self.line(RUN + later, "publishes"), "1, of which 0 rejected")
         self.assertEqual(self.line(RUN + later, "time"),
                          "5 min to the first accepted publish, 5 min to the last step, and the cold read was not finished")
+
+    def test_a_changed_map_says_how_many_changes_went_back(self):
+        later = [step(90000, "fetch", status="partial", files=37, additions=2300, deletions=92, diff_lines=4400, back=3, total=12)]
+        self.assertEqual(self.line(RUN + later, "pull request"),
+                         "37 files, +2300 -92, 4400 diff lines, changed since its last map, 3 of 12 changes sent back")
+        self.assertEqual(self.line(RUN, "pull request"), "36 files, +2199 -92, 4210 diff lines, new")
 
     def test_a_fetch_that_finds_the_map_unchanged_starts_no_run(self):
         same = [step(90000, "fetch", status="same-head", files=36, additions=2199, deletions=92, diff_lines=4210)]

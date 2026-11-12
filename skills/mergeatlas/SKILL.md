@@ -17,7 +17,17 @@ The reader is a skilled engineer asked to review a change that spans across file
     - `unchanged since it was published`: the head is the same. Give the user the URL; skip the other steps for this PR.
     - `published as a draft whose cold read did not finish`: the head is the same, and an earlier run stopped before step 8 was done. Give the user the URL, then run steps 8 and 9 for this PR.
     - `refreshed by the script`: the same changes sit on a new commit, as after a rebase. The script moved the links into the PR's files and published the map again. Give the user the URL; skip the other steps for this PR.
-    - `changed since it was published`: it lists the cards to write again, the cards to keep, new files to add, files to drop, and other parts whose links to fix. Run steps 3 to 9 for those alone: change only the listed parts of `<map-id>.input.json`, which still holds the rest and keeps its search log, and cold read only the cards you wrote again, plus the story when it changed.
+    - `changed since it was published`: the PR has new changes, and the lines under it say what to do with each part of `<map-id>.input.json`, which still holds the whole map and its search log. Do not read the whole diff again. Read the story and the intents in that file, then the delta file the `delta:` line names, which holds only what changed since the last map, then the source around what it shows. Then do what each line says, and leave every part no line names as it is:
+        - `write again`, or `write again changes N`: write that card, or those changes of it, again by the rules below.
+        - `check the rest of the card against the delta`, and `check against the delta`: read that part beside the delta and edit only a statement the delta made untrue.
+        - `N lines entered and M left its diff`: every line that entered belongs to a change. Add it to the change whose reason it shares, or write a new change for it, and give a new change its intent by the revert test.
+        - `add cards for the new files`, `drop the files no longer in the PR`, `fix the links in` and `fix the links outside its changes`: as they say. A file that joined the PR leaves any `reaches` or `unaffected` list that named it.
+        - `search ... now also matches`: sort each such file into `reaches` or `unaffected`. `no longer matches`: check the entry that names that file.
+        - `the PR's title, description or issues changed`: read them in fetch's output and check the story against them.
+        - `publish rejected the refreshed map`: the changes are the same, so fix the problems it lists and nothing else.
+        - `map it afresh`: ignore the other lines, run fetch again with the same targets and `--fresh`, and map the PR from step 3.
+
+        Search, as in step 4, only for the names, fields and values the delta adds or changes. Then run steps 7 to 9; step 8 reads only the cards whose words changed.
 
     No PRs to map: tell the user and stop.
 
