@@ -1,0 +1,8 @@
+[
+  {"q": "Before this pull request, what did someone working in the dark theme get when they exported an image without touching the export dialog's dark-mode switch, and why?", "a": "A light image. `exportWithDarkMode` was its own app-state field with a default of false, and nothing tied it to `theme`."},
+  {"q": "After this pull request, when does App decide the export theme, and from which values?", "a": "After every update, in `componentDidUpdate`. It takes `sessionExportThemeOverride` when set and `state.theme` otherwise, and sets `exportWithDarkMode` when it differs from that."},
+  {"q": "What does the export dialog's dark-mode switch store now, where, and how long does the choice last?", "a": "The action `actionExportWithDarkMode` stores dark or light in `sessionExportThemeOverride`, a field on the App instance and not in app state. It outlasts later theme changes and is gone after a reload."},
+  {"q": "Why does the pull request also set `exportWithDarkMode` in App's constructor?", "a": "`componentDidUpdate` does not run on mount, so the initial state takes `theme === THEME.DARK`; an editor opened in the dark theme then starts with a dark export."},
+  {"q": "Why did the export dialog drop its own `exportDarkMode` state?", "a": "It now gets `exportWithDarkMode` as a prop from `appState`, so the switch and the preview follow the value App keeps in sync, where before they followed a copy made when the dialog opened."},
+  {"q": "What stops an older preview render from replacing a newer one in the export dialog?", "a": "A request counter in a ref. Each run of the effect takes the next number, the asynchronous steps return early when their number is no longer the latest, and the effect's cleanup also advances the counter."}
+]

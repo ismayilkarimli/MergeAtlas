@@ -26,12 +26,7 @@ CI runs both on every pull request, with the tests on Python 3.9 to 3.14. The ol
 
 ## Changing how maps are written
 
-A change to `SKILL.md` changes every map, and no test can tell you whether maps got better. Before and after such a change, map the same pull request and compare:
-
-- the two maps, read side by side;
-- `mergeatlas.py report <map-id>` for each run, which shows the time taken, what publish rejected and how many cold-read rounds it took.
-
-Say in the pull request which pull request you mapped and what moved.
+A change to `SKILL.md` changes every map, and no test can tell you whether maps got better. Measure the change against the fixed set of pull requests in `evals/` before you open the pull request, as `evals/README.md` describes, and paste the comparison table into it.
 
 ## Changing the viewer or the server
 

@@ -1,0 +1,5 @@
+{"pulls": [
+  {"key": "small", "repo": "excalidraw/excalidraw", "number": 10903, "head": "460c357ce8d2630c243916bb12d85a03ec1ead4f", "budget_usd": 6, "timeout_min": 45},
+  {"key": "medium", "repo": "excalidraw/excalidraw", "number": 11859, "head": "64033fdbd050449b59447f8b151438a6c68e777f", "budget_usd": 10, "timeout_min": 60},
+  {"key": "large", "repo": "excalidraw/excalidraw", "number": 8613, "head": "0cc70d07c7706419daac595a667935797d2d5310", "budget_usd": 25, "timeout_min": 120}
+]}
