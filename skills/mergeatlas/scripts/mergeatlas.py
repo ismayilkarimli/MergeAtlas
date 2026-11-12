@@ -659,7 +659,7 @@ def search(map_id, term, mode):
     matches = matching(term, mode, commit, changed)
     log_path = WORK / f"{map_id}.searches.json"
     log = [s for s in json.loads(log_path.read_text()) if (s["term"], s["mode"]) != (term, mode)]
-    log.append({"term": term, "mode": mode, "files": found_by(term, mode, commit, changed)})
+    log.append({"term": term, "mode": mode, "files": list(matches)})
     log_path.write_text(json.dumps(log, indent=2))
     note(map_id, "search", mode=mode, files=len(matches))
     record = stack_of_map(pr)
