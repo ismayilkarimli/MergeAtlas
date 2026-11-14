@@ -8,7 +8,7 @@ ones included. So the server hands out the viewer and the published maps and not
 its own address. A web page can point its own domain at 127.0.0.1 and read whatever a local server gives that name.
 
 Two answers are worked out when asked for, and neither is a file. maps.json lists the published maps for the viewer's
-front page. pr-now.json says where a mapped PR stands on GitHub now, which the server asks gh for, so the viewer can
+front page. pr-now.json says where a mapped PR stands on its host now, which the server asks the host's CLI for, so the viewer can
 say when a map describes an older commit.
 
 The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
@@ -16,7 +16,6 @@ The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
     library()                -> what maps.json answers: every published map and stack page, the latest first
     pr_now(map_id)           -> what pr-now.json answers: the commit the map was made at, and the PR's head and state now
     serve()                  -> starts the server unless this release's is running; replaces another release's
-    unversioned_server()     -> the process id of a server from before servers named their release, or None
 """
 import http.client
 import json
@@ -111,9 +110,11 @@ class WhatTheServerHandsOut(Served):
 
 
 def a_map(number, title, at, head="a" * 40, draft=False, stack=None):
+    url = f"https://github.com/o/r/pull/{number}"
     return {"pr": {"number": number, "title": title, "files": 3, "additions": 40, "deletions": 2, "draft": draft,
-                   "url": f"https://github.com/o/r/pull/{number}", "mapped": {"at": at, "head": head}, "stack": stack,
-                   "diffs": {"src/secret.py": "+secret"}, "problem": "a secret problem"}, "cards": [{"id": "secret"}]}
+                   "url": url, "mapped": {"at": at, "head": head}, "stack": stack,
+                   "links": mergeatlas.GitHub().links(url, ["src/secret.py"]), "problem": "a secret problem"},
+            "cards": [{"id": "secret"}]}
 
 
 class TheListOfMaps(Served):
@@ -130,7 +131,7 @@ class TheListOfMaps(Served):
         self.publish("o-r-8", a_map(8, "Older", 100))
         self.publish("o-r-9", a_map(9, "Newer", 200, draft=True))
         newer, older = self.maps()
-        self.assertEqual(newer, {"id": "o-r-9", "kind": "map", "repo": "o/r", "number": 9, "title": "Newer", "files": 3,
+        self.assertEqual(newer, {"id": "o-r-9", "kind": "map", "repo": "o/r", "host": "GitHub", "number": 9, "title": "Newer", "files": 3,
                                  "additions": 40, "deletions": 2, "url": "https://github.com/o/r/pull/9", "draft": True,
                                  "at": 200, "stack": None})
         self.assertEqual((older["id"], older["draft"]), ("o-r-8", False))
@@ -139,12 +140,6 @@ class TheListOfMaps(Served):
         self.publish("o-r-8", a_map(8, "Older", 100))
         self.assertNotIn("secret", self.get("/maps.json")[1])
 
-    def test_a_map_from_before_maps_said_when_they_were_made_takes_its_files_time(self):
-        data = a_map(8, "Older", 100)
-        del data["pr"]["mapped"]
-        self.publish("o-r-8", data)
-        self.assertEqual(self.maps()[0]["at"], int((self.home / "data" / "o-r-8.json").stat().st_mtime))
-
     def test_a_map_in_a_stack_says_its_place(self):
         strip = {"id": "o-r-stack-1", "number": 1, "prs": [{"number": 7}, {"number": 8, "current": True}, {"number": 9}]}
         self.publish("o-r-8", a_map(8, "Middle", 100, stack=strip))
@@ -152,10 +147,10 @@ class TheListOfMaps(Served):
 
     def test_a_stack_page_is_listed_with_its_size(self):
         self.publish("o-r-stack-1", {"kind": "stack", "stack": {"id": "o-r-stack-1", "repo": "o/r", "number": 1, "url": "https://x"},
-                                     "prs": [{}, {}, {}]})
+                                     "links": {"host": "GitHub"}, "prs": [{}, {}, {}]})
         (page,) = self.maps()
-        self.assertEqual({k: page[k] for k in ("id", "kind", "repo", "number", "prs")},
-                         {"id": "o-r-stack-1", "kind": "stack", "repo": "o/r", "number": 1, "prs": 3})
+        self.assertEqual({k: page[k] for k in ("id", "kind", "repo", "host", "number", "prs")},
+                         {"id": "o-r-stack-1", "kind": "stack", "repo": "o/r", "host": "GitHub", "number": 1, "prs": 3})
 
     def test_the_list_is_refused_under_another_host_name(self):
         self.assertEqual(self.get("/maps.json", host="attacker.example")[0].status, 403)
@@ -178,7 +173,7 @@ class WhereThePullRequestStandsNow(Served):
         self.assertEqual(response.status, 200)
         return json.loads(body), [call.args[0] for call in run.call_args_list]
 
-    def test_it_gives_the_mapped_commit_beside_the_head_on_github(self):
+    def test_it_gives_the_mapped_commit_beside_the_head_on_the_host(self):
         self.publish("o-r-8", a_map(8, "Mapped", 100))
         now, ran = self.now()
         self.assertEqual(now, {"mapped": "a" * 40, "head": "b" * 40, "state": "open"})
@@ -190,7 +185,7 @@ class WhereThePullRequestStandsNow(Served):
         self.publish("o-r-8", data)
         self.assertEqual(self.now()[1][0][:5], ["gh", "api", "--hostname", "github.example.com", "repos/o/r/pulls/8"])
 
-    def test_github_is_asked_once_a_minute_at_most(self):
+    def test_the_host_is_asked_once_a_minute_at_most(self):
         self.publish("o-r-8", a_map(8, "Mapped", 100))
         self.assertEqual(len(self.now()[1]), 1)
         self.assertEqual(self.now(), ({"mapped": "a" * 40, "head": "b" * 40, "state": "open"}, []))
@@ -206,7 +201,7 @@ class WhereThePullRequestStandsNow(Served):
         self.publish("o-r-8", a_map(8, "Mapped", 100))
         self.assertEqual(self.now(returncode=1, stdout="")[0], {})
 
-    def test_another_sites_page_cannot_have_github_asked(self):
+    def test_another_sites_page_cannot_have_the_host_asked(self):
         self.publish("o-r-8", a_map(8, "Mapped", 100))
         done = subprocess.CompletedProcess([], 0, stdout="{}", stderr="")
         with mock.patch.object(mergeatlas.subprocess, "run", return_value=done) as run:
@@ -238,11 +233,10 @@ VIEWER = b'<div id="world"></div>'
 
 
 class TakingOverFromAnotherRelease(unittest.TestCase):
-    def serve(self, answer, listening=(True, False), unversioned=None):
+    def serve(self, answer, listening=(True, False)):
         """Runs serve against a port in the given state; returns the process ids stopped and how many servers started."""
         with mock.patch.object(mergeatlas, "listening", side_effect=list(listening)), \
                 mock.patch.object(mergeatlas.urllib.request, "urlopen", return_value=answer), \
-                mock.patch.object(mergeatlas, "unversioned_server", return_value=unversioned), \
                 mock.patch.object(mergeatlas.os, "kill") as kill, \
                 mock.patch.object(mergeatlas.subprocess, "Popen") as popen, \
                 mock.patch.object(mergeatlas.sys, "stderr"):
@@ -260,10 +254,7 @@ class TakingOverFromAnotherRelease(unittest.TestCase):
         answer = Answer(VIEWER, {"X-MergeAtlas-Version": "0.0.1", "X-MergeAtlas-Pid": "41"})
         self.assertEqual(self.serve(answer), ([41], 1))
 
-    def test_a_server_from_before_releases_is_replaced_when_its_process_is_found(self):
-        self.assertEqual(self.serve(Answer(VIEWER, {}), unversioned="52"), ([52], 1))
-
-    def test_a_server_from_before_releases_is_left_when_its_process_is_not_found(self):
+    def test_a_server_that_names_no_process_is_reported_and_left(self):
         self.assertEqual(self.serve(Answer(VIEWER, {}), listening=(True,)), ([], 0))
 
     def test_something_else_on_the_port_stops_the_run(self):

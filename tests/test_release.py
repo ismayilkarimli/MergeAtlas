@@ -13,7 +13,8 @@ from outside, such as a pull request's title, and the viewer writes that text in
 What is under test:
     mergeatlas.VERSION, .claude-plugin/plugin.json, .claude-plugin/marketplace.json, CHANGELOG.md, README.md
     skills/mergeatlas/assets/viewer.html: the map slot export fills, the mark serve knows the viewer by, what it asks
-    the server for, esc and unesc, and ago, which says how long ago a map was made
+    the server for, esc and unesc, ago, which says how long ago a map was made, and codeUrl, which opens a link into code
+    on the host from the templates in the map's `links`
 """
 import json
 import re
@@ -62,6 +63,9 @@ class WhatTheScriptNeedsOfTheViewer(unittest.TestCase):
         self.assertEqual(asked, {"data/${encodeURIComponent(id)}.json", "maps.json", "pr-now.json?map=${encodeURIComponent(id)}"})
         self.assertTrue(mergeatlas.SERVED.fullmatch("/data/owner-repo.name_1-42.json"))
 
+    def test_the_viewer_names_no_host_of_its_own(self):
+        self.assertNotRegex(VIEWER, r"(?i)github|gitlab")
+
 
 @unittest.skipUnless(NODE, "needs Node.js")
 class ViewerScript(unittest.TestCase):
@@ -106,6 +110,34 @@ class ViewerScript(unittest.TestCase):
         *recent, dated = ran.stdout.splitlines()
         self.assertEqual(recent, ["just now", "1 minute ago", "59 minutes ago", "3 hours ago", "1 day ago", "20 days ago"])
         self.assertRegex(dated, r"^on .*1970")
+
+    def addresses(self, links, asked):
+        """Runs the viewer's own codeUrl and keyLine addresses against a map's links."""
+        lifted = re.search(r"const fill = .*?\n};\n(?=const keyLine)", VIEWER, re.S)
+        self.assertTrue(lifted)
+        meta = {"pinned": {"commit": "c0ffee"}}
+        ran = self.node(f"const META = {json.dumps(meta)}, LINKS = {json.dumps(links)};\n{lifted[0]}\n"
+                        f"for (const at of {json.dumps(asked)}) console.log(codeUrl(at));\n"
+                        "console.log(hostUrl('src/a.py', '7', null, 'L'), hostUrl('b.py', '7', null, 'L'));")
+        self.assertEqual(ran.returncode, 0, ran.stderr)
+        return ran.stdout.splitlines()
+
+    def test_a_link_into_code_opens_where_the_hosts_templates_say(self):
+        links = mergeatlas.GitHub().links("https://github.com/o/r/pull/7", ["src/a.py"])
+        found = self.addresses(links, ["src/a.py", "src/a.py#L5", "src/a.py#L5-L9", "b.py#L5-L9", "b.py"])
+        key = links["keys"]["src/a.py"]
+        self.assertEqual(found, [
+            f"https://github.com/o/r/pull/7/files#diff-{key}", f"https://github.com/o/r/pull/7/files#diff-{key}R5",
+            f"https://github.com/o/r/pull/7/files#diff-{key}R5-R9", "https://github.com/o/r/blob/c0ffee/b.py#L5-L9",
+            "https://github.com/o/r/blob/c0ffee/b.py", f"https://github.com/o/r/pull/7/files#diff-{key}L7 "
+            "https://github.com/o/r/blob/c0ffee/b.py#L7"])
+
+    def test_another_host_spells_its_lines_in_its_own_templates(self):
+        links = {"diff": "https://git.example/mr/7/diffs#{key}", "diff_line": "_{first}", "diff_range": "_{first}_{last}",
+                 "blob": "https://git.example/-/blob/{sha}/{path}", "blob_line": "#L{first}", "blob_range": "#L{first}-{last}",
+                 "keys": {"src/a.py": "k1"}}
+        found = self.addresses(links, ["src/a.py#L5-L9", "b.py#L5-L9"])
+        self.assertEqual(found[:2], ["https://git.example/mr/7/diffs#k1_5_9", "https://git.example/-/blob/c0ffee/b.py#L5-9"])
 
     def test_a_link_target_comes_back_as_it_was_written(self):
         path = '''src/a&b/it's "x".ts#L1-L2'''

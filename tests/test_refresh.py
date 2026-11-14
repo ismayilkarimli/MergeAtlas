@@ -29,6 +29,7 @@ The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
                                         -> (status, plan): status is new, same-head, refreshed or partial
 """
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -321,9 +322,15 @@ class RefreshWork(unittest.TestCase):
     def saved_input(self):
         return json.loads((mergeatlas.WORK / "o-r-7.input.json").read_text())
 
+    def test_a_map_carries_the_templates_for_the_hosts_pages(self):
+        self.first_map()
+        links = self.published()["pr"]["links"]
+        self.assertEqual((links["host"], links["pr"]), ("GitHub", "https://github.com/o/r/pull/7"))
+        self.assertEqual(links["keys"], {"cfg.txt": hashlib.sha256(b"cfg.txt").hexdigest()})
+
     def test_a_first_fetch_pins_code_outside_the_pr_to_the_commit_it_was_built_on(self):
         self.first_map()
-        self.assertEqual(self.published()["pr"]["blob"], f"https://github.com/o/r/blob/{self.base}/")
+        self.assertEqual(self.published()["pr"]["links"]["blob"], "https://github.com/o/r/blob/{sha}/{path}")
         self.assertEqual(self.published()["pr"]["pinned"], {"commit": self.base, "base": "main", "below": None})
 
     def test_the_same_head_leaves_the_map_alone(self):
@@ -347,7 +354,7 @@ class RefreshWork(unittest.TestCase):
         # outside the PR, the link stays on the commit the map was built on
         self.assertIn("[read](app.py#L3)", data["cards"][0]["changes"][0]["change"])
         published = self.published()
-        self.assertEqual(published["pr"]["blob"], f"https://github.com/o/r/blob/{self.base}/")
+        self.assertEqual(published["pr"]["pinned"]["commit"], self.base)
         key = [line for line in published["cards"][0]["changes"][0]["snippets"][0] if line.get("key")]
         self.assertEqual([(line["text"], line["line"]) for line in key], [("+B", "R3")])
 
@@ -370,22 +377,49 @@ class RefreshWork(unittest.TestCase):
         self.assertEqual((plan["keep"], plan["back"], plan["total"]), ([], 1, 1))
         self.assertEqual(json.loads((mergeatlas.WORK / "o-r-7.pr.json").read_text())["headRefOid"], head2)
 
-    def test_a_finished_map_counts_as_read_when_its_pr_changes(self):
-        self.first_map()
-        with contextlib.redirect_stdout(io.StringIO()):
-            mergeatlas.finish("o-r-7")
-        # a map finished by a release from before read marks had none
-        (mergeatlas.WORK / "o-r-7.read.json").unlink()
-        head2 = self.commit({"cfg.txt": "a\nBee\nc\n"}, "change b differently")
-        self.assertEqual(mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base)[0], "partial")
-        marks = json.loads((mergeatlas.WORK / "o-r-7.read.json").read_text())
-        self.assertEqual(marks, mergeatlas.hashes_of(self.saved_input()))
-
     def test_a_draft_has_no_read_marks_when_its_pr_changes(self):
         self.first_map()
         head2 = self.commit({"cfg.txt": "a\nBee\nc\n"}, "change b differently")
         mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base)
         self.assertFalse((mergeatlas.WORK / "o-r-7.read.json").exists())
+
+    def test_the_files_and_their_lines_come_from_the_clone(self):
+        old = "".join(f"line {n}\n" for n in range(1, 11))
+        built = self.commit({"old.txt": old, "gone.txt": "x\ny\n"}, "more files")
+        (self.repo / "photo.bin").write_bytes(b"\x00\x01\x02")
+        (self.repo / "old.txt").rename(self.repo / "moved.txt")
+        (self.repo / "gone.txt").unlink()
+        head = self.commit({"moved.txt": old.replace("line 5", "line five"), "fresh.txt": "a\nb\nc\n"}, "change them")
+        diff, files = mergeatlas.local_diff(built, head)
+        self.assertEqual(files, [
+            {"path": "fresh.txt", "additions": 3, "deletions": 0}, {"path": "gone.txt", "additions": 0, "deletions": 2},
+            {"path": "moved.txt", "additions": 1, "deletions": 1}, {"path": "photo.bin", "additions": 0, "deletions": 0}])
+        self.assertEqual(diff, mergeatlas.text_only(git(self.repo, "diff", "-M", built, head) + "\n"))
+        self.assertIn("rename from old.txt", diff)
+        self.assertNotIn("photo.bin", diff)
+
+    def test_a_fetch_takes_the_diff_and_the_file_stats_from_the_clone_alone(self):
+        origin = self.tmp / "origin.git"
+        git(self.tmp, "init", "-q", "--bare", str(origin))
+        git(self.repo, "remote", "add", "origin", str(origin))
+        git(self.repo, "push", "-q", "origin", f"{self.head}:refs/pull/7/head")
+        head, base = self.head, self.base
+
+        class Forge(mergeatlas.GitHub):
+            def pr_record(self, repo, number):
+                return {"number": 7, "title": "Change b", "body": "", "url": "https://github.com/o/r/pull/7",
+                        "headRefName": "change-b", "headRefOid": head, "baseRefName": "main", "baseRefOid": base,
+                        "issues": []}
+
+        with contextlib.redirect_stdout(io.StringIO()) as out, mock.patch.object(mergeatlas, "gh", side_effect=AssertionError):
+            mergeatlas.fetch_pr(Forge(), "o/r", 7, None)
+        saved = json.loads((mergeatlas.WORK / "github-o-r-7.pr.json").read_text())
+        self.assertEqual(saved["files"], [{"path": "cfg.txt", "additions": 1, "deletions": 1}])
+        self.assertEqual((saved["additions"], saved["deletions"], saved["pinned"]), (1, 1, self.base))
+        self.assertNotIn("baseRefOid", saved)
+        self.assertEqual((mergeatlas.WORK / "github-o-r-7.diff").read_text(), mergeatlas.text_only(git(self.repo, "diff", "-M", base, head) + "\n"))
+        self.assertIn("  +1 -1 cfg.txt", out.getvalue())
+        self.assertIn("github-o-r-7", out.getvalue())
 
     def test_a_new_commit_on_top_is_the_delta(self):
         self.first_map()
@@ -450,17 +484,6 @@ class RefreshWork(unittest.TestCase):
         before = self.published()
         mergeatlas.refresh_work("o-r-7", *self.pr(self.head, self.base), self.base, fresh=True)
         self.assertEqual(self.published(), before)
-
-    def test_a_map_in_an_old_format_starts_over_by_itself(self):
-        self.first_map()
-        self.set_aside()
-        old = self.saved_input()
-        del old["cards"][0]["changes"]
-        (mergeatlas.WORK / "o-r-7.input.json").write_text(json.dumps(old))
-        head2 = self.commit({"cfg.txt": "a\nBee\nc\n"}, "change b differently")
-        self.assertEqual(mergeatlas.refresh_work("o-r-7", *self.pr(head2, self.base), self.base), ("new", None))
-        self.assertFalse((mergeatlas.WORK / "o-r-7.input.json").exists())
-        self.assertFalse((mergeatlas.WORK / "o-r-7.delta.diff").exists())
 
     def log_searches(self, files):
         (mergeatlas.WORK / "o-r-7.searches.json").write_text(json.dumps([{"term": "read", "mode": "word", "files": files}]))

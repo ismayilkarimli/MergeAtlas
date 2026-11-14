@@ -9,13 +9,13 @@ Set MERGEATLAS_LIVE=1 to also check the GitHub adapter against that repository i
 The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
     parse_target(text)                       -> (kind, repo, number): kind is "pr" or "stack", repo is None for a bare number
     parse_fetch_args(args)                   -> (targets, whole_stack)
-    resolve(targets, github, whole_stack)    -> plan dict:
+    resolve(targets, forge, whole_stack)     -> plan dict:
         repo:   "owner/name"
         stack:  None for a PR in no stack, else {number (None when found by branches), source ("native" or "branches"),
                 base, prs (every PR in the stack, bottom to top)}
         map:    the PRs to map, bottom to top
         added:  PRs the user did not list but that sit between ones they did
-    GhGitHub(): the adapter over `gh`, with the methods FakeGitHub has below
+    GitHub(): the forge over `gh`, with the methods FakeGitHub has below; tests/test_forge.py covers the rest of it
 """
 import copy
 import json
@@ -41,8 +41,8 @@ def stack_link(number, repo=REPO):
     return f"https://github.com/{repo}/stack/{number}"
 
 
-class FakeGitHub:
-    """Answers from the fixture as GhGitHub answers from GitHub. With native=False the repository has no
+class FakeGitHub(mergeatlas.GitHub):
+    """Answers from the fixture as GitHub answers from GitHub, and spells links as it does. With native=False the repository has no
     native stacks, as with one built by hand, by Graphite, or with plain branches."""
 
     def __init__(self, native=True, extra=(), merged=()):
@@ -281,7 +281,7 @@ class LiveGitHub(unittest.TestCase):
     """The real adapter answers as the fixture does, so the fake stays honest."""
 
     def setUp(self):
-        self.github = mergeatlas.GhGitHub()
+        self.github = mergeatlas.GitHub()
 
     def test_stack(self):
         self.assertEqual(self.github.stack(REPO, 9), FIXTURE["stacks"][0])

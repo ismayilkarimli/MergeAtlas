@@ -72,7 +72,8 @@ def pull_of(key):
 
 
 def map_id_of(pull):
-    return f"{pull['repo'].replace('/', '-')}-{pull['number']}"
+    """The id the script gives the map: the host's name, the repository and the number."""
+    return f"github-{pull['repo'].replace('/', '-')}-{pull['number']}"
 
 
 def folder_of(label):

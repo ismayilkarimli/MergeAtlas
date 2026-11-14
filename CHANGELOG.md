@@ -4,6 +4,17 @@ What changed in each release of MergeAtlas, newest first. Versions follow [seman
 
 If you installed the Claude Code plugin, you stay on a release until the next one is published, then `/plugin marketplace update mergeatlas` brings it in. Installs through skills.sh or a clone follow the `main` branch.
 
+## Unreleased
+
+### Changed
+
+- A map's id now names its host, such as `github-owner-repo-12` and `github-owner-repo-stack-7`, and the viewer takes every address it opens, and the name of the host it shows, from the map. Maps from earlier releases have no such addresses, so publish them again.
+- fetch takes a pull request's diff and its file list with their added and removed lines from your clone, where it asked GitHub for them, so a very large pull request no longer fails on a diff GitHub will not send.
+
+### Removed
+
+- The code that kept maps and servers from earlier releases working: a map in the format from before cards held changes is no longer set aside by itself, and a viewer server that names no release is left running with a note instead of being looked up and replaced.
+
 ## 0.4.0 - 2026-11-12
 
 ### Added

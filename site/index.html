@@ -1352,7 +1352,7 @@ function site(local) {
   stage.classList.toggle('local', local);
   const idle = stage.classList.contains('idle');
   const idleOrOver = idle ? 'idle' : stage.classList.contains('overview') ? 'over' : 'files';
-  $('addr').textContent = local ? '127.0.0.1:8765/?map=excalidraw-excalidraw-8613' : { idle: 'githob.com/pulls/review-requested', over: 'githob.com/pull/8613', files: 'githob.com/pull/8613/files' }[idleOrOver];
+  $('addr').textContent = local ? '127.0.0.1:8765/?map=github-excalidraw-excalidraw-8613' : { idle: 'githob.com/pulls/review-requested', over: 'githob.com/pull/8613', files: 'githob.com/pull/8613/files' }[idleOrOver];
 }
 const PR_URL = 'https://githob.com/pull/8613', URL_RE = /https?:\/\/[^\s<]+/g;
 function ping(text, onclick) {
@@ -1548,7 +1548,7 @@ const ACT_TWO = [
   () => {
     $('flood')?.remove(); $('ping')?.remove(); stage.classList.remove('glitch', 'idle', 'overview'); site(false); clock(0); main.textContent = '';
     const t = document.createElement('div'); t.className = 'term'; t.id = 'term';
-    t.innerHTML = '<div>&gt; /mergeatlas 8613</div><div>fetching PR #8613</div><div>reading 36 files and the code around them</div><div>sorting what the change reaches</div><div>map ready at<br>http://127.0.0.1:8765/<wbr>?&#8288;map=excalidraw-excalidraw-8613</div>';
+    t.innerHTML = '<div>&gt; /mergeatlas 8613</div><div>fetching PR #8613</div><div>reading 36 files and the code around them</div><div>sorting what the change reaches</div><div>map ready at<br>http://127.0.0.1:8765/<wbr>?&#8288;map=github-excalidraw-excalidraw-8613</div>';
     $('screen').append(t);
     say('Rewind. Same pull request, same afternoon.', 'This time you ask your agent to map it before you read a line.', [['Open MergeAtlas', next]]);
   },

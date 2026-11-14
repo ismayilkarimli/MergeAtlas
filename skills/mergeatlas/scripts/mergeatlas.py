@@ -85,7 +85,6 @@ SLUG = re.compile(r"[\w-]+")
 # The files the viewer's server hands out: the viewer itself and the published maps.
 SERVED = re.compile(r"/(index\.html)?|/data/[\w.-]+\.json")
 MAP_ID = re.compile(r"[\w.-]+")
-PR_URL = re.compile(r"https://([^/]+)/([^/]+)/([^/]+)/pull/(\d+)")
 # How long the server trusts what GitHub last said about a PR before asking again.
 PR_NOW_SECONDS = 60
 CARD_LINK = re.compile(r"\[[^\]]+\]\(([\w-]+)\)")
@@ -188,19 +187,9 @@ def ticket_refs(title, body, branch):
     return [*(f"{name} {url}" for url, name in urls.items()), *dict.fromkeys(keys)]
 
 
-PR_OR_STACK = re.compile(r"(?:https?://)?(?:www\.)?github\.com/([\w.-]+/[\w.-]+)/(pull|stack)/(\d+)(?:[/?#].*)?")
-
-
 def parse_target(text):
     """Reads a PR or stack link, or a bare PR number, as (kind, repo, number); a bare number has no repo."""
-    text = text.strip()
-    bare = re.fullmatch(r"#?(\d+)", text)
-    if bare:
-        return ("pr", None, int(bare[1]))
-    link = PR_OR_STACK.fullmatch(text)
-    if not link:
-        raise ValueError(f"not a GitHub pull request or stack link: {text!r}")
-    return ("pr" if link[2] == "pull" else "stack", link[1], int(link[3]))
+    return forge_for(text).parse_target(text)
 
 
 def parse_fetch_args(args):
@@ -212,18 +201,18 @@ def open_or_merged(pulls):
     return [p for p in pulls if p["state"] != "closed"]
 
 
-def stack_by_branches(repo, pull, github, known, strict):
+def stack_by_branches(repo, pull, forge, known, strict):
     """Finds a stack built without GitHub's stacks: each PR's base branch is the head branch of the PR below it.
     Above a fork the chain has no single next PR, so strict fails there and otherwise stops."""
     chain, seen = [pull], {pull["number"]}
     while True:
-        below = open_or_merged(github.pulls_with_head(repo, chain[0]["base"]))
+        below = open_or_merged(forge.pulls_with_head(repo, chain[0]["base"]))
         if len(below) != 1 or below[0]["number"] in seen:
             break
         chain.insert(0, below[0])
         seen.add(below[0]["number"])
     while True:
-        above = open_or_merged(github.pulls_with_base(repo, chain[-1]["head"]))
+        above = open_or_merged(forge.pulls_with_base(repo, chain[-1]["head"]))
         if len(above) > 1 and strict:
             names = " and ".join(f"#{p['number']}" for p in sorted(above, key=lambda p: p["number"]))
             raise ValueError(f"the stack forks above #{chain[-1]['number']} into {names}, so it is not one stack")
@@ -237,18 +226,18 @@ def stack_by_branches(repo, pull, github, known, strict):
     return {"number": None, "source": "branches", "base": chain[0]["base"], "prs": [p["number"] for p in chain]}
 
 
-def stack_of(repo, pull, github, known, strict):
+def stack_of(repo, pull, forge, known, strict):
     """The stack a PR sits in: GitHub's own when it has one, else the chain of base branches."""
     if pull.get("stack"):
-        found = github.stack(repo, pull["stack"]["number"])
+        found = forge.stack(repo, pull["stack"]["number"])
         return {"number": found["number"], "source": "native", "base": found["base"], "prs": found["prs"]}
-    return stack_by_branches(repo, pull, github, known, strict)
+    return stack_by_branches(repo, pull, forge, known, strict)
 
 
-def resolve(targets, github, whole_stack=False):
+def resolve(targets, forge, whole_stack=False):
     """Decides which PRs to map, bottom to top, and the stack they sit in.
     A stack link maps the whole stack; a PR link maps that PR unless whole_stack; several PRs map the run between them."""
-    repos = {repo or github.current_repo() for _, repo, _ in targets}
+    repos = {repo or forge.current_repo() for _, repo, _ in targets}
     if len(repos) != 1:
         raise ValueError(f"links from more than one repository: {', '.join(sorted(repos))}")
     repo = repos.pop()
@@ -256,17 +245,17 @@ def resolve(targets, github, whole_stack=False):
     listed = list(dict.fromkeys(n for kind, _, n in targets if kind == "pr"))
     if len(stacks) > 1:
         raise ValueError(f"links to more than one stack: {', '.join(f'#{n}' for n in stacks)}")
-    known = {n: github.pull(repo, n) for n in listed}
+    known = {n: forge.pull(repo, n) for n in listed}
     if len(listed) > 1:
         for n in listed:
             if known[n]["state"] == "merged":
                 raise ValueError(f"#{n} is already merged, so it has nothing left to review")
     if stacks:
-        found = github.stack(repo, stacks[0])
+        found = forge.stack(repo, stacks[0])
         stack = {"number": found["number"], "source": "native", "base": found["base"], "prs": found["prs"]}
         whole_stack = True
     else:
-        stack = stack_of(repo, known[listed[0]], github, known, strict=whole_stack)
+        stack = stack_of(repo, known[listed[0]], forge, known, strict=whole_stack)
     if stack is None:
         if len(listed) > 1:
             raise ValueError(f"#{listed[0]} is in no stack, so {', '.join(f'#{n}' for n in listed[1:])} cannot share one with it")
@@ -277,7 +266,7 @@ def resolve(targets, github, whole_stack=False):
     if whole_stack:
         for n in stack["prs"]:
             if n not in known:
-                known[n] = github.pull(repo, n)
+                known[n] = forge.pull(repo, n)
         chosen = [n for n in stack["prs"] if known[n]["state"] == "open"]
     else:
         positions = [stack["prs"].index(n) for n in listed]
@@ -297,8 +286,30 @@ def pull_record(p):
     }
 
 
-class GhGitHub:
-    """Reads pull requests and stacks through the signed-in GitHub CLI."""
+# The links a map's page opens are written once, as templates the viewer fills in, so it never builds a host's URL itself:
+#   {path} a file's path, {sha} a commit, {ref} a branch, {n} a PR number,
+#   {key} a changed file's anchor in the PR's diff, {side} L or R, the old or the new side of that diff,
+#   {first} and {last} the lines a link names.
+# "diff" opens a changed file in the PR's diff and "blob" any file at a commit; each takes a line or a range after it, from
+# "<name>_line" and "<name>_range". "keys" gives each changed file's {key}.
+class GitHub:
+    """Everything MergeAtlas knows of GitHub: it reads pull requests and stacks through the signed-in GitHub CLI, and says
+    how GitHub spells its links. Another host is another class with these methods."""
+
+    name = "github"
+    label = "GitHub"
+    LINK = re.compile(r"(?:https?://)?(?:www\.)?github\.com/([\w.-]+/[\w.-]+)/(pull|stack)/(\d+)(?:[/?#].*)?")
+    PR_URL = re.compile(r"https://([^/]+)/([^/]+)/([^/]+)/pull/(\d+)")
+
+    def parse_target(self, text):
+        text = text.strip()
+        bare = re.fullmatch(r"#?(\d+)", text)
+        if bare:
+            return ("pr", None, int(bare[1]))
+        link = self.LINK.fullmatch(text)
+        if not link:
+            raise ValueError(f"not a GitHub pull request or stack link: {text!r}")
+        return ("pr" if link[2] == "pull" else "stack", link[1], int(link[3]))
 
     def _api(self, path):
         try:
@@ -308,6 +319,28 @@ class GhGitHub:
 
     def current_repo(self):
         return gh("repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").strip()
+
+    def current_pr(self):
+        """The number of the current branch's PR, None when it has none."""
+        try:
+            return int(gh("pr", "view", "--json", "number", "--jq", ".number"))
+        except subprocess.CalledProcessError:
+            return None
+
+    def pr_record(self, repo, number):
+        """A PR as pr.json keeps it, less its stack, files and line counts, which come from the clone: its title, text, branch
+        names, head and base commits, and the issues it closes."""
+        fields = "number,title,body,headRefName,headRefOid,baseRefName,baseRefOid,url,closingIssuesReferences"
+        pr = json.loads(gh("pr", "view", str(number), "--repo", repo, "--json", fields))
+        pr["issues"] = [
+            json.loads(gh("issue", "view", str(i["number"]), "--repo", repo, "--json", "number,title,body,url"))
+            for i in pr.pop("closingIssuesReferences")
+        ]
+        return pr
+
+    def fetch_ref(self, number):
+        """What to fetch from origin to get a PR's head commit."""
+        return f"pull/{number}/head"
 
     def pull(self, repo, number):
         return pull_record(self._api(f"repos/{repo}/pulls/{number}"))
@@ -328,6 +361,50 @@ class GhGitHub:
     def files(self, repo, number):
         return [f["filename"] for f in self._api(f"repos/{repo}/pulls/{number}/files?per_page=100")]
 
+    def repo_of(self, url):
+        """The owner/name a PR link is in, "" when it is not one."""
+        link = self.PR_URL.fullmatch(url)
+        return f"{link[2]}/{link[3]}" if link else ""
+
+    def stack_url(self, repo, number):
+        return f"https://github.com/{repo}/stack/{number}"
+
+    def status(self, url):
+        """Where a PR stands now as {"head", "state"}, state being open, closed or merged; {} when it cannot be told in 15 seconds."""
+        link = self.PR_URL.fullmatch(url)
+        if not link:
+            return {}
+        host, owner, repo, number = link.groups()
+        try:
+            asked = subprocess.run(
+                ["gh", "api", *(["--hostname", host] if host != "github.com" else []), f"repos/{owner}/{repo}/pulls/{number}",
+                 "--jq", "{head: .head.sha, state: (if .merged then \"merged\" else .state end)}"],
+                capture_output=True, text=True, timeout=15)
+            return json.loads(asked.stdout) if asked.returncode == 0 else {}
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return {}
+
+    def diff_key(self, path):
+        """What GitHub calls a changed file in a PR's diff page, which is the hash of its path."""
+        return hashlib.sha256(path.encode()).hexdigest()
+
+    def links(self, url, paths=()):
+        """The templates the viewer opens this host's pages with, for a PR and the files it changes."""
+        repo = url.split("/pull/")[0]
+        return {
+            "host": self.label, "pr": url, "ref": "#{n}",
+            "diff": f"{url}/files#diff-{{key}}", "diff_line": "{side}{first}", "diff_range": "{side}{first}-{side}{last}",
+            "blob": f"{repo}/blob/{{sha}}/{{path}}", "blob_line": "#L{first}", "blob_range": "#L{first}-L{last}",
+            "commit": f"{repo}/commit/{{sha}}", "tree": f"{repo}/tree/{{ref}}", "pr_number": f"{repo}/pull/{{n}}",
+            "keys": {path: self.diff_key(path) for path in paths},
+        }
+
+
+def forge_for(link=None):
+    """The forge a PR or stack link belongs to; with no link, the one this clone's origin remote is on. GitHub is the only
+    one so far."""
+    return GitHub()
+
 
 def stack_context(plan, number):
     """The stack around one mapped PR: the whole stack, where the PR sits in it, and its neighbours."""
@@ -338,26 +415,27 @@ def stack_context(plan, number):
     return {**stack, "position": at + 1, "below": prs[at - 1] if at else None, "above": prs[at + 1] if at + 1 < len(prs) else None}
 
 
-def map_id_of(repo, number):
-    return f"{repo.replace('/', '-')}-{number}"
+def map_id_of(forge, repo, number):
+    """A map is named by its forge, repository and PR, so two hosts never share an id."""
+    return f"{forge.name}-{repo.replace('/', '-')}-{number}"
 
 
-def stack_id(repo, stack):
+def stack_id(forge, repo, stack):
     """A native stack is named by its number, a stack of branches by its bottom and top PRs."""
     name = stack["number"] if stack["number"] else f"{stack['prs'][0]}-{stack['prs'][-1]}"
-    return f"{repo.replace('/', '-')}-stack-{name}"
+    return f"{forge.name}-{repo.replace('/', '-')}-stack-{name}"
 
 
-def stack_record(plan, github):
+def stack_record(plan, forge):
     """Everything the maps of one stack share: its PRs bottom to top, each with its map id and changed files."""
     stack, repo = plan["stack"], plan["repo"]
     prs = []
     for number in stack["prs"]:
-        p = github.pull(repo, number)
+        p = forge.pull(repo, number)
         prs.append({"number": number, "title": p["title"], "url": p["url"], "state": p["state"],
-                    "map_id": map_id_of(repo, number), "files": github.files(repo, number)})
-    return {"id": stack_id(repo, stack), "repo": repo, "number": stack["number"], "base": stack["base"],
-            "source": stack["source"], "url": f"https://github.com/{repo}/stack/{stack['number']}" if stack["number"] else None,
+                    "map_id": map_id_of(forge, repo, number), "files": forge.files(repo, number)})
+    return {"id": stack_id(forge, repo, stack), "repo": repo, "number": stack["number"], "base": stack["base"],
+            "source": stack["source"], "url": forge.stack_url(repo, stack["number"]) if stack["number"] else None,
             "prs": prs}
 
 
@@ -450,8 +528,9 @@ def stack_problems(data, record):
 
 def stack_page(data, record, maps):
     """The published stack page: the story once, then each PR with the intents its published map found."""
+    first = record["prs"][0]["url"]
     return {
-        "kind": "stack",
+        "kind": "stack", "links": forge_for(first).links(first),
         "stack": {k: record[k] for k in ("id", "repo", "number", "base", "url")},
         **{k: data[k] for k in ("background", "problem", "solution")},
         "prs": [{"number": p["number"], "title": p["title"], "url": p["url"], "state": p["state"], "map_id": p["map_id"],
@@ -463,23 +542,24 @@ def stack_page(data, record, maps):
 
 def fetch(args):
     fresh = "--fresh" in args
-    targets, whole_stack = parse_fetch_args([a for a in args if a != "--fresh"])
-    github = GhGitHub()
+    given = [a for a in args if a != "--fresh"]
+    forge = forge_for(next((a for a in given if a != "--stack"), None))
+    targets, whole_stack = parse_fetch_args(given)
     if not targets:
-        try:
-            targets = [("pr", None, int(gh("pr", "view", "--json", "number", "--jq", ".number")))]
-        except subprocess.CalledProcessError:
+        current = forge.current_pr()
+        if current is None:
             sys.exit("No pull request for the current branch: give a PR or stack link.")
+        targets = [("pr", None, current)]
     try:
-        plan = resolve(targets, github, whole_stack=whole_stack)
+        plan = resolve(targets, forge, whole_stack=whole_stack)
     except (ValueError, LookupError) as problem:
         sys.exit(str(problem))
-    here = github.current_repo()
+    here = forge.current_repo()
     if here.lower() != plan["repo"].lower():
         sys.exit(f"Run fetch from inside a clone of {plan['repo']}; this is {here}.")
     stack, record = plan["stack"], None
     if stack:
-        record = stack_record(plan, github)
+        record = stack_record(plan, forge)
         WORK.mkdir(parents=True, exist_ok=True)
         (WORK / f"{record['id']}.stack.json").write_text(json.dumps(record, indent=2))
         name = f"stack #{stack['number']}" if stack["number"] else "a stack of branches"
@@ -491,7 +571,7 @@ def fetch(args):
     for number in plan["map"]:
         print()
         context = stack_context(plan, number)
-        fetch_pr(plan["repo"], number, context and {**context, "id": record["id"]}, fresh)
+        fetch_pr(forge, plan["repo"], number, context and {**context, "id": record["id"]}, fresh)
     if record:
         refresh_stack(record)
 
@@ -511,28 +591,29 @@ def is_ancestor(older, newer):
 
 
 def local_diff(built, head):
-    """The PR's own changes from the commit it was built on, with their file list, when GitHub's diff would also show a
-    squash-merged parent's changes."""
+    """The PR's own changes from the commit it was built on, as a diff of its text files and the list of every file it
+    changes with its added and removed lines. Both come from the clone, so no host has to produce them; a binary file
+    counts no lines, and a renamed file is listed at its new path."""
     diff = subprocess.run(["git", "diff", "-M", built, head], capture_output=True, text=True, check=True).stdout
+    counted = subprocess.run(["git", "diff", "--numstat", "-z", "-M", built, head], capture_output=True, text=True,
+                             check=True).stdout.split("\0")
     files = []
-    for line in subprocess.run(["git", "diff", "--numstat", "-M", built, head], capture_output=True, text=True,
-                               check=True).stdout.splitlines():
-        added, deleted, path = line.split("\t", 2)
+    while counted and counted[0]:
+        added, deleted, path = counted.pop(0).split("\t", 2)
+        if not path:
+            # a rename gives its old path and then its new one, as separate entries
+            path = counted.pop(1)
+            counted.pop(0)
         files.append({"path": path, "additions": int(added) if added != "-" else 0,
                       "deletions": int(deleted) if deleted != "-" else 0})
     return text_only(diff), files
 
 
-def fetch_pr(repo, number, stack, fresh=False):
-    fields = "number,title,body,additions,deletions,files,headRefName,headRefOid,baseRefName,baseRefOid,url,closingIssuesReferences"
-    pr = json.loads(gh("pr", "view", str(number), "--repo", repo, "--json", fields))
+def fetch_pr(forge, repo, number, stack, fresh=False):
+    pr = forge.pr_record(repo, number)
     pr["stack"] = stack
-    map_id = map_id_of(repo, pr["number"])
-    pr["issues"] = [
-        json.loads(gh("issue", "view", str(i["number"]), "--repo", repo, "--json", "number,title,body,url"))
-        for i in pr.pop("closingIssuesReferences")
-    ]
-    subprocess.run(["git", "fetch", "origin", f"pull/{pr['number']}/head"], check=True, capture_output=True)
+    map_id = map_id_of(forge, repo, pr["number"])
+    subprocess.run(["git", "fetch", "origin", forge.fetch_ref(pr["number"])], check=True, capture_output=True)
     head, base = pr["headRefOid"], pr.pop("baseRefOid")
     ensure_commit(base)
     merge_base = subprocess.run(["git", "merge-base", head, base], capture_output=True, text=True).stdout.strip() or base
@@ -541,11 +622,8 @@ def fetch_pr(repo, number, stack, fresh=False):
     for sha in (old.get("pinned"), old.get("headRefOid")):
         ensure_commit(sha)
     built = built_on(merge_base, old.get("pinned"), head, is_ancestor)
-    if built == merge_base:
-        diff = text_only(gh("pr", "diff", str(pr["number"]), "--repo", repo))
-    else:
-        diff, pr["files"] = local_diff(built, head)
-        pr["additions"], pr["deletions"] = sum(f["additions"] for f in pr["files"]), sum(f["deletions"] for f in pr["files"])
+    diff, pr["files"] = local_diff(built, head)
+    pr["additions"], pr["deletions"] = sum(f["additions"] for f in pr["files"]), sum(f["deletions"] for f in pr["files"])
     status, plan = refresh_work(map_id, pr, diff, built, fresh)
     sent = {"back": plan["back"], "total": plan["total"]} if status == "partial" else {}
     note(map_id, "fetch", status=status, files=len(pr["files"]), additions=pr["additions"], deletions=pr["deletions"],
@@ -699,7 +777,7 @@ def source_at(commit):
 def reader_of(pr):
     """Returns a reader for the lines a map's links cite: a pull request's own files at its head, every other file at the commit the map was built on."""
     changed = {f["path"] for f in pr["files"]}
-    head_read, pinned_read = source_at(pr["headRefOid"]), source_at(pr.get("pinned") or pr["headRefOid"])
+    head_read, pinned_read = source_at(pr["headRefOid"]), source_at(pr["pinned"])
     return lambda path: head_read(path) if path in changed else pinned_read(path)
 
 
@@ -955,31 +1033,15 @@ def mark_update(map_id, old, plan):
     (WORK / f"{map_id}.seen.json").write_text(json.dumps(seen, indent=2))
 
 
-def keep_read_marks(map_id):
-    """Counts a map finished before it had read marks as read, at its words as they stand."""
-    if is_draft(map_id):
-        return
-    data = json.loads((WORK / f"{map_id}.input.json").read_text())
-    if not (WORK / f"{map_id}.read.json").exists():
-        (WORK / f"{map_id}.read.json").write_text(json.dumps(hashes_of(data), indent=2))
-    if not (WORK / f"{map_id}.checked.json").exists():
-        write_checked(map_id, data)
-
-
-def outdated(data):
-    """Tells whether a map is in a format from before cards held changes, which cannot be reused card by card."""
-    return any("changes" not in card for card in data.get("cards", []))
-
-
 def refresh_work(map_id, pr, diff, built, fresh=False):
     """Brings the work directory up to a fetched PR. A PR mapped before keeps its map when it can: the same head commit
     changes nothing; the same changes on a new commit get their links shifted and are published again by the script;
     otherwise the links are shifted where they still hold and the plan says which cards the agent writes again. A map
-    asked to start over, or in a format too old to reuse, is set aside and the PR mapped as if for the first time."""
+    asked to start over is set aside and the PR mapped as if for the first time."""
     work = {k: WORK / f"{map_id}.{k}" for k in ("pr.json", "input.json", "diff", "searches.json", "cochange.json", "delta.diff")}
     WORK.mkdir(parents=True, exist_ok=True)
     known = all(work[k].exists() for k in ("pr.json", "input.json", "diff")) and (DATA / f"{map_id}.json").exists()
-    if known and (fresh or outdated(json.loads(work["input.json"].read_text()))):
+    if known and fresh:
         for k in ("input.json", "read.json", "checked.json", "seen.json", "update.json", "delta.diff"):
             (WORK / f"{map_id}.{k}").unlink(missing_ok=True)
         known = False
@@ -994,18 +1056,12 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
         return "new", None
     if old["headRefOid"] == pr["headRefOid"]:
         old["stack"] = pr["stack"]
-        # a map from before links were pinned takes the commit it was built on once, which the same head leaves unchanged
-        unpinned = "pinned" not in old
-        old.setdefault("pinned", built)
-        old.setdefault("baseRefName", pr.get("baseRefName"))
         work["pr.json"].write_text(json.dumps(old))
-        if unpinned:
-            publish(map_id, asked=False)
         return "same-head", None
     old_rows, new_rows = diff_rows(work["diff"].read_text()), diff_rows(diff)
     old_paths = [f["path"] for f in old["files"]]
     same = patch_id(old_rows) == patch_id(new_rows) and sorted(old_paths) == sorted(paths)
-    old_pinned = old.get("pinned") or old["headRefOid"]
+    old_pinned = old["pinned"]
     pr["pinned"] = old_pinned if same else built
     old_head, old_pin = source_at(old["headRefOid"]), source_at(old_pinned)
     new_head, new_pin = source_at(pr["headRefOid"]), source_at(pr["pinned"])
@@ -1031,7 +1087,6 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
         except SystemExit as rejected:
             plan = {**plan, "redo": [], "keep": [c["id"] for c in data["cards"]], "added": [], "gone": [], "fix": [],
                     "recheck": [], "back": 0, "problems": str(rejected)}
-            keep_read_marks(map_id)
             mark_update(map_id, old, plan)
             return "partial", plan
     text, kind = delta_of(old, pr, old_rows, new_rows, old_pinned, built)
@@ -1046,7 +1101,6 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
             plan["searches"].append({"term": entry["term"], "mode": entry["mode"], "now": now, "gone": gone})
     work["searches.json"].write_text(json.dumps(log, indent=2))
     work["cochange.json"].write_text(json.dumps(co_changes(set(paths), pr["headRefOid"]), indent=2))
-    keep_read_marks(map_id)
     mark_update(map_id, old, plan)
     return "partial", plan
 
@@ -1374,18 +1428,18 @@ def library():
     for path in DATA.glob("*.json"):
         data = published(path.stem)
         pr, stack = data.get("pr"), data.get("stack")
+        # a map published before maps carried their host's links cannot be drawn, so one left in the cache is not listed
+        if "links" not in ((pr or {}) if data.get("kind") != "stack" else data):
+            continue
         if data.get("kind") == "stack" and stack:
-            found.append({"id": path.stem, "kind": "stack", "repo": stack["repo"], "number": stack.get("number"),
+            found.append({"id": path.stem, "kind": "stack", "repo": stack["repo"], "host": data["links"]["host"], "number": stack.get("number"),
                           "url": stack.get("url"), "prs": len(data.get("prs", [])), "at": int(path.stat().st_mtime)})
         elif pr:
-            link = PR_URL.fullmatch(pr["url"])
             strip = pr.get("stack") or {}
             found.append({
-                "id": path.stem, "kind": "map", "repo": f"{link[2]}/{link[3]}" if link else "", "number": pr["number"],
-                "title": pr["title"], "url": pr["url"], "files": pr["files"], "additions": pr["additions"],
-                "deletions": pr["deletions"], "draft": bool(pr.get("draft")),
-                # a map from before maps said when they were made takes the time its file was written
-                "at": (pr.get("mapped") or {}).get("at") or int(path.stat().st_mtime),
+                "id": path.stem, "kind": "map", "repo": forge_for(pr["url"]).repo_of(pr["url"]), "host": pr["links"]["host"],
+                "number": pr["number"], "title": pr["title"], "url": pr["url"], "files": pr["files"], "additions": pr["additions"],
+                "deletions": pr["deletions"], "draft": bool(pr.get("draft")), "at": pr["mapped"]["at"],
                 "stack": {"id": strip["id"], "number": strip.get("number"), "of": len(strip["prs"]),
                           "part": next((i for i, p in enumerate(strip["prs"], 1) if p.get("current")), None)} if strip else None,
             })
@@ -1396,24 +1450,16 @@ pr_now_known = {}
 
 
 def pr_now(map_id):
-    """Where a mapped PR stands on GitHub now, beside the commit its map was made at, so the viewer can say when the PR
-    has moved on. It asks through gh as fetch does, once a minute per map at most, and answers {} when it cannot tell."""
+    """Where a mapped PR stands on its host now, beside the commit its map was made at, so the viewer can say when the PR
+    has moved on. It asks the host's CLI as fetch does, once a minute per map at most, and answers {} when it cannot tell."""
     pr = published(map_id).get("pr", {}) if MAP_ID.fullmatch(map_id) else {}
-    link, mapped = PR_URL.fullmatch(pr.get("url", "")), (pr.get("mapped") or {}).get("head")
-    if not (link and mapped):
+    url, mapped = pr.get("url", ""), (pr.get("mapped") or {}).get("head")
+    if not (url and mapped):
         return {}
     at, now, head = pr_now_known.get(map_id, (0, {}, None))
     # a map made again describes a later commit, so what was heard for the earlier one no longer answers
     if time.time() - at > PR_NOW_SECONDS or head != mapped:
-        host, owner, repo, number = link.groups()
-        try:
-            asked = subprocess.run(
-                ["gh", "api", *(["--hostname", host] if host != "github.com" else []), f"repos/{owner}/{repo}/pulls/{number}",
-                 "--jq", "{head: .head.sha, state: (if .merged then \"merged\" else .state end)}"],
-                capture_output=True, text=True, timeout=15)
-            now = json.loads(asked.stdout) if asked.returncode == 0 else {}
-        except (OSError, ValueError, subprocess.SubprocessError):
-            now = {}
+        now = forge_for(url).status(url)
         pr_now_known[map_id] = (time.time(), now, mapped)
     return {"mapped": mapped, **now} if now.get("head") else {}
 
@@ -1755,23 +1801,9 @@ def listening():
         return s.connect_ex(("127.0.0.1", PORT)) == 0
 
 
-def unversioned_server():
-    """The process id of a viewer server from before servers named their release, None when it cannot be told. Such a
-    server hands out the whole cache, so serve replaces it. Only a process running this script's serve command counts.
-    It asks lsof and ps, so on Windows, where no such server ran, it finds none."""
-    try:
-        pids = subprocess.run(["lsof", "-ti", f"tcp:{PORT}", "-sTCP:LISTEN"], capture_output=True, text=True).stdout.split()
-        for pid in pids:
-            command = subprocess.run(["ps", "-p", pid, "-o", "command="], capture_output=True, text=True).stdout
-            if "mergeatlas.py" in command and command.split()[-1:] == ["serve"]:
-                return pid
-    except OSError:
-        pass
-    return None
-
-
 def serve():
-    """Starts the viewer server unless this release's is running, and replaces one left running by another release."""
+    """Starts the viewer server unless this release's is running, and replaces one left running by another release. A
+    server that names no process to stop cannot be replaced, so it is reported."""
     if listening():
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/index.html", timeout=3) as res:
@@ -1782,7 +1814,6 @@ def serve():
             sys.exit(f"Port {PORT} is in use by something other than the MergeAtlas viewer.")
         if version == VERSION:
             return
-        pid = pid if version else unversioned_server()
         if not (pid and pid.isdigit()):
             print(f"An older MergeAtlas viewer server is running on port {PORT} and could not be replaced. "
                   f"Stop it, then publish again.", file=sys.stderr)
@@ -1812,7 +1843,7 @@ def publish(map_id, asked=True):
     data = json.loads((WORK / f"{map_id}.input.json").read_text())
     stats = {f["path"]: (f["additions"], f["deletions"]) for f in pr["files"]}
     # the PR's own files are read at its head; every other file at the commit the map was built on
-    pinned = pr.get("pinned") or pr["headRefOid"]
+    pinned = pr["pinned"]
     read = reader_of(pr)
     rows = diff_rows((WORK / f"{map_id}.diff").read_text())
     searches = json.loads((WORK / f"{map_id}.searches.json").read_text())
@@ -1844,11 +1875,10 @@ def publish(map_id, asked=True):
             "number": pr["number"], "title": pr["title"], "files": len(stats),
             "additions": pr["additions"], "deletions": pr["deletions"],
             "url": pr["url"],
-            "blob": f"{pr['url'].split('/pull/')[0]}/blob/{pinned}/",
+            "links": forge_for(pr["url"]).links(pr["url"], stats),
             "pinned": {"commit": pinned, "base": pr.get("baseRefName"), "below": (pr.get("stack") or {}).get("below")},
             "mapped": {"at": int(time.time()), "head": pr["headRefOid"]},
             "draft": asked or is_draft(map_id),
-            "diffs": {p: hashlib.sha256(p.encode()).hexdigest() for p in stats},
             "issues": [
                 *({"label": f"#{i['number']}", "title": i["title"], "url": i["url"]} for i in pr["issues"]),
                 *({"label": t["key"], "title": t["title"], "url": t["url"]} for t in data.get("tickets", [])),

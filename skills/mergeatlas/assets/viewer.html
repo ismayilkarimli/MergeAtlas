@@ -533,7 +533,7 @@ const EDGE_KIND = {
   reach:    { color: 'var(--muted)',   label: 'Also reaches' },
 };
 
-let CARDS = [], EDGES = [], META = {}, VIEWS = {};
+let CARDS = [], EDGES = [], META = {}, LINKS = {}, VIEWS = {};
 const intentsOf = {};
 
 /* ---------- state ---------- */
@@ -541,17 +541,26 @@ const intentsOf = {};
 const ENTITY = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' };
 const esc = t => String(t).replace(/[&<>"']/g, c => ENTITY[c]);
 const unesc = t => t.replace(/&(amp|lt|gt|quot|apos);/g, e => Object.keys(ENTITY).find(c => ENTITY[c] === e));
+/* Every address the page opens on the host comes from the templates in the map's `links`, so the host is named in one
+   place. A template's {words} are filled in from what the caller knows. */
+const fill = (template, values) => template.replace(/\{(\w+)\}/g, (_, name) => values[name]);
+// a file in the PR's diff when the PR changes it, else the file at the commit the map was built on; a line or a range follows
+const hostUrl = (path, first, last, side) => {
+  const key = LINKS.keys[path], kind = key ? 'diff' : 'blob';
+  const values = { key, side, path, sha: META.pinned.commit, first, last };
+  return fill(LINKS[kind], values) + (first ? fill(LINKS[`${kind}_${last ? 'range' : 'line'}`], values) : '');
+};
 const codeUrl = at => {
-  const [path, lines = ''] = at.split('#'), diff = META.diffs[path];
-  return diff ? `${META.url}/files#diff-${diff}${lines.replace(/L/g, 'R')}` : META.blob + at;
+  const [path, lines = ''] = at.split('#'), [, first, last] = lines.match(/^L(\d+)(?:-L(\d+))?$/) ?? [];
+  return hostUrl(path, first, last, 'R');
 };
 const keyLine = ({ gap, text, path, line, key }) => {
   if (gap) return '<span class="keygap">⋯</span>';
   const mark = { '+': ' a', '-': ' d' }[text[0]] ?? '';
   // the underline starts at the code, after the diff mark and indentation
   const [lead] = text.match(/^[+\- ]?\s*/), code = text.slice(lead.length);
-  // a line in a file outside the PR opens at the head commit
-  const href = META.diffs[path] ? `${META.url}/files#diff-${META.diffs[path]}${line}` : `${META.blob}${path}#L${line.slice(1)}`;
+  // a line in a file outside the PR opens at the commit the map was built on
+  const href = hostUrl(path, line.slice(1), null, line[0]);
   return `<a class="keyline${mark}${key ? '' : ' around'}" href="${esc(href)}" target="_blank" rel="noopener"><span class="lineno">${line.slice(1)}</span>${esc(lead)}<span class="src">${esc(code)}</span></a>`;
 };
 const codeLink = (at, text) => `<a class="codelink" href="${esc(codeUrl(at))}" target="_blank" rel="noopener">${text}</a>`;
@@ -563,13 +572,14 @@ const fmt = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([
 let STUBS = {}, CARRIED = false, STACK_PAGE = null;
 const mapHref = (id, card) => `?map=${encodeURIComponent(id)}${card ? `&card=${encodeURIComponent(card)}` : ''}`;
 const stackPr = n => META.stack?.prs.find(p => p.number === n);
-// a shared file has no server to open other maps from, so it sends the reader to GitHub instead
+const prRef = n => fill(LINKS.ref, { n });
+// a shared file has no server to open other maps from, so it sends the reader to the host instead
 const prHref = (p, card) => !CARRIED && p?.published ? mapHref(p.map_id, card) : p?.url ?? '#';
 function fromBadge(path) {
   const s = STUBS[path]; if (!s) return '';
-  const p = stackPr(s.pr) ?? { url: META.url, published: false };
-  const where = !CARRIED && p.published ? `Open PR #${s.pr}'s map${s.card_id ? ' at this file' : ''}` : `PR #${s.pr} on GitHub`;
-  return `<a class="from-pr" href="${esc(prHref(p, s.card_id))}" title="${esc(`${path} was changed in #${s.pr} below: ${s.title}. ${where}.`)}">from #${s.pr}</a>`;
+  const p = stackPr(s.pr) ?? { url: LINKS.pr, published: false };
+  const where = !CARRIED && p.published ? `Open PR #${s.pr}'s map${s.card_id ? ' at this file' : ''}` : `PR #${s.pr} on ${LINKS.host}`;
+  return `<a class="from-pr" href="${esc(prHref(p, s.card_id))}" title="${esc(`${path} was changed in ${prRef(s.pr)} below: ${s.title}. ${where}.`)}">from ${esc(prRef(s.pr))}</a>`;
 }
 // code outside the PR is linked at the commit the map was built on, so a rebase leaves those links where they were
 const UNITS = [['minute', 60], ['hour', 24], ['day', 30]];
@@ -582,12 +592,12 @@ function ago(at) {
 }
 // the commit the map describes, then the commit its links to files outside the PR open at
 function pinnedHtml() {
-  const p = META.pinned, m = META.mapped, repo = META.url.replace(/\/pull\/\d+.*$/, ''), parts = [];
-  const commit = sha => `<a class="sha" href="${esc(`${repo}/commit/${sha}`)}" target="_blank" rel="noopener">${esc(sha.slice(0, 7))}</a>`;
+  const p = META.pinned, m = META.mapped, parts = [];
+  const commit = sha => `<a class="sha" href="${esc(fill(LINKS.commit, { sha }))}" target="_blank" rel="noopener">${esc(sha.slice(0, 7))}</a>`;
   const link = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(text)}</a>`;
   if (m?.at) parts.push(`<span title="${esc(`This map describes the pull request as it stood at this commit, on ${new Date(m.at * 1000).toLocaleString()}`)}">Mapped ${esc(ago(m.at))} at ${commit(m.head)}</span>`);
   if (p?.commit) {
-    const base = p.below ? link(stackPr(p.below)?.url ?? `${repo}/pull/${p.below}`, `#${p.below}`) : p.base ? link(`${repo}/tree/${encodeURI(p.base)}`, p.base) : '';
+    const base = p.below ? link(stackPr(p.below)?.url ?? fill(LINKS.pr_number, { n: p.below }), prRef(p.below)) : p.base ? link(fill(LINKS.tree, { ref: encodeURI(p.base) }), p.base) : '';
     parts.push(`<span title="Links to files this PR doesn't change open at this commit">Base: ${base ? `${base} @ ` : ''}${commit(p.commit)}</span>`);
   }
   return parts.join(' · ');
@@ -595,7 +605,7 @@ function pinnedHtml() {
 /* ---------- the map's own standing ---------- */
 /* A map is published as a draft and stays one until its cards have been checked for gaps, so a reviewer can start
    reading while that runs. The page fetches the map again while it is a draft and takes in what changed. The server
-   also says where the pull request stands on GitHub now, so a map made at an older commit says so. */
+   also says where the pull request stands on its host now, so a map made at an older commit says so. */
 let NOW = null, PENDING = null, LIBRARY = false, stalledShown = false;
 const UPDATED = new Set();
 const POLL_MS = 4000, DRAFT_STALLED_MS = 60 * 60 * 1000;
@@ -697,7 +707,7 @@ function stackStripHtml() {
     ? `<span class="chip current" aria-current="page" title="${esc(`#${p.number} ${p.title} (this map)`)}">${p.number}</span>`
     : `<a class="chip${p.published ? '' : ' unmapped'}" href="${esc(prHref(p))}"${!CARRIED && p.published ? '' : ' target="_blank" rel="noopener"'} title="${esc(`#${p.number} ${p.title}${p.published ? '' : ' (no map yet)'}`)}">${p.number}</a>`;
   const overview = st.page && !CARRIED ? `<a class="overview" href="${esc(mapHref(st.id))}">Stack overview →</a>`
-    : st.url ? `<a class="overview" href="${esc(st.url)}" target="_blank" rel="noopener">Stack on GitHub →</a>` : '';
+    : st.url ? `<a class="overview" href="${esc(st.url)}" target="_blank" rel="noopener">Stack on ${esc(LINKS.host)} →</a>` : '';
   // the arrows step to the nearest map below or above, past PRs that have none yet
   const here = at - 1, mapped = p => p.published && !CARRIED;
   const below = st.prs.slice(0, here).reverse().find(mapped), above = st.prs.slice(here + 1).find(mapped);
@@ -707,7 +717,7 @@ function stackStripHtml() {
   // five slots with this PR always in the middle one; slots past either end of the stack stay empty
   const side = (STRIP_SHOWN - 1) / 2;
   const shown = Array.from({ length: STRIP_SHOWN }, (_, i) => st.prs[here - side + i] ?? null);
-  const title = st.url ? `<a class="stacklink" href="${esc(st.url)}" target="_blank" rel="noopener" title="Open the stack on GitHub">${name}</a>` : name;
+  const title = st.url ? `<a class="stacklink" href="${esc(st.url)}" target="_blank" rel="noopener" title="${esc(`Open the stack on ${LINKS.host}`)}">${name}</a>` : name;
   return `<div>${title} · part ${at} of ${st.prs.length}</div>
     <div class="row">${step(below, 'PR below', 'M10 3 5 8l5 5', 'ArrowLeft')}<div class="chips" style="--n:${STRIP_SHOWN}">${shown.map(p => p ? chip(p) : '<span class="chip empty" aria-hidden="true"></span>').join('')}</div>${step(above, 'PR above', 'm6 3 5 5-5 5', 'ArrowRight')}</div>
     ${overview ? `<div class="foot">${overview}</div>` : ''}`;
@@ -724,16 +734,16 @@ function renderStackPage(page) {
       <div class="top"><span class="num">#${p.number}</span><h3>${esc(p.title)}</h3><span class="state">${esc(p.state)}</span></div>
       ${p.intents.length ? `<ul>${p.intents.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
       <div class="links">${!CARRIED && p.published ? `<a href="${esc(mapHref(p.map_id))}">Open map →</a>` : `<span class="state">${p.published ? 'Mapped' : 'No map yet'}</span>`}
-        <a href="${esc(p.url)}" target="_blank" rel="noopener">${p.files} ${p.files === 1 ? 'file' : 'files'} on GitHub</a></div></li>`;
+        <a href="${esc(p.url)}" target="_blank" rel="noopener">${p.files} ${p.files === 1 ? 'file' : 'files'} on ${esc(LINKS.host)}</a></div></li>`;
   const name = st.number ? `Stack #${st.number}` : `Stack of ${page.prs.length} PRs`;
-  STACK_PAGE = page;
+  STACK_PAGE = page; LINKS = page.links;
   document.title = `${name} · MergeAtlas`;
   document.body.classList.add('stack-page');
   $('#stackpage')?.remove();
   const back = !CARRIED && page.prs.some(p => p.published)
     ? `<button class="back" id="stackback" aria-label="Back to the map" title="Back to the map (Esc)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8H3m4-4L3 8l4 4"/></svg></button>` : '';
   document.body.insertAdjacentHTML('beforeend', `<main id="stackpage">${back}<div class="inner">
-    <h1>${st.url ? `<a href="${esc(st.url)}" target="_blank" rel="noopener" title="Open the stack on GitHub">${esc(name)}<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3h7v7M13 3 4 12"/></svg></a>` : esc(name)}</h1>
+    <h1>${st.url ? `<a href="${esc(st.url)}" target="_blank" rel="noopener" title="${esc(`Open the stack on ${LINKS.host}`)}">${esc(name)}<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3h7v7M13 3 4 12"/></svg></a>` : esc(name)}</h1>
     <div class="meta">${esc(st.repo)} · ${page.prs.length} PRs on ${esc(st.base)}</div>
     ${beat('Background', page.background)}${beat('Problem', page.problem)}${beat('Solution', page.solution)}
     <h2 class="beat">The PRs</h2>
@@ -770,11 +780,11 @@ function renderLibrary(maps) {
       `mapped ${esc(ago(m.at))}`, st?.part ? `part ${st.part} of ${st.of} in ${st.number ? `stack #${st.number}` : 'a stack'}` : '', pct === null ? '' : `${esc(pct)}% reviewed`];
     return `<li class="pr"><div class="top"><span class="num">#${m.number}</span><h3><a href="${esc(mapHref(m.id))}">${esc(m.title)}</a></h3>${m.draft ? '<span class="state draft">Draft</span>' : ''}</div>
       <div class="facts">${facts.filter(Boolean).join(' \u00b7 ')}</div>
-      <div class="links"><a href="${esc(mapHref(m.id))}">Open map \u2192</a><a href="${esc(m.url)}" target="_blank" rel="noopener">Pull request on GitHub</a></div></li>`;
+      <div class="links"><a href="${esc(mapHref(m.id))}">Open map \u2192</a><a href="${esc(m.url)}" target="_blank" rel="noopener">Pull request on ${esc(m.host)}</a></div></li>`;
   };
   const stackHtml = m => `<li class="pr"><div class="top"><span class="num">Stack</span><h3><a href="${esc(mapHref(m.id))}">${m.number ? `Stack #${m.number}` : `Stack of ${m.prs} PRs`}</a></h3></div>
       <div class="facts">The story of ${m.prs} pull requests as one change \u00b7 written ${esc(ago(m.at))}</div>
-      <div class="links"><a href="${esc(mapHref(m.id))}">Open stack overview \u2192</a>${m.url ? `<a href="${esc(m.url)}" target="_blank" rel="noopener">Stack on GitHub</a>` : ''}</div></li>`;
+      <div class="links"><a href="${esc(mapHref(m.id))}">Open stack overview \u2192</a>${m.url ? `<a href="${esc(m.url)}" target="_blank" rel="noopener">Stack on ${esc(m.host)}</a>` : ''}</div></li>`;
   const repos = [...Map.groupBy(maps, m => m.repo)].map(([repo, list]) =>
     `<h2 class="beat">${esc(repo)}</h2><ol class="maps">${list.map(m => (m.kind === 'stack' ? stackHtml(m) : mapHtml(m))).join('')}</ol>`);
   const pulls = maps.filter(m => m.kind === 'map').length;
@@ -1403,7 +1413,7 @@ world.addEventListener('focusin', ev => {
 const modalBg = $('#modal-bg'), modal = $('#modal'), detail = $('#detail');
 const OVERVIEW = 'overview';
 let listView = false, selected = OVERVIEW, sequence = [], topOrder = [];
-const metaHtml = () => `<a class="codelink" href="${esc(META.url)}" target="_blank" rel="noopener">PR #${META.number}</a> \u00b7 ${META.files} files \u00b7 <span class="lines"><span class="a">+${META.additions}</span> <span class="d">\u2212${META.deletions}</span></span>${progressHtml()}${noticesHtml()}`;
+const metaHtml = () => `<a class="codelink" href="${esc(LINKS.pr)}" target="_blank" rel="noopener">PR #${META.number}</a> \u00b7 ${META.files} files \u00b7 <span class="lines"><span class="a">+${META.additions}</span> <span class="d">\u2212${META.deletions}</span></span>${progressHtml()}${noticesHtml()}`;
 const section = (title, text, level = 3) => text ? `<h${level}>${title}</h${level}><p>${fmt(text)}</p>` : '';
 /* A mark covers one file's changes for one intent and stores the file's fingerprint, so a later push to that file
    shows as changed. A card is reviewed when every mark it covers is set, which keeps both views in step. */
@@ -1614,8 +1624,8 @@ function openReach(n, i) {
       ${other ? `${step < 0 ? '← ' : ''}<span>${esc(fileName(other))}</span>${step > 0 ? ' →' : ''}` : ''}</button>`;
   };
   const pager = last ? `<div class="file-pager">${pageTo(i - 1, -1)}<span class="step-at">File ${i + 1} of ${n.files.length}</span>${pageTo(i + 1, 1)}</div>` : '';
-  const o = f.origin, p = o && (stackPr(o.pr) ?? { url: META.url, published: false }), opens = p && !CARRIED && p.published;
-  const origin = o ? `<div class="links"><a class="button" href="${esc(prHref(p, o.card_id))}"${opens ? '' : ' target="_blank" rel="noopener"'}>${opens ? `Open #${o.pr}'s map${o.card_id ? ' at this file' : ''}` : `#${o.pr} on GitHub`} →</a></div>` : '';
+  const o = f.origin, p = o && (stackPr(o.pr) ?? { url: LINKS.pr, published: false }), opens = p && !CARRIED && p.published;
+  const origin = o ? `<div class="links"><a class="button" href="${esc(prHref(p, o.card_id))}"${opens ? '' : ' target="_blank" rel="noopener"'}>${opens ? `Open #${o.pr}'s map${o.card_id ? ' at this file' : ''}` : `${esc(prRef(o.pr))} on ${esc(LINKS.host)}`} →</a></div>` : '';
   const body = f.from ? `${section('Where it comes from', f.effect)}${origin}<h3>Built on by</h3>`
     : `${section('What changes for it', f.effect)}${o ? `${section('Where it comes from', fromEffect(o))}${origin}` : ''}<h3>Affected by</h3>`;
   present(`${pager}<div class="tag" style="color:var(--muted)">${esc(fileTag(f))}</div>
@@ -2135,7 +2145,7 @@ function renderUnreadable(pr) {
   renderLibrary([]);
   $('#stackpage h1').textContent = 'This map can\u2019t be shown';
   $('#stackpage .meta').textContent = pr?.number ? `#${pr.number} ${pr.title ?? ''}` : '';
-  const links = [CARRIED ? '' : '<a class="prlink" href="./">\u2190 Your maps</a>', /^https:\/\//.test(pr?.url) ? `<a class="prlink" href="${esc(pr.url)}" target="_blank" rel="noopener">Pull request on GitHub</a>` : ''];
+  const links = [CARRIED ? '' : '<a class="prlink" href="./">\u2190 Your maps</a>', pr?.links ? `<a class="prlink" href="${esc(pr.links.pr)}" target="_blank" rel="noopener">Pull request on ${esc(pr.links.host)}</a>` : ''];
   $('#stackpage p').outerHTML = `<p>It may have been written by an older release of MergeAtlas, in a form this viewer no longer reads.</p><p class="links">${links.join('')}</p>`;
   document.title = 'MergeAtlas';
 }
@@ -2155,7 +2165,7 @@ async function draw(id, raw, data) {
     c.holds = c.title;
     if (c.paths.length === 1) c.title = c.paths[0].split('/').pop();
   }
-  META = data.pr; byId = Object.fromEntries(data.cards.map(c => [c.id, c]));
+  META = data.pr; LINKS = META.links; byId = Object.fromEntries(data.cards.map(c => [c.id, c]));
   if (META.update) { const seen = seenCards(); for (const card of META.update.cards) if (!seen.includes(card)) UPDATED.add(card); }
   VIEWS = { files: { cards: data.cards, edges: data.edges } };
   const params = new URLSearchParams(location.search), intents = data.intents ?? [];

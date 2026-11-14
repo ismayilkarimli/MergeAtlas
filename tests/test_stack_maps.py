@@ -4,8 +4,8 @@ Run from the repository root:
     python3 -m unittest discover -s tests
 
 The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
-    stack_id(repo, stack)                       -> the stack page's map id
-    stack_record(plan, github)                  -> {id, repo, number, base, source, url,
+    stack_id(forge, repo, stack)                -> the stack page's map id, which starts with the forge's name
+    stack_record(plan, forge)                   -> {id, repo, number, base, source, url,
                                                     prs: [{number, title, url, state, map_id, files}]}, bottom to top
     stack_labels(record, number)                -> {path: "changed in #N below, #M above"} for files other PRs change
     stack_strip(record, number, published)      -> what a map shows of its stack: {id, number, url, page, prs}
@@ -18,11 +18,11 @@ import unittest
 
 from test_stack_detection import FIXTURE, REPO, FakeGitHub, mergeatlas, pr, stack_link
 
-STACK_ID = "ismayilkarimli-home-loan-calculator-stack-9"
+STACK_ID = "github-ismayilkarimli-home-loan-calculator-stack-9"
 
 
 def map_id(n):
-    return f"ismayilkarimli-home-loan-calculator-{n}"
+    return f"github-ismayilkarimli-home-loan-calculator-{n}"
 
 
 def record(**kw):
@@ -34,11 +34,11 @@ def record(**kw):
 
 class StackRecord(unittest.TestCase):
     def test_native_stack_id_names_the_stack(self):
-        self.assertEqual(mergeatlas.stack_id(REPO, {"number": 9, "prs": [1, 2]}), STACK_ID)
+        self.assertEqual(mergeatlas.stack_id(FakeGitHub(), REPO, {"number": 9, "prs": [1, 2]}), STACK_ID)
 
     def test_branch_stack_id_names_its_ends(self):
-        self.assertEqual(mergeatlas.stack_id(REPO, {"number": None, "prs": [3, 4, 5]}),
-                         "ismayilkarimli-home-loan-calculator-stack-3-5")
+        self.assertEqual(mergeatlas.stack_id(FakeGitHub(), REPO, {"number": None, "prs": [3, 4, 5]}),
+                         "github-ismayilkarimli-home-loan-calculator-stack-3-5")
 
     def test_record_lists_every_pr_bottom_to_top_with_its_files(self):
         r = record()
@@ -57,7 +57,7 @@ class StackRecord(unittest.TestCase):
         r = record(native=False)
         self.assertIsNone(r["number"])
         self.assertIsNone(r["url"])
-        self.assertEqual(r["id"], "ismayilkarimli-home-loan-calculator-stack-1-8")
+        self.assertEqual(r["id"], "github-ismayilkarimli-home-loan-calculator-stack-1-8")
 
     def test_record_keeps_a_merged_pr(self):
         self.assertEqual(record(merged=[1])["prs"][0]["state"], "merged")
@@ -193,6 +193,7 @@ class StackPage(unittest.TestCase):
         page = mergeatlas.stack_page(story(), record(), maps)
         self.assertEqual(page["kind"], "stack")
         self.assertEqual(page["stack"], {"id": STACK_ID, "repo": REPO, "number": 9, "base": "main", "url": stack_link(9)})
+        self.assertEqual(page["links"], mergeatlas.GitHub().links(pr(1)))
         self.assertEqual(page["background"], story()["background"])
         self.assertEqual(page["solution"], story()["solution"])
         six = page["prs"][5]

@@ -42,7 +42,7 @@ class Set(unittest.TestCase):
             self.assertRegex(pull["head"], r"^[0-9a-f]{40}$")
             self.assertGreater(pull["budget_usd"], 0)
             self.assertGreater(pull["timeout_min"], 0)
-        self.assertEqual(run.map_id_of(pulls[0]), "excalidraw-excalidraw-10903")
+        self.assertEqual(run.map_id_of(pulls[0]), "github-excalidraw-excalidraw-10903")
 
     def test_every_questions_file_belongs_to_a_pull_in_the_set(self):
         keys = {p["key"] for p in run.pulls()}
