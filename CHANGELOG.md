@@ -4,10 +4,11 @@ What changed in each release of MergeAtlas, newest first. Versions follow [seman
 
 If you installed the Claude Code plugin, you stay on a release until the next one is published, then `/plugin marketplace update mergeatlas` brings it in. Installs through skills.sh or a clone follow the `main` branch.
 
-## Unreleased
+## 0.5.0 - 2026-11-14
 
 ### Added
 
+- Windows. The script runs itself in Python's UTF-8 mode there, so diffs and PR text in any language read and print as on macOS and Linux, and the viewer server keeps running after the command that started it ends.
 - GitLab merge requests, on gitlab.com or a self-hosted GitLab, are mapped as pull requests are, through the `glab` CLI. A merge request link works for fetch, a stack of merge requests is found from the branches they target, and the viewer says "merge request", writes `!7` and opens diff lines in GitLab's own diff where it can.
 
 ### Changed
