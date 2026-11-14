@@ -33,6 +33,7 @@ import io
 import json
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -279,7 +280,8 @@ class RefreshWork(unittest.TestCase):
         os.chdir(self.cwd)
         for p in self.patches:
             p.stop()
-        shutil.rmtree(self.tmp)
+        # git writes its objects read-only, which Windows will not delete until they are made writable
+        shutil.rmtree(self.tmp, onerror=lambda unlink, path, _: (os.chmod(path, stat.S_IWRITE), unlink(path)))
 
     def commit(self, files, message):
         for path, text in files.items():
