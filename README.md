@@ -56,7 +56,7 @@ It recognises links from Jira, Linear, Trello, Asana, Shortcut, ClickUp and Azur
 You'll need:
 
 - An agent that runs skills, such as Claude Code or Codex
-- Python 3.9 or newer
+- Python 3.9 or newer, on macOS, Linux or Windows
 - `git`
 - The [GitHub CLI](https://cli.github.com), signed in with `gh auth login`
 

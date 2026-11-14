@@ -1757,7 +1757,8 @@ def listening():
 
 def unversioned_server():
     """The process id of a viewer server from before servers named their release, None when it cannot be told. Such a
-    server hands out the whole cache, so serve replaces it. Only a process running this script's serve command counts."""
+    server hands out the whole cache, so serve replaces it. Only a process running this script's serve command counts.
+    It asks lsof and ps, so on Windows, where no such server ran, it finds none."""
     try:
         pids = subprocess.run(["lsof", "-ti", f"tcp:{PORT}", "-sTCP:LISTEN"], capture_output=True, text=True).stdout.split()
         for pid in pids:
@@ -1794,9 +1795,13 @@ def serve():
             if not listening():
                 break
             time.sleep(0.1)
+    # The server outlives this run: on POSIX in a session of its own, on Windows detached from this run's console,
+    # which would otherwise close it along with the console.
+    detached = {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" \
+        else {"start_new_session": True}
     subprocess.Popen(
-        [sys.executable, __file__, "serve"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+        [sys.executable, "-X", "utf8", __file__, "serve"],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **detached,
     )
 
 
@@ -1998,6 +2003,11 @@ def show_config():
 def main():
     if sys.version_info < OLDEST_PYTHON:
         sys.exit(f"MergeAtlas needs Python {'.'.join(map(str, OLDEST_PYTHON))} or newer; this is {platform.python_version()}.")
+    # Windows reads and writes text in its locale's code page unless told otherwise, which cannot hold every character
+    # a diff or a PR's text may carry. UTF-8 mode makes files, git's output and this script's own output UTF-8, so a
+    # run without it starts again with it.
+    if os.name == "nt" and not sys.flags.utf8_mode:
+        sys.exit(subprocess.run([sys.executable, "-X", "utf8", *sys.argv]).returncode)
     command, args = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else ("", [])
     if command in ("version", "--version") and not args:
         print(VERSION)
