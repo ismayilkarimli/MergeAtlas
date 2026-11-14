@@ -123,8 +123,7 @@ class ParseTarget(unittest.TestCase):
         self.assertEqual(mergeatlas.parse_target("#5"), ("pr", None, 5))
 
     def test_rejects_what_is_not_a_github_pr_or_stack(self):
-        for text in ("https://gitlab.com/o/r/-/merge_requests/5", "https://github.com/o/r/issues/5",
-                     "https://github.com/o/r", "five", ""):
+        for text in ("https://github.com/o/r/issues/5", "https://github.com/o/r", "five", ""):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 mergeatlas.parse_target(text)
 

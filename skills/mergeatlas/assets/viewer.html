@@ -544,11 +544,15 @@ const unesc = t => t.replace(/&(amp|lt|gt|quot|apos);/g, e => Object.keys(ENTITY
 /* Every address the page opens on the host comes from the templates in the map's `links`, so the host is named in one
    place. A template's {words} are filled in from what the caller knows. */
 const fill = (template, values) => template.replace(/\{(\w+)\}/g, (_, name) => values[name]);
-// a file in the PR's diff when the PR changes it, else the file at the commit the map was built on; a line or a range follows
-const hostUrl = (path, first, last, side) => {
-  const key = LINKS.keys[path], kind = key ? 'diff' : 'blob';
-  const values = { key, side, path, sha: META.pinned.commit, first, last };
-  return fill(LINKS[kind], values) + (first ? fill(LINKS[`${kind}_${last ? 'range' : 'line'}`], values) : '');
+// a file in the PR's diff when the PR changes it, else the file at the commit the map was built on; a line or a range follows.
+// A host's diff that cannot name the line, or the row's mark (+, - or space), sends the link to the changed file at the PR's head.
+const hostUrl = (path, first, last, side, mark) => {
+  const key = LINKS.keys[path], part = first ? (last ? 'range' : 'line') : '';
+  const letter = LINKS.marks ? LINKS.marks[mark] : side;
+  const inDiff = key && (!part || (LINKS[`diff_${part}`] && letter != null)), kind = inDiff ? 'diff' : 'blob';
+  const sha = key && !inDiff ? META.mapped?.head : META.pinned.commit;
+  const values = { key, side: letter, path, epath: encodeURIComponent(path), sha, first, last };
+  return fill(LINKS[kind], values) + (part ? fill(LINKS[`${kind}_${part}`], values) : '');
 };
 const codeUrl = at => {
   const [path, lines = ''] = at.split('#'), [, first, last] = lines.match(/^L(\d+)(?:-L(\d+))?$/) ?? [];
@@ -560,7 +564,7 @@ const keyLine = ({ gap, text, path, line, key }) => {
   // the underline starts at the code, after the diff mark and indentation
   const [lead] = text.match(/^[+\- ]?\s*/), code = text.slice(lead.length);
   // a line in a file outside the PR opens at the commit the map was built on
-  const href = hostUrl(path, line.slice(1), null, line[0]);
+  const href = hostUrl(path, line.slice(1), null, line[0], '+-'.includes(text[0]) ? text[0] : ' ');
   return `<a class="keyline${mark}${key ? '' : ' around'}" href="${esc(href)}" target="_blank" rel="noopener"><span class="lineno">${line.slice(1)}</span>${esc(lead)}<span class="src">${esc(code)}</span></a>`;
 };
 const codeLink = (at, text) => `<a class="codelink" href="${esc(codeUrl(at))}" target="_blank" rel="noopener">${text}</a>`;
@@ -573,12 +577,14 @@ let STUBS = {}, CARRIED = false, STACK_PAGE = null;
 const mapHref = (id, card) => `?map=${encodeURIComponent(id)}${card ? `&card=${encodeURIComponent(card)}` : ''}`;
 const stackPr = n => META.stack?.prs.find(p => p.number === n);
 const prRef = n => fill(LINKS.ref, { n });
+// "PR #7" or "merge request !7", as the host calls it
+const prName = n => `${LINKS.noun} ${prRef(n)}`;
 // a shared file has no server to open other maps from, so it sends the reader to the host instead
 const prHref = (p, card) => !CARRIED && p?.published ? mapHref(p.map_id, card) : p?.url ?? '#';
 function fromBadge(path) {
   const s = STUBS[path]; if (!s) return '';
   const p = stackPr(s.pr) ?? { url: LINKS.pr, published: false };
-  const where = !CARRIED && p.published ? `Open PR #${s.pr}'s map${s.card_id ? ' at this file' : ''}` : `PR #${s.pr} on ${LINKS.host}`;
+  const where = !CARRIED && p.published ? `Open ${prName(s.pr)}'s map${s.card_id ? ' at this file' : ''}` : `${prName(s.pr)} on ${LINKS.host}`;
   return `<a class="from-pr" href="${esc(prHref(p, s.card_id))}" title="${esc(`${path} was changed in ${prRef(s.pr)} below: ${s.title}. ${where}.`)}">from ${esc(prRef(s.pr))}</a>`;
 }
 // code outside the PR is linked at the commit the map was built on, so a rebase leaves those links where they were
@@ -704,15 +710,15 @@ function stackStripHtml() {
   const at = st.prs.findIndex(p => p.current) + 1;
   const name = st.number ? `Stack #${st.number}` : 'Stack';
   const chip = p => p.current
-    ? `<span class="chip current" aria-current="page" title="${esc(`#${p.number} ${p.title} (this map)`)}">${p.number}</span>`
-    : `<a class="chip${p.published ? '' : ' unmapped'}" href="${esc(prHref(p))}"${!CARRIED && p.published ? '' : ' target="_blank" rel="noopener"'} title="${esc(`#${p.number} ${p.title}${p.published ? '' : ' (no map yet)'}`)}">${p.number}</a>`;
+    ? `<span class="chip current" aria-current="page" title="${esc(`${prRef(p.number)} ${p.title} (this map)`)}">${p.number}</span>`
+    : `<a class="chip${p.published ? '' : ' unmapped'}" href="${esc(prHref(p))}"${!CARRIED && p.published ? '' : ' target="_blank" rel="noopener"'} title="${esc(`${prRef(p.number)} ${p.title}${p.published ? '' : ' (no map yet)'}`)}">${p.number}</a>`;
   const overview = st.page && !CARRIED ? `<a class="overview" href="${esc(mapHref(st.id))}">Stack overview →</a>`
     : st.url ? `<a class="overview" href="${esc(st.url)}" target="_blank" rel="noopener">Stack on ${esc(LINKS.host)} →</a>` : '';
   // the arrows step to the nearest map below or above, past PRs that have none yet
   const here = at - 1, mapped = p => p.published && !CARRIED;
   const below = st.prs.slice(0, here).reverse().find(mapped), above = st.prs.slice(here + 1).find(mapped);
   const step = (p, dir, d, key) => p
-    ? `<a class="step" href="${esc(mapHref(p.map_id))}" data-step-key="${key}" aria-keyshortcuts="${key}" aria-label="${esc(`${dir}: #${p.number} ${p.title}`)}" title="${esc(`${dir}: #${p.number} ${p.title}`)}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="${d}"/></svg></a>`
+    ? `<a class="step" href="${esc(mapHref(p.map_id))}" data-step-key="${key}" aria-keyshortcuts="${key}" aria-label="${esc(`${dir}: ${prRef(p.number)} ${p.title}`)}" title="${esc(`${dir}: ${prRef(p.number)} ${p.title}`)}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="${d}"/></svg></a>`
     : `<span class="step" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="${d}"/></svg></span>`;
   // five slots with this PR always in the middle one; slots past either end of the stack stay empty
   const side = (STRIP_SHOWN - 1) / 2;
@@ -731,7 +737,7 @@ function renderStackPage(page) {
   });
   const beat = (title, text) => `<h2 class="beat">${title}</h2><p>${linkPrs(text)}</p>`;
   const prHtml = (p, i) => `<li class="pr${p.published ? '' : ' unmapped'}"><span class="pos" aria-hidden="true">${i + 1}</span>
-      <div class="top"><span class="num">#${p.number}</span><h3>${esc(p.title)}</h3><span class="state">${esc(p.state)}</span></div>
+      <div class="top"><span class="num">${esc(prRef(p.number))}</span><h3>${esc(p.title)}</h3><span class="state">${esc(p.state)}</span></div>
       ${p.intents.length ? `<ul>${p.intents.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
       <div class="links">${!CARRIED && p.published ? `<a href="${esc(mapHref(p.map_id))}">Open map →</a>` : `<span class="state">${p.published ? 'Mapped' : 'No map yet'}</span>`}
         <a href="${esc(p.url)}" target="_blank" rel="noopener">${p.files} ${p.files === 1 ? 'file' : 'files'} on ${esc(LINKS.host)}</a></div></li>`;
@@ -778,7 +784,7 @@ function renderLibrary(maps) {
     const pct = reviewedOf(m.id), st = m.stack;
     const facts = [`${m.files} ${m.files === 1 ? 'file' : 'files'}`, `<span class="lines"><span class="a">+${m.additions}</span> <span class="d">\u2212${m.deletions}</span></span>`,
       `mapped ${esc(ago(m.at))}`, st?.part ? `part ${st.part} of ${st.of} in ${st.number ? `stack #${st.number}` : 'a stack'}` : '', pct === null ? '' : `${esc(pct)}% reviewed`];
-    return `<li class="pr"><div class="top"><span class="num">#${m.number}</span><h3><a href="${esc(mapHref(m.id))}">${esc(m.title)}</a></h3>${m.draft ? '<span class="state draft">Draft</span>' : ''}</div>
+    return `<li class="pr"><div class="top"><span class="num">${esc(fill(m.ref, { n: m.number }))}</span><h3><a href="${esc(mapHref(m.id))}">${esc(m.title)}</a></h3>${m.draft ? '<span class="state draft">Draft</span>' : ''}</div>
       <div class="facts">${facts.filter(Boolean).join(' \u00b7 ')}</div>
       <div class="links"><a href="${esc(mapHref(m.id))}">Open map \u2192</a><a href="${esc(m.url)}" target="_blank" rel="noopener">Pull request on ${esc(m.host)}</a></div></li>`;
   };
@@ -959,11 +965,11 @@ function build() {
 }
 /* A card's node of files outside this PR holds what the change reaches and, in a stack, the files it builds on that a
    PR below changed ("From #N"), which open that PR's map. */
-const fileTag = f => f.from ? `From #${f.from.pr} · not changed here` : 'Not changed · affected';
+const fileTag = f => f.from ? `From ${prRef(f.from.pr)} · not changed here` : 'Not changed · affected';
 const outsideTag = files => files.every(f => f.from) ? 'From PRs below' : files.some(f => f.from) ? 'Not changed here' : 'Not changed · affected';
 const outsideLabel = files => files.every(f => f.from) ? `${count(files.length, 'file')} from PRs below`
   : files.some(f => f.from) ? `${count(files.length, 'file')} outside this PR` : `${files.length} affected file${files.length > 1 ? 's' : ''} outside this PR`;
-const fromEffect = s => `Changed in #${s.pr} below, ${s.title}. This PR leaves it as it is.`;
+const fromEffect = s => `Changed in ${prRef(s.pr)} below, ${s.title}. This ${LINKS.noun} leaves it as it is.`;
 const reachFileHtml = f => {
   const name = fileName(f), preview = f.effect.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
   return `<div class="top"><span class="tag">${esc(fileTag(f))}</span></div>
@@ -1413,7 +1419,7 @@ world.addEventListener('focusin', ev => {
 const modalBg = $('#modal-bg'), modal = $('#modal'), detail = $('#detail');
 const OVERVIEW = 'overview';
 let listView = false, selected = OVERVIEW, sequence = [], topOrder = [];
-const metaHtml = () => `<a class="codelink" href="${esc(LINKS.pr)}" target="_blank" rel="noopener">PR #${META.number}</a> \u00b7 ${META.files} files \u00b7 <span class="lines"><span class="a">+${META.additions}</span> <span class="d">\u2212${META.deletions}</span></span>${progressHtml()}${noticesHtml()}`;
+const metaHtml = () => `<a class="codelink" href="${esc(LINKS.pr)}" target="_blank" rel="noopener">${esc(prName(META.number))}</a> \u00b7 ${META.files} files \u00b7 <span class="lines"><span class="a">+${META.additions}</span> <span class="d">\u2212${META.deletions}</span></span>${progressHtml()}${noticesHtml()}`;
 const section = (title, text, level = 3) => text ? `<h${level}>${title}</h${level}><p>${fmt(text)}</p>` : '';
 /* A mark covers one file's changes for one intent and stores the file's fingerprint, so a later push to that file
    shows as changed. A card is reviewed when every mark it covers is set, which keeps both views in step. */
@@ -1588,7 +1594,7 @@ const storyHtml = () => `
   <h2 class="beat">The issue</h2>
   <div class="issues">${META.issues.map(i => `<a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.label)} ${esc(i.title)}</a>`).join('')}</div>
   <p>${fmt(META.problem)}</p>
-  <h2 class="beat">What this PR does</h2>
+  <h2 class="beat">What this ${esc(LINKS.noun)} does</h2>
   <p>${story(META.solution)}</p>`;
 
 function present(html, accent, item) {
@@ -1625,7 +1631,7 @@ function openReach(n, i) {
   };
   const pager = last ? `<div class="file-pager">${pageTo(i - 1, -1)}<span class="step-at">File ${i + 1} of ${n.files.length}</span>${pageTo(i + 1, 1)}</div>` : '';
   const o = f.origin, p = o && (stackPr(o.pr) ?? { url: LINKS.pr, published: false }), opens = p && !CARRIED && p.published;
-  const origin = o ? `<div class="links"><a class="button" href="${esc(prHref(p, o.card_id))}"${opens ? '' : ' target="_blank" rel="noopener"'}>${opens ? `Open #${o.pr}'s map${o.card_id ? ' at this file' : ''}` : `${esc(prRef(o.pr))} on ${esc(LINKS.host)}`} →</a></div>` : '';
+  const origin = o ? `<div class="links"><a class="button" href="${esc(prHref(p, o.card_id))}"${opens ? '' : ' target="_blank" rel="noopener"'}>${opens ? `Open ${prRef(o.pr)}'s map${o.card_id ? ' at this file' : ''}` : `${esc(prRef(o.pr))} on ${esc(LINKS.host)}`} →</a></div>` : '';
   const body = f.from ? `${section('Where it comes from', f.effect)}${origin}<h3>Built on by</h3>`
     : `${section('What changes for it', f.effect)}${o ? `${section('Where it comes from', fromEffect(o))}${origin}` : ''}<h3>Affected by</h3>`;
   present(`${pager}<div class="tag" style="color:var(--muted)">${esc(fileTag(f))}</div>
@@ -2173,7 +2179,7 @@ async function draw(id, raw, data) {
   for (const c of VIEWS.intents.cards) byId[c.id] = c;
   planCards();
   loadReviewed(id);
-  document.title = `PR #${META.number} · MergeAtlas`;
+  document.title = `${prName(META.number)} · MergeAtlas`;
   $('#ptitle').replaceChildren(Object.assign(document.createElement('span'), { textContent: META.title, title: META.title }));
   $('#pmeta').innerHTML = metaHtml();
   showStanding();

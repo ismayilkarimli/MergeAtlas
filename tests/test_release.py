@@ -14,7 +14,8 @@ What is under test:
     mergeatlas.VERSION, .claude-plugin/plugin.json, .claude-plugin/marketplace.json, CHANGELOG.md, README.md
     skills/mergeatlas/assets/viewer.html: the map slot export fills, the mark serve knows the viewer by, what it asks
     the server for, esc and unesc, ago, which says how long ago a map was made, and codeUrl, which opens a link into code
-    on the host from the templates in the map's `links`
+    on the host from the templates in the map's `links`, and keyLine, which does the same for a line of a diff,
+    for GitHub's templates and GitLab's
 """
 import json
 import re
@@ -111,11 +112,21 @@ class ViewerScript(unittest.TestCase):
         self.assertEqual(recent, ["just now", "1 minute ago", "59 minutes ago", "3 hours ago", "1 day ago", "20 days ago"])
         self.assertRegex(dated, r"^on .*1970")
 
-    def addresses(self, links, asked):
+    def key_lines(self, links, rows):
+        """Runs the viewer's own keyLine against a map's links and gives the address each row opens."""
+        lifted = re.search(r"const fill = .*?\n};\n(?=const codeLink)", VIEWER, re.S)
+        self.assertTrue(lifted)
+        meta = {"pinned": {"commit": "c0ffee"}, "mapped": {"head": "beef00"}}
+        ran = self.node(f"{self.escaping()}\nconst META = {json.dumps(meta)}, LINKS = {json.dumps(links)};\n{lifted[0]}\n"
+                        f"for (const row of {json.dumps(rows)}) console.log(keyLine(row).match(/href=\"([^\"]*)\"/)[1]);")
+        self.assertEqual(ran.returncode, 0, ran.stderr)
+        return ran.stdout.splitlines()
+
+    def addresses(self, links, asked, mapped=None):
         """Runs the viewer's own codeUrl and keyLine addresses against a map's links."""
         lifted = re.search(r"const fill = .*?\n};\n(?=const keyLine)", VIEWER, re.S)
         self.assertTrue(lifted)
-        meta = {"pinned": {"commit": "c0ffee"}}
+        meta = {"pinned": {"commit": "c0ffee"}, "mapped": mapped}
         ran = self.node(f"const META = {json.dumps(meta)}, LINKS = {json.dumps(links)};\n{lifted[0]}\n"
                         f"for (const at of {json.dumps(asked)}) console.log(codeUrl(at));\n"
                         "console.log(hostUrl('src/a.py', '7', null, 'L'), hostUrl('b.py', '7', null, 'L'));")
@@ -138,6 +149,47 @@ class ViewerScript(unittest.TestCase):
                  "keys": {"src/a.py": "k1"}}
         found = self.addresses(links, ["src/a.py#L5-L9", "b.py#L5-L9"])
         self.assertEqual(found[:2], ["https://git.example/mr/7/diffs#k1_5_9", "https://git.example/-/blob/c0ffee/b.py#L5-9"])
+
+    def test_a_github_diff_line_is_named_by_its_side_and_a_context_line_too(self):
+        links = mergeatlas.GitHub().links("https://github.com/o/r/pull/7", ["src/a.py"])
+        rows = [{"text": "+new", "path": "src/a.py", "line": "R39", "key": True},
+                {"text": "-old", "path": "src/a.py", "line": "L89", "key": True},
+                {"text": " same", "path": "src/a.py", "line": "R12", "key": False},
+                {"text": " else", "path": "b.py", "line": "R3", "key": False}]
+        key = links["keys"]["src/a.py"]
+        self.assertEqual(self.key_lines(links, rows), [
+            f"https://github.com/o/r/pull/7/files#diff-{key}R39", f"https://github.com/o/r/pull/7/files#diff-{key}L89",
+            f"https://github.com/o/r/pull/7/files#diff-{key}R12", "https://github.com/o/r/blob/c0ffee/b.py#L3"])
+
+    def test_gitlab_sends_each_kind_of_line_where_its_diff_can_name_it(self):
+        url = "https://gitlab.com/g/s/p/-/merge_requests/7"
+        links = mergeatlas.GitLab().links(url, ["src/a.py"])
+        rows = [{"text": "+new", "path": "src/a.py", "line": "R39", "key": True},
+                {"text": "-old", "path": "src/a.py", "line": "L89", "key": True},
+                {"text": " same", "path": "src/a.py", "line": "R12", "key": False},
+                {"text": " else", "path": "b.py", "line": "R3", "key": False}]
+        key = links["keys"]["src/a.py"]
+        self.assertEqual(self.key_lines(links, rows), [
+            f"{url}/diffs?file_path=src%2Fa.py#line_{key}_A39", f"{url}/diffs?file_path=src%2Fa.py#line_{key}_89",
+            "https://gitlab.com/g/s/p/-/blob/beef00/src/a.py#L12", "https://gitlab.com/g/s/p/-/blob/c0ffee/b.py#L3"])
+
+    def test_gitlab_opens_a_link_in_text_at_the_blob_where_its_diff_cannot_name_the_lines(self):
+        url = "https://gitlab.com/g/s/p/-/merge_requests/7"
+        links = mergeatlas.GitLab().links(url, ["src/a.py"])
+        found = self.addresses(links, ["src/a.py", "src/a.py#L5", "src/a.py#L5-L9", "b.py#L5-L9", "b.py"], {"head": "beef00"})
+        self.assertEqual(found[:5], [
+            f"{url}/diffs?file_path=src%2Fa.py", "https://gitlab.com/g/s/p/-/blob/beef00/src/a.py#L5",
+            "https://gitlab.com/g/s/p/-/blob/beef00/src/a.py#L5-9", "https://gitlab.com/g/s/p/-/blob/c0ffee/b.py#L5-9",
+            "https://gitlab.com/g/s/p/-/blob/c0ffee/b.py"])
+
+    def test_a_pr_is_named_as_its_host_names_it(self):
+        refs = re.search(r"const prRef = .*\n(?://.*\n)?const prName = .*\n", VIEWER)
+        fill = re.search(r"const fill = .*\n", VIEWER)
+        self.assertTrue(refs and fill)
+        for links, named in [(mergeatlas.GitHub().links("https://github.com/o/r/pull/7"), "PR #7"),
+                             (mergeatlas.GitLab().links("https://gitlab.com/g/p/-/merge_requests/7"), "merge request !7")]:
+            ran = self.node(f"const LINKS = {json.dumps(links)};\n{fill[0]}{refs[0]}\nconsole.log(prName(7), prRef(7));")
+            self.assertEqual(ran.stdout.strip(), f"{named} {named.split()[-1]}", ran.stderr)
 
     def test_a_link_target_comes_back_as_it_was_written(self):
         path = '''src/a&b/it's "x".ts#L1-L2'''

@@ -85,6 +85,7 @@ SLUG = re.compile(r"[\w-]+")
 # The files the viewer's server hands out: the viewer itself and the published maps.
 SERVED = re.compile(r"/(index\.html)?|/data/[\w.-]+\.json")
 MAP_ID = re.compile(r"[\w.-]+")
+BARE_NUMBER = re.compile(r"#?(\d+)")
 # How long the server trusts what GitHub last said about a PR before asking again.
 PR_NOW_SECONDS = 60
 CARD_LINK = re.compile(r"\[[^\]]+\]\(([\w-]+)\)")
@@ -141,6 +142,10 @@ def gh(*args):
     return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
 
 
+def glab(*args):
+    return subprocess.run(["glab", *args], check=True, capture_output=True, text=True).stdout
+
+
 def text_only(diff):
     """Drops the sections of binary files, which have nothing to read."""
     sections, current = [], []
@@ -189,12 +194,27 @@ def ticket_refs(title, body, branch):
 
 def parse_target(text):
     """Reads a PR or stack link, or a bare PR number, as (kind, repo, number); a bare number has no repo."""
+    bare = BARE_NUMBER.fullmatch(text.strip())
+    if bare:
+        return ("pr", None, int(bare[1]))
     return forge_for(text).parse_target(text)
 
 
 def parse_fetch_args(args):
     """Splits fetch's arguments into its targets and whether the user asked for the whole stack."""
     return [parse_target(a) for a in args if a != "--stack"], "--stack" in args
+
+
+def forge_of(args):
+    """The one forge a fetch's links are on; bare numbers and no links at all belong to this clone's origin."""
+    found = {}
+    for arg in args:
+        if arg != "--stack" and not BARE_NUMBER.fullmatch(arg.strip()):
+            forge = forge_for(arg)
+            found[(forge.name, forge.host)] = forge
+    if len(found) > 1:
+        raise ValueError(f"links from more than one forge: {', '.join(f'{name} ({host})' for name, host in sorted(found))}")
+    return next(iter(found.values()), None) or forge_for()
 
 
 def open_or_merged(pulls):
@@ -288,22 +308,27 @@ def pull_record(p):
 
 # The links a map's page opens are written once, as templates the viewer fills in, so it never builds a host's URL itself:
 #   {path} a file's path, {sha} a commit, {ref} a branch, {n} a PR number,
-#   {key} a changed file's anchor in the PR's diff, {side} L or R, the old or the new side of that diff,
+#   {key} a changed file's anchor in the PR's diff, {epath} its path URL-encoded, {side} what names a line's side of that diff,
 #   {first} and {last} the lines a link names.
 # "diff" opens a changed file in the PR's diff and "blob" any file at a commit; each takes a line or a range after it, from
-# "<name>_line" and "<name>_range". "keys" gives each changed file's {key}.
+# "<name>_line" and "<name>_range". "keys" gives each changed file's {key}. A line or range template that is null cannot be
+# opened in the diff, so that link opens the blob at the PR's head instead. {side} is L or R, the old or the new side, unless
+# "marks" is there: it gives the side's name for a diff row marked "+", "-" or " " (null for no name, so the blob opens), and
+# a link into code that names no row, such as one in a card's text, has none either. "ref" spells a PR number and "noun" says
+# what a PR is called.
 class GitHub:
     """Everything MergeAtlas knows of GitHub: it reads pull requests and stacks through the signed-in GitHub CLI, and says
     how GitHub spells its links. Another host is another class with these methods."""
 
     name = "github"
     label = "GitHub"
+    host = "github.com"
     LINK = re.compile(r"(?:https?://)?(?:www\.)?github\.com/([\w.-]+/[\w.-]+)/(pull|stack)/(\d+)(?:[/?#].*)?")
     PR_URL = re.compile(r"https://([^/]+)/([^/]+)/([^/]+)/pull/(\d+)")
 
     def parse_target(self, text):
         text = text.strip()
-        bare = re.fullmatch(r"#?(\d+)", text)
+        bare = BARE_NUMBER.fullmatch(text)
         if bare:
             return ("pr", None, int(bare[1]))
         link = self.LINK.fullmatch(text)
@@ -392,7 +417,7 @@ class GitHub:
         """The templates the viewer opens this host's pages with, for a PR and the files it changes."""
         repo = url.split("/pull/")[0]
         return {
-            "host": self.label, "pr": url, "ref": "#{n}",
+            "host": self.label, "noun": "PR", "pr": url, "ref": "#{n}",
             "diff": f"{url}/files#diff-{{key}}", "diff_line": "{side}{first}", "diff_range": "{side}{first}-{side}{last}",
             "blob": f"{repo}/blob/{{sha}}/{{path}}", "blob_line": "#L{first}", "blob_range": "#L{first}-L{last}",
             "commit": f"{repo}/commit/{{sha}}", "tree": f"{repo}/tree/{{ref}}", "pr_number": f"{repo}/pull/{{n}}",
@@ -400,10 +425,176 @@ class GitHub:
         }
 
 
+# A merge request's state in GitLab's words, and in the words stack detection and the viewer use.
+MR_STATES = {"opened": "open", "locked": "open", "merged": "merged", "closed": "closed"}
+# A git remote's URL, as https, ssh:// with an optional port, or scp-style: (host, project path).
+REMOTE = re.compile(r"(?:[\w+.-]+://(?:[^@/]+@)?([^/:]+)(?::\d+)?/|(?:[^@/]+@)?([^/:]+):)(.+?)(?:\.git)?/?")
+
+
+def glab_host(host):
+    """The arguments that aim glab at a self-hosted GitLab; gitlab.com is its default."""
+    return [] if host == "gitlab.com" else ["--hostname", host]
+
+
+def merge_request_record(mr):
+    """Cuts a merge request from GitLab's REST API down to what stack detection reads."""
+    return {
+        "number": mr["iid"], "title": mr["title"], "url": mr["web_url"], "state": MR_STATES[mr["state"]],
+        "base": mr["target_branch"], "head": mr["source_branch"], "stack": None,
+    }
+
+
+class GitLab:
+    """Everything MergeAtlas knows of GitLab, which it reaches through the signed-in glab CLI: a merge request is a PR, a
+    project path of any depth is the repo, and a self-hosted GitLab is the same class with another host. GitLab has no
+    stacks, so only chains of branches make one."""
+
+    name = "gitlab"
+    label = "GitLab"
+    LINK = re.compile(r"(?:https?://)?([\w.-]+(?::\d+)?)/([\w.-]+(?:/[\w.-]+)+)/-/merge_requests/(\d+)(?:[/?#].*)?")
+
+    def __init__(self, host="gitlab.com"):
+        self.host = host.lower()
+
+    def parse_target(self, text):
+        text = text.strip()
+        bare = BARE_NUMBER.fullmatch(text)
+        if bare:
+            return ("pr", None, int(bare[1]))
+        link = self.LINK.fullmatch(text)
+        if not link:
+            raise ValueError(f"not a GitLab merge request link: {text!r}")
+        return ("pr", link[2], int(link[3]))
+
+    def _api(self, path):
+        try:
+            return json.loads(glab("api", *glab_host(self.host), path))
+        except subprocess.CalledProcessError as failed:
+            raise LookupError(f"GitLab has no {path}: {failed.stderr.strip()}") from None
+
+    def _mr_path(self, repo, number):
+        return f"projects/{quote(repo, safe='')}/merge_requests/{number}"
+
+    def current_repo(self):
+        """The project path of this clone's origin remote."""
+        remote = origin()
+        if not remote:
+            raise LookupError("this clone has no origin remote to read the GitLab project from")
+        return remote[1]
+
+    def current_pr(self):
+        """The IID of the current branch's open merge request, None when it has none."""
+        branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True).stdout.strip()
+        if not branch:
+            return None
+        try:
+            found = self._api(f"projects/{quote(self.current_repo(), safe='')}/merge_requests?state=opened&source_branch={quote(branch, safe='')}")
+        except LookupError:
+            return None
+        return found[0]["iid"] if found else None
+
+    def pr_record(self, repo, number):
+        """A merge request as pr.json keeps it, less its stack, files and line counts, which come from the clone. GitLab
+        names the commit the merge request branched from, so that is the base, and has none until it has worked out the diff."""
+        mr = self._api(self._mr_path(repo, number))
+        refs = mr.get("diff_refs")
+        if not refs:
+            raise LookupError(f"GitLab has not worked out the diff of !{number} yet: try again in a moment")
+        issues = self._api(f"{self._mr_path(repo, number)}/closes_issues")
+        return {
+            "number": mr["iid"], "title": mr["title"], "body": mr["description"] or "", "headRefName": mr["source_branch"],
+            "headRefOid": refs["head_sha"], "baseRefName": mr["target_branch"], "baseRefOid": refs["base_sha"],
+            "url": mr["web_url"],
+            "issues": [{"number": i["iid"], "title": i["title"], "body": i["description"] or "", "url": i["web_url"]}
+                       for i in issues if i.get("iid")],
+        }
+
+    def fetch_ref(self, number):
+        """What to fetch from origin to get a merge request's head commit, which holds for one from a fork too."""
+        return f"merge-requests/{number}/head"
+
+    def pull(self, repo, number):
+        return merge_request_record(self._api(self._mr_path(repo, number)))
+
+    def _pulls(self, repo, query):
+        return self._api(f"projects/{quote(repo, safe='')}/merge_requests?state=all&per_page=100&{query}")
+
+    def pulls_with_head(self, repo, branch):
+        # a fork's branch of the same name is not this project's branch
+        return [merge_request_record(p) for p in self._pulls(repo, f"source_branch={quote(branch, safe='')}")
+                if p.get("source_project_id") == p.get("target_project_id")]
+
+    def pulls_with_base(self, repo, branch):
+        return [merge_request_record(p) for p in self._pulls(repo, f"target_branch={quote(branch, safe='')}")]
+
+    def files(self, repo, number):
+        return [f["new_path"] for f in self._api(f"{self._mr_path(repo, number)}/diffs?per_page=100")]
+
+    def repo_of(self, url):
+        """The project path a merge request link is in, "" when it is not one."""
+        link = self.LINK.fullmatch(url)
+        return link[2] if link else ""
+
+    def stack_url(self, repo, number):
+        return None
+
+    def status(self, url):
+        """Where a merge request stands now as {"head", "state"}, state being open, closed or merged; {} when it cannot be told
+        in 15 seconds."""
+        link = self.LINK.fullmatch(url)
+        if not link:
+            return {}
+        host, repo, number = link.groups()
+        try:
+            asked = subprocess.run(["glab", "api", *glab_host(host.lower()), self._mr_path(repo, number)],
+                                   capture_output=True, text=True, timeout=15)
+            mr = json.loads(asked.stdout) if asked.returncode == 0 else {}
+            return {"head": mr["sha"], "state": MR_STATES[mr["state"]]} if mr else {}
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+            return {}
+
+    def diff_key(self, path):
+        """What GitLab calls a changed file in a merge request's diff page: the start of the hash of its path."""
+        return hashlib.sha1(path.encode()).hexdigest()[:9]
+
+    def links(self, url, paths=()):
+        """The templates the viewer opens this host's pages with. A diff line is named by its old number when removed and by
+        A and its new number when added; an unchanged line has no name of its own there, and no line range has one."""
+        project = url.split("/-/merge_requests/")[0]
+        return {
+            "host": self.label, "noun": "merge request", "pr": url, "ref": "!{n}",
+            "diff": f"{url}/diffs?file_path={{epath}}", "diff_line": "#line_{key}_{side}{first}", "diff_range": None,
+            "marks": {"+": "A", "-": "", " ": None},
+            "blob": f"{project}/-/blob/{{sha}}/{{path}}", "blob_line": "#L{first}", "blob_range": "#L{first}-{last}",
+            "commit": f"{project}/-/commit/{{sha}}", "tree": f"{project}/-/tree/{{ref}}",
+            "pr_number": f"{project}/-/merge_requests/{{n}}",
+            "keys": {path: self.diff_key(path) for path in paths},
+        }
+
+
+def origin():
+    """The host and project path of this clone's origin remote, None when it has none."""
+    try:
+        url = subprocess.run(["git", "remote", "get-url", "origin"], check=True, capture_output=True, text=True).stdout.strip()
+    except (subprocess.CalledProcessError, OSError):
+        return None
+    found = REMOTE.fullmatch(url)
+    return (found[1] or found[2], found[3]) if found else None
+
+
 def forge_for(link=None):
-    """The forge a PR or stack link belongs to; with no link, the one this clone's origin remote is on. GitHub is the only
-    one so far."""
-    return GitHub()
+    """The forge a PR or stack link belongs to; with no link, the one this clone's origin remote is on: GitHub, GitLab when
+    the host is gitlab.com or has "gitlab" in its name, and GitHub for any other host, as gh also reaches GitHub Enterprise."""
+    given = (link or "").strip()
+    found = GitLab.LINK.fullmatch(given)
+    if found:
+        return GitLab(found[1])
+    # a PR address a map kept names its own host, so it needs no look at the clone
+    if GitHub.LINK.fullmatch(given) or GitHub.PR_URL.fullmatch(given):
+        return GitHub()
+    remote = origin()
+    host = remote[0].lower() if remote else GitHub.host
+    return GitLab(host) if "gitlab" in host else GitHub()
 
 
 def stack_context(plan, number):
@@ -543,8 +734,11 @@ def stack_page(data, record, maps):
 def fetch(args):
     fresh = "--fresh" in args
     given = [a for a in args if a != "--fresh"]
-    forge = forge_for(next((a for a in given if a != "--stack"), None))
-    targets, whole_stack = parse_fetch_args(given)
+    try:
+        forge = forge_of(given)
+        targets, whole_stack = parse_fetch_args(given)
+    except ValueError as problem:
+        sys.exit(str(problem))
     if not targets:
         current = forge.current_pr()
         if current is None:
@@ -552,9 +746,9 @@ def fetch(args):
         targets = [("pr", None, current)]
     try:
         plan = resolve(targets, forge, whole_stack=whole_stack)
+        here = forge.current_repo()
     except (ValueError, LookupError) as problem:
         sys.exit(str(problem))
-    here = forge.current_repo()
     if here.lower() != plan["repo"].lower():
         sys.exit(f"Run fetch from inside a clone of {plan['repo']}; this is {here}.")
     stack, record = plan["stack"], None
@@ -610,7 +804,10 @@ def local_diff(built, head):
 
 
 def fetch_pr(forge, repo, number, stack, fresh=False):
-    pr = forge.pr_record(repo, number)
+    try:
+        pr = forge.pr_record(repo, number)
+    except LookupError as problem:
+        sys.exit(str(problem))
     pr["stack"] = stack
     map_id = map_id_of(forge, repo, pr["number"])
     subprocess.run(["git", "fetch", "origin", forge.fetch_ref(pr["number"])], check=True, capture_output=True)
@@ -1438,6 +1635,7 @@ def library():
             strip = pr.get("stack") or {}
             found.append({
                 "id": path.stem, "kind": "map", "repo": forge_for(pr["url"]).repo_of(pr["url"]), "host": pr["links"]["host"],
+                "ref": pr["links"]["ref"],
                 "number": pr["number"], "title": pr["title"], "url": pr["url"], "files": pr["files"], "additions": pr["additions"],
                 "deletions": pr["deletions"], "draft": bool(pr.get("draft")), "at": pr["mapped"]["at"],
                 "stack": {"id": strip["id"], "number": strip.get("number"), "of": len(strip["prs"]),

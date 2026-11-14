@@ -131,7 +131,7 @@ class TheListOfMaps(Served):
         self.publish("o-r-8", a_map(8, "Older", 100))
         self.publish("o-r-9", a_map(9, "Newer", 200, draft=True))
         newer, older = self.maps()
-        self.assertEqual(newer, {"id": "o-r-9", "kind": "map", "repo": "o/r", "host": "GitHub", "number": 9, "title": "Newer", "files": 3,
+        self.assertEqual(newer, {"id": "o-r-9", "kind": "map", "repo": "o/r", "host": "GitHub", "ref": "#{n}", "number": 9, "title": "Newer", "files": 3,
                                  "additions": 40, "deletions": 2, "url": "https://github.com/o/r/pull/9", "draft": True,
                                  "at": 200, "stack": None})
         self.assertEqual((older["id"], older["draft"]), ("o-r-8", False))

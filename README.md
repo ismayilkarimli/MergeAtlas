@@ -58,7 +58,8 @@ You'll need:
 - An agent that runs skills, such as Claude Code or Codex
 - Python 3.9 or newer, on macOS, Linux or Windows
 - `git`
-- The [GitHub CLI](https://cli.github.com), signed in with `gh auth login`
+- For GitHub pull requests, the [GitHub CLI](https://cli.github.com), signed in with `gh auth login`
+- For GitLab merge requests, on gitlab.com or a self-hosted GitLab, the [GitLab CLI](https://gitlab.com/gitlab-org/cli), signed in with `glab auth login`
 
 ### Claude Code
 

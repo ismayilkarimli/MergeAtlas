@@ -6,6 +6,10 @@ If you installed the Claude Code plugin, you stay on a release until the next on
 
 ## Unreleased
 
+### Added
+
+- GitLab merge requests, on gitlab.com or a self-hosted GitLab, are mapped as pull requests are, through the `glab` CLI. A merge request link works for fetch, a stack of merge requests is found from the branches they target, and the viewer says "merge request", writes `!7` and opens diff lines in GitLab's own diff where it can.
+
 ### Changed
 
 - A map's id now names its host, such as `github-owner-repo-12` and `github-owner-repo-stack-7`, and the viewer takes every address it opens, and the name of the host it shows, from the map. Maps from earlier releases have no such addresses, so publish them again.

@@ -8,6 +8,7 @@ reshapes the answers. The stack queries are covered in test_stack_detection.py.
 
 The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
     forge_for(link)                  -> the forge a link, or the clone's origin when there is none, belongs to
+                                        (GitLab's half of that is in test_gitlab.py)
     GitHub.name, .label              -> "github", used in map ids, and "GitHub", shown to the reader
     GitHub.current_pr()              -> the current branch's PR number, None when it has none
     GitHub.pr_record(repo, number)   -> the PR as pr.json keeps it, before the clone adds its files and line counts
@@ -44,9 +45,10 @@ def answers(canned):
 
 
 class WhichForge(unittest.TestCase):
-    def test_github_is_the_only_forge_so_far(self):
-        for link in (None, "7", URL, "https://github.com/o/r/stack/9"):
-            self.assertEqual(mergeatlas.forge_for(link).name, "github")
+    def test_a_github_link_or_a_github_origin_is_github(self):
+        with mock.patch.object(mergeatlas, "origin", return_value=("github.com", "o/r")):
+            for link in (None, "7", URL, "https://github.com/o/r/stack/9"):
+                self.assertEqual(mergeatlas.forge_for(link).name, "github")
 
     def test_a_forge_names_itself_for_ids_and_for_readers(self):
         self.assertEqual((FORGE.name, FORGE.label), ("github", "GitHub"))
@@ -118,7 +120,7 @@ class Links(unittest.TestCase):
     def test_the_templates_for_a_pr_and_its_files(self):
         links = FORGE.links(URL, ["src/a.py"])
         self.assertEqual(links, {
-            "host": "GitHub", "pr": URL, "ref": "#{n}",
+            "host": "GitHub", "noun": "PR", "pr": URL, "ref": "#{n}",
             "diff": f"{URL}/files#diff-{{key}}", "diff_line": "{side}{first}", "diff_range": "{side}{first}-{side}{last}",
             "blob": "https://github.com/o/r/blob/{sha}/{path}", "blob_line": "#L{first}", "blob_range": "#L{first}-L{last}",
             "commit": "https://github.com/o/r/commit/{sha}", "tree": "https://github.com/o/r/tree/{ref}",

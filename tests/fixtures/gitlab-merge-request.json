@@ -1,0 +1,29 @@
+{
+  "source": "GET https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/merge_requests/4420, and closes_issues of !4414, which closes an issue where !4420 closes none; trimmed to the fields MergeAtlas reads",
+  "merge_request": {
+    "iid": 4420,
+    "title": "fix(orbit): show install hint instead of stale help when binary is missing",
+    "description": "## What does this MR do and why?\n\nRunning `glab orbit` before the binary is installed printed glab's own help, which listed commands the binary no longer has. It now says the Orbit CLI isn't installed and how to install it. If a custom binary path is set but broken, it names the path instead. The examples now cover only what glab handles itself, so they can't drift from the binary.\n\n## Related issues\n\nNo project issue exists for this change.\n\n## How has this been tested?\n\n- `go test ./internal/commands/orbit/...`\n- `golangci-lint run --new-from-rev=origin/main`\n- `make gen-docs`\n\n\n\n## Demo\n\nBare `glab orbit` with no binary installed, then `glab orbit --install --yes`, then the real Orbit help.\n\n![glab orbit install hint and install](/uploads/fe953dde6da70af959eebda92c137d4d/demo-hold.svg)\n\n<details>\n<summary>Agent context</summary>\n\n- `runHelp` prints to stdout through `LogInfof`. With no binary it shows the install hint (`glab orbit --install --yes`, `glab orbit --yes <command>`), using the spec's display name.\n- If a custom path is set but invalid, it names the path plus `GLAB_ORBIT_CLI_BINARY_PATH` and the `orbit_cli_binary_path` key instead of suggesting `--install`.\n- The `help` field on `options` is gone.\n- `Example` is cut to `--install --yes`, `update`, `--yes skills get orbit` and `--help`.\n- Tests cover a never-installed managed binary and a broken custom path. Docs regenerated.\n\n</details>",
+    "web_url": "https://gitlab.com/gitlab-org/cli/-/merge_requests/4420",
+    "state": "merged",
+    "draft": false,
+    "source_branch": "dgruzd/orbit-not-installed-hint",
+    "target_branch": "main",
+    "sha": "4652e8fa455dcfd3bcea96947ea5f2533834431c",
+    "diff_refs": {
+      "base_sha": "59e9ed304fe7601e642132002026b98708e58a42",
+      "head_sha": "4652e8fa455dcfd3bcea96947ea5f2533834431c",
+      "start_sha": "59e9ed304fe7601e642132002026b98708e58a42"
+    },
+    "source_project_id": 34675721,
+    "target_project_id": 34675721
+  },
+  "closes_issues": [
+    {
+      "iid": 8746,
+      "title": "Ignore testdata fixtures in markdownlint config",
+      "description": "### Problem to solve\n\nThe `markdownlint` pre-push hook fails on unchanged `main` when lefthook lints all Markdown files. These fixture files have 11 errors (MD041, MD004, MD047):\n\n- `internal/commands/snippet/create/testdata/file1.md`\n- `internal/commands/snippet/create/testdata/file2.md`\n- `test/testdata/.gitlab/issue_templates/Bug.md`\n- `test/testdata/.gitlab/issue_templates/Feature Request.md`\n- `test/testdata/.gitlab/merge_request_templates/Default.md`\n- `test/testdata/README.md`\n\nLefthook lints all files when it can't compute the push diff. On a new-branch push without `origin/HEAD`, `{push_files}` is every tracked file. Clones made with `git clone` have `origin/HEAD`. CI-style checkouts don't, for example the Software Factory runner (`/builds/gitlab-org/cli`). That is how Duo Developer hit it in https://gitlab.com/gitlab-org/cli/-/merge_requests/4403 (session https://gitlab.com/gitlab-org/cli/-/automate/agent-sessions/11157995).\n\nCI doesn't catch it, because the docs-lint job only lints `docs/**/*.md *.md`.\n\nThe files are test fixtures, not documentation. Fixing their lint errors could change what the tests read.\n\n### Proposal\n\nAdd `**/testdata/**` to `ignores` in `.markdownlint-cli2.yaml`:\n\n```yaml\nignores:\n  - \".gitlab/issue_templates/**\"\n  - \".gitlab/merge_request_templates/**\"\n  - \"**/testdata/**\"\n```\n\n### Verification\n\nIn a clone at the MR !4403 commit, with `origin/HEAD` removed, a new-branch push lints 358 files and `markdownlint` fails with \"11 issues in 6 files\". With the ignore, it lints 352 files with 0 issues.\n\n### Out of scope\n\n- The lefthook fallback that lints all files when `origin/HEAD` is missing. Software Factory feedback covers it.\n\n---\n_Drafted with an AI agent (Claude Code)._",
+      "web_url": "https://gitlab.com/gitlab-org/cli/-/work_items/8746"
+    }
+  ]
+}
