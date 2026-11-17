@@ -4,6 +4,19 @@ What changed in each release of MergeAtlas, newest first. Versions follow [seman
 
 If you installed the Claude Code plugin, you stay on a release until the next one is published, then `/plugin marketplace update mergeatlas` brings it in. Installs through skills.sh or a clone follow the `main` branch.
 
+## 0.6.0 - 2026-11-17
+
+### Added
+
+- A company's own plugin marketplace can list MergeAtlas with a `git-subdir` source pointed at `plugin/` and pinned to a release tag, and Claude Code fetches that folder alone: the plugin manifest, `SKILL.md`, the script, the viewer and the license. The README shows the entry.
+- Each release carries `mergeatlas-<version>.zip`, the skill folder alone, with its SHA-256 beside it, for teams that vendor the skill into their own repository. `python3 tools/build_dist.py` builds the same zip from a clone, byte for byte.
+- `SKILL.md` declares its license, what it needs to run, and the tools it uses, among them AskUserQuestion for choosing the cold readers' model.
+
+### Changed
+
+- The skill moved from `skills/mergeatlas` to `plugin/skills/mergeatlas`. If you linked it into your skills folder by hand, link the new path. The plugin finds it there by itself.
+- The script builds every command it runs as a list before running it, and none goes through a shell.
+
 ## 0.5.0 - 2026-11-14
 
 ### Added
