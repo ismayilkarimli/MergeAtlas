@@ -6,7 +6,7 @@ Run from the repository root:
 The fixture is stack #9 of ismayilkarimli/home-loan-calculator, eight open PRs captured from GitHub's API.
 Set MERGEATLAS_LIVE=1 to also check the GitHub adapter against that repository itself (needs `gh` signed in).
 
-The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
+The interface under test, in plugin/skills/mergeatlas/scripts/mergeatlas.py:
     parse_target(text)                       -> (kind, repo, number): kind is "pr" or "stack", repo is None for a bare number
     parse_fetch_args(args)                   -> (targets, whole_stack)
     resolve(targets, forge, whole_stack)     -> plan dict:
@@ -25,7 +25,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "skills" / "mergeatlas" / "scripts"))
+sys.path.insert(0, str(ROOT / "plugin" / "skills" / "mergeatlas" / "scripts"))
 import mergeatlas  # noqa: E402
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "loan-calculator-stack.json").read_text())

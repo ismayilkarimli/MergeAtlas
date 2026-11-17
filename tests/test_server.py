@@ -11,7 +11,7 @@ Two answers are worked out when asked for, and neither is a file. maps.json list
 front page. pr-now.json says where a mapped PR stands on its host now, which the server asks the host's CLI for, so the viewer can
 say when a map describes an older commit.
 
-The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
+The interface under test, in plugin/skills/mergeatlas/scripts/mergeatlas.py:
     ViewerHandler            -> the request handler; its server's port is the one a Host header must name
     library()                -> what maps.json answers: every published map and stack page, the latest first
     pr_now(map_id)           -> what pr-now.json answers: the commit the map was made at, and the PR's head and state now

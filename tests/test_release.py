@@ -12,7 +12,7 @@ from outside, such as a pull request's title, and the viewer writes that text in
 
 What is under test:
     mergeatlas.VERSION, .claude-plugin/plugin.json, .claude-plugin/marketplace.json, CHANGELOG.md, README.md
-    skills/mergeatlas/assets/viewer.html: the map slot export fills, the mark serve knows the viewer by, what it asks
+    plugin/skills/mergeatlas/assets/viewer.html: the map slot export fills, the mark serve knows the viewer by, what it asks
     the server for, esc and unesc, ago, which says how long ago a map was made, and codeUrl, which opens a link into code
     on the host from the templates in the map's `links`, and keyLine, which does the same for a line of a diff,
     for GitHub's templates and GitLab's
@@ -28,13 +28,13 @@ from pathlib import Path
 
 from test_stack_detection import ROOT, mergeatlas
 
-VIEWER = (ROOT / "skills" / "mergeatlas" / "assets" / "viewer.html").read_text()
+VIEWER = (ROOT / "plugin" / "skills" / "mergeatlas" / "assets" / "viewer.html").read_text()
 NODE = shutil.which("node")
 
 
 class OneVersion(unittest.TestCase):
     def test_the_plugin_names_the_scripts_version(self):
-        plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
+        plugin = json.loads((ROOT / "plugin" / ".claude-plugin" / "plugin.json").read_text())
         self.assertEqual(plugin["version"], mergeatlas.VERSION)
 
     def test_the_marketplace_leaves_the_version_to_the_plugin(self):
@@ -229,6 +229,25 @@ class TheLeanBundle(unittest.TestCase):
         _, archive, _ = self.build()
         self.assertEqual(archive.name, f"mergeatlas-{mergeatlas.VERSION}.zip")
 
+    def test_the_skill_folder_holds_only_what_the_bundle_ships(self):
+        skill = ROOT / "plugin" / "skills" / "mergeatlas"
+        tracked = subprocess.run(["git", "ls-files", "--", "."], cwd=skill, capture_output=True, text=True).stdout.split()
+        self.assertEqual(sorted(tracked), sorted(self.build_dist.FILES))
+
+    def test_the_plugin_folder_holds_only_the_manifest_and_the_skill(self):
+        command = ["git", "ls-files", "--", "plugin"]
+        tracked = subprocess.run(command, cwd=ROOT, capture_output=True, text=True).stdout.split()
+        self.assertEqual(sorted(tracked), sorted(
+            ["plugin/.claude-plugin/plugin.json"] + [f"plugin/skills/mergeatlas/{f}" for f in self.build_dist.FILES]))
+
+    def test_the_skills_license_is_the_repositorys(self):
+        self.assertEqual((ROOT / "plugin" / "skills" / "mergeatlas" / "LICENSE").read_text(),
+                         (ROOT / "LICENSE").read_text())
+
+    def test_the_marketplace_points_at_the_plugin_folder(self):
+        marketplace = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
+        self.assertEqual([p["source"] for p in marketplace["plugins"]], ["./plugin"])
+
     def test_the_same_sources_give_the_same_zip(self):
         self.assertEqual(self.build()[2], self.build()[2])
 
@@ -240,7 +259,7 @@ class TheLeanBundle(unittest.TestCase):
 
 
 class TheSkillsFrontmatter(unittest.TestCase):
-    FRONT = (ROOT / "skills" / "mergeatlas" / "SKILL.md").read_text().split("---")[1]
+    FRONT = (ROOT / "plugin" / "skills" / "mergeatlas" / "SKILL.md").read_text().split("---")[1]
 
     def test_it_names_the_license(self):
         self.assertRegex(self.FRONT, r"(?m)^license: MIT\b")

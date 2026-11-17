@@ -5,7 +5,7 @@
   "plugins": [
     {
       "name": "mergeatlas",
-      "source": "./",
+      "source": "./plugin",
       "description": "Turn a pull request into an interactive map on localhost: a card per changed file, grouped by intent, with cause-and-effect arrows.",
       "category": "code-review"
     }

@@ -3,7 +3,7 @@
 Run from the repository root:
     python3 -m unittest discover -s tests
 
-The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
+The interface under test, in plugin/skills/mergeatlas/scripts/mergeatlas.py:
     stack_id(forge, repo, stack)                -> the stack page's map id, which starts with the forge's name
     stack_record(plan, forge)                   -> {id, repo, number, base, source, url,
                                                     prs: [{number, title, url, state, map_id, files}]}, bottom to top

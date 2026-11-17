@@ -2,12 +2,13 @@
 
 ## What is where
 
-- `skills/mergeatlas/SKILL.md`: the instructions the agent follows to write a map. This is most of the product.
-- `skills/mergeatlas/scripts/mergeatlas.py`: the mechanical half. It fetches the pull request, runs searches, checks the map, serves it and keeps the run record. It uses the Python standard library alone, so there is nothing to install.
-- `skills/mergeatlas/assets/viewer.html`: the viewer, one file with no build step. `site/map/index.html` is a link to it, so the sample map on the site always runs the current viewer.
+- `plugin/skills/mergeatlas/SKILL.md`: the instructions the agent follows to write a map. This is most of the product.
+- `plugin/skills/mergeatlas/scripts/mergeatlas.py`: the mechanical half. It fetches the pull request, runs searches, checks the map, serves it and keeps the run record. It uses the Python standard library alone, so there is nothing to install.
+- `plugin/skills/mergeatlas/assets/viewer.html`: the viewer, one file with no build step. `site/map/index.html` is a link to it, so the sample map on the site always runs the current viewer.
 - `site/`: the landing page at mergeatlas.dev.
 - `tests/`: the tests for the script and for what the script and the viewer rely on in each other.
-- `tools/build_dist.py`: builds the lean bundle a release attaches, the skill folder alone. A file the skill needs at run time goes in its `FILES` too.
+- `plugin/`: everything a user installs, and nothing else, since a company marketplace can fetch this folder alone. Keep tests, notes and images outside it; a test fails when it holds a file `tools/build_dist.py` does not list in `FILES`.
+- `tools/build_dist.py`: builds the zip a release attaches, the skill folder alone.
 
 ## Running the checks
 
@@ -45,7 +46,7 @@ Write the commit subject as what a user can now do or what is now true, such as 
 Claude Code keeps the plugin's users on a release until its version changes, so merging to `main` does not reach them by itself. Installs through skills.sh or a clone do follow `main`.
 
 1. Choose the version. While it starts with 0, bump the minor number for a change to the map format or a command, and the patch number otherwise.
-2. Set it in `VERSION` in `skills/mergeatlas/scripts/mergeatlas.py` and in `.claude-plugin/plugin.json`, and give it a `## <version> - <date>` heading in `CHANGELOG.md`. A test fails while the three disagree.
+2. Set it in `VERSION` in `plugin/skills/mergeatlas/scripts/mergeatlas.py` and in `plugin/.claude-plugin/plugin.json`, and give it a `## <version> - <date>` heading in `CHANGELOG.md`. A test fails while the three disagree.
 3. Merge to `main`, then tag that commit and push the tag:
 
 ```bash

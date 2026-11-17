@@ -7,7 +7,7 @@ A cold reader sees the words of a card with its link targets left out. The scrip
 has passed to a file of its own, so the card never enters the agent's context, and keeps the hash of the words that
 passed in <work-dir>/<map-id>.read.json. A card is read again only when its words change.
 
-The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
+The interface under test, in plugin/skills/mergeatlas/scripts/mergeatlas.py:
     card_words(data, name, stack)       -> the words of the story or one card, as one string
     hashes_of(data, stack)              -> {name: hash of its words}, the story first
     readers(map_id)                     -> writes <map-id>.readers/<name>.txt for each unread name and prints its path

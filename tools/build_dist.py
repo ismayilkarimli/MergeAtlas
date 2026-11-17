@@ -3,9 +3,10 @@
     python3 tools/build_dist.py [--out dist]
 
 It writes dist/mergeatlas/, the skill folder to copy as it is, and dist/mergeatlas-<version>.zip with a .sha256 beside
-it. The bundle holds only what a run needs: SKILL.md, the script, the viewer and the license. Tests, evals, the site,
-design notes and logos stay in this repository. The zip is reproducible: the same sources give the same bytes, so a
-reviewer can rebuild it and compare checksums.
+it. The bundle is plugin/skills/mergeatlas as it is in git: SKILL.md, the script, the viewer and the license. Tests,
+evals, the site and design notes live outside plugin/, so neither this bundle nor a marketplace that points at plugin/
+carries them. The zip is reproducible: the same sources give the same bytes, so a reviewer can rebuild it and compare
+checksums.
 """
 import argparse
 import hashlib
@@ -16,22 +17,18 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SKILL = ROOT / "skills" / "mergeatlas"
+SKILL = ROOT / "plugin" / "skills" / "mergeatlas"
 
-# Published path in the bundle -> source in this repository. Anything not named here stays out.
-FILES = {
-    "SKILL.md": SKILL / "SKILL.md",
-    "LICENSE": ROOT / "LICENSE",
-    "scripts/mergeatlas.py": SKILL / "scripts" / "mergeatlas.py",
-    "assets/viewer.html": SKILL / "assets" / "viewer.html",
-}
+# What the bundle holds, by its path in the skill folder. A test fails if the folder holds anything else, so a new file
+# there is a choice to ship it.
+FILES = ["LICENSE", "SKILL.md", "assets/viewer.html", "scripts/mergeatlas.py"]
 
 # The earliest date a zip entry can carry, so the zip does not change with the files' modification times.
 STAMP = (1980, 1, 1, 0, 0, 0)
 
 
 def version():
-    found = re.search(r'^VERSION = "([^"]+)"', FILES["scripts/mergeatlas.py"].read_text(encoding="utf-8"), re.M)
+    found = re.search(r'^VERSION = "([^"]+)"', (SKILL / "scripts" / "mergeatlas.py").read_text(encoding="utf-8"), re.M)
     if not found:
         sys.exit("no VERSION in scripts/mergeatlas.py")
     return found[1]
@@ -42,10 +39,10 @@ def build(out):
     folder = out / "mergeatlas"
     if folder.exists():
         shutil.rmtree(folder)
-    for published, source in FILES.items():
+    for published in FILES:
         target = folder / published
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, target)
+        shutil.copyfile(SKILL / published, target)
 
     archive = out / f"mergeatlas-{version()}.zip"
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zipped:
