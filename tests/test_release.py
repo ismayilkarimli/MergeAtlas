@@ -21,6 +21,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -199,3 +200,55 @@ class ViewerScript(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheLeanBundle(unittest.TestCase):
+    """tools/build_dist.py ships the skill alone, for teams that vendor it into their own repository."""
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("build_dist", ROOT / "tools" / "build_dist.py")
+        cls.build_dist = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.build_dist)
+
+    def build(self):
+        out = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, out, True)
+        return self.build_dist.build(out)
+
+    def test_it_holds_only_what_a_run_needs(self):
+        import zipfile
+        _, archive, _ = self.build()
+        with zipfile.ZipFile(archive) as zipped:
+            self.assertEqual(sorted(zipped.namelist()), [
+                "mergeatlas/LICENSE", "mergeatlas/SKILL.md", "mergeatlas/assets/viewer.html",
+                "mergeatlas/scripts/mergeatlas.py"])
+
+    def test_it_is_named_for_the_version(self):
+        _, archive, _ = self.build()
+        self.assertEqual(archive.name, f"mergeatlas-{mergeatlas.VERSION}.zip")
+
+    def test_the_same_sources_give_the_same_zip(self):
+        self.assertEqual(self.build()[2], self.build()[2])
+
+    def test_the_bundled_script_runs(self):
+        folder, _, _ = self.build()
+        ran = subprocess.run([sys.executable, str(folder / "scripts" / "mergeatlas.py"), "version"],
+                             capture_output=True, text=True)
+        self.assertEqual(ran.stdout.strip(), mergeatlas.VERSION)
+
+
+class TheSkillsFrontmatter(unittest.TestCase):
+    FRONT = (ROOT / "skills" / "mergeatlas" / "SKILL.md").read_text().split("---")[1]
+
+    def test_it_names_the_license(self):
+        self.assertRegex(self.FRONT, r"(?m)^license: MIT\b")
+
+    def test_it_says_what_it_needs_in_under_500_characters(self):
+        found = re.search(r"(?m)^compatibility: (.+)$", self.FRONT)
+        self.assertIsNotNone(found)
+        self.assertLessEqual(len(found[1]), 500)
+
+    def test_it_allows_asking_the_user(self):
+        self.assertRegex(self.FRONT, r"(?m)^  - AskUserQuestion$")

@@ -1,6 +1,20 @@
 ---
 name: mergeatlas
 description: "MergeAtlas: an interactive infinite-canvas diagram of a pull request on localhost, with a card per changed file, grouped by intent, and cause-and-effect arrows that explain what changed and why. Use when the user asks to map, diagram or visualize a PR, or to change or show the model MergeAtlas's cold readers use."
+license: MIT. Complete terms in LICENSE.
+compatibility: Needs Python 3.9 or newer (standard library only), git, and the GitHub CLI (gh) for GitHub or the GitLab CLI (glab) for GitLab, signed in to the PR's host. Serves the map on 127.0.0.1 only. Works best with an agent that can run subagents.
+allowed-tools:
+  - AskUserQuestion
+  - Read
+  - Write
+  - Edit
+  - Grep
+  - Glob
+  - Agent
+  - Bash(python3 *)
+  - Bash(python *)
+  - Bash(py *)
+  - Bash(git show *)
 ---
 
 A **map** lets a reviewer understand a PR from the canvas alone: the problem it solves, which files change, how they relate, what each one is and why it needs changing, and how a change in A reaches B through the code that connects them. The analysis is yours; `scripts/mergeatlas.py` (next to this file) fetches the PR, runs the searches you choose for reach, checks the map, and publishes it.
