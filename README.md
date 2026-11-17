@@ -99,6 +99,10 @@ ln -s "$PWD/MergeAtlas/skills/mergeatlas" ~/.claude/skills/mergeatlas
 
 This is the setup where `/mergeatlas` works without the plugin's prefix.
 
+### Adding it to a company repository
+
+Each [release](https://github.com/ismayilkarimli/MergeAtlas/releases) carries `mergeatlas-<version>.zip`, the skill alone: `SKILL.md`, the script, the viewer and the license, with none of this repository's tests, evals or site. Unzip it into your repository's skills folder, such as `.claude/skills/`, and compare the `.sha256` beside it. To build the same bundle from a clone, run `python3 tools/build_dist.py`; the same sources give the same zip, byte for byte.
+
 ### Using it
 
 From inside the pull request's repository, ask your agent to map it. It gives you a link as soon as the map is written, and goes on checking the map while you read. Every map you have made is listed at `http://127.0.0.1:8765`. After new commits, ask it to map the pull request again: it updates the map you have. To start over, ask it to map the pull request afresh.

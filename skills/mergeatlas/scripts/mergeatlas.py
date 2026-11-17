@@ -139,11 +139,13 @@ BRANCH_KEY = re.compile(r"(?:^|/)([A-Za-z][A-Za-z0-9]{1,9}-\d+)(?![A-Za-z0-9])")
 
 
 def gh(*args):
-    return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
+    command = ["gh", *args]
+    return subprocess.run(command, check=True, capture_output=True, text=True).stdout
 
 
 def glab(*args):
-    return subprocess.run(["glab", *args], check=True, capture_output=True, text=True).stdout
+    command = ["glab", *args]
+    return subprocess.run(command, check=True, capture_output=True, text=True).stdout
 
 
 def text_only(diff):
@@ -161,7 +163,8 @@ def text_only(diff):
 
 
 def files_at(commit):
-    listed = subprocess.run(["git", "ls-tree", "-r", "-z", "--name-only", commit], check=True, capture_output=True, text=True)
+    command = ["git", "ls-tree", "-r", "-z", "--name-only", commit]
+    listed = subprocess.run(command, check=True, capture_output=True, text=True)
     return set(filter(None, listed.stdout.split("\0")))
 
 
@@ -169,11 +172,9 @@ def co_changes(changed, commit):
     """Maps each changed file to the unchanged files its past commits often touched too."""
     existing, found = {f for f in files_at(commit) - changed if not COCHANGE_NOISE.search(f)}, {}
     for path in sorted(changed):
-        log = subprocess.run(
-            ["git", "log", "-n", str(COCHANGE_COMMITS), "--format=%x00", "--name-only", "--no-renames", "--full-diff",
-             commit, "--", path],
-            capture_output=True, text=True, errors="replace",
-        ).stdout
+        command = ["git", "log", "-n", str(COCHANGE_COMMITS), "--format=%x00", "--name-only", "--no-renames",
+                   "--full-diff", commit, "--", path]
+        log = subprocess.run(command, capture_output=True, text=True, errors="replace").stdout
         commits = [set(filter(None, c.split("\n"))) for c in log.split("\0")[1:]]
         commits = [c for c in commits if len(c) <= COCHANGE_LARGEST_COMMIT]
         counts = Counter(file for c in commits for file in c & existing)
@@ -400,11 +401,12 @@ class GitHub:
         if not link:
             return {}
         host, owner, repo, number = link.groups()
+        hostname = ["--hostname", host] if host != "github.com" else []
+        endpoint = f"repos/{owner}/{repo}/pulls/{number}"
+        query = "{head: .head.sha, state: (if .merged then \"merged\" else .state end)}"
+        command = ["gh", "api", *hostname, endpoint, "--jq", query]
         try:
-            asked = subprocess.run(
-                ["gh", "api", *(["--hostname", host] if host != "github.com" else []), f"repos/{owner}/{repo}/pulls/{number}",
-                 "--jq", "{head: .head.sha, state: (if .merged then \"merged\" else .state end)}"],
-                capture_output=True, text=True, timeout=15)
+            asked = subprocess.run(command, capture_output=True, text=True, timeout=15)
             return json.loads(asked.stdout) if asked.returncode == 0 else {}
         except (OSError, ValueError, subprocess.SubprocessError):
             return {}
@@ -484,7 +486,8 @@ class GitLab:
 
     def current_pr(self):
         """The IID of the current branch's open merge request, None when it has none."""
-        branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True).stdout.strip()
+        command = ["git", "branch", "--show-current"]
+        branch = subprocess.run(command, capture_output=True, text=True).stdout.strip()
         if not branch:
             return None
         try:
@@ -545,9 +548,9 @@ class GitLab:
         if not link:
             return {}
         host, repo, number = link.groups()
+        command = ["glab", "api", *glab_host(host.lower()), self._mr_path(repo, number)]
         try:
-            asked = subprocess.run(["glab", "api", *glab_host(host.lower()), self._mr_path(repo, number)],
-                                   capture_output=True, text=True, timeout=15)
+            asked = subprocess.run(command, capture_output=True, text=True, timeout=15)
             mr = json.loads(asked.stdout) if asked.returncode == 0 else {}
             return {"head": mr["sha"], "state": MR_STATES[mr["state"]]} if mr else {}
         except (OSError, ValueError, KeyError, subprocess.SubprocessError):
@@ -574,8 +577,9 @@ class GitLab:
 
 def origin():
     """The host and project path of this clone's origin remote, None when it has none."""
+    command = ["git", "remote", "get-url", "origin"]
     try:
-        url = subprocess.run(["git", "remote", "get-url", "origin"], check=True, capture_output=True, text=True).stdout.strip()
+        url = subprocess.run(command, check=True, capture_output=True, text=True).stdout.strip()
     except (subprocess.CalledProcessError, OSError):
         return None
     found = REMOTE.fullmatch(url)
@@ -771,26 +775,30 @@ def fetch(args):
 
 
 def has_commit(sha):
-    return subprocess.run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], capture_output=True).returncode == 0
+    command = ["git", "cat-file", "-e", f"{sha}^{{commit}}"]
+    return subprocess.run(command, capture_output=True).returncode == 0
 
 
 def ensure_commit(sha):
     """Fetches a commit the clone lacks, such as a PR's old head after a force push; GitHub keeps them reachable."""
     if sha and not has_commit(sha):
-        subprocess.run(["git", "fetch", "origin", sha], capture_output=True)
+        command = ["git", "fetch", "origin", sha]
+        subprocess.run(command, capture_output=True)
 
 
 def is_ancestor(older, newer):
-    return subprocess.run(["git", "merge-base", "--is-ancestor", older, newer], capture_output=True).returncode == 0
+    command = ["git", "merge-base", "--is-ancestor", older, newer]
+    return subprocess.run(command, capture_output=True).returncode == 0
 
 
 def local_diff(built, head):
     """The PR's own changes from the commit it was built on, as a diff of its text files and the list of every file it
     changes with its added and removed lines. Both come from the clone, so no host has to produce them; a binary file
     counts no lines, and a renamed file is listed at its new path."""
-    diff = subprocess.run(["git", "diff", "-M", built, head], capture_output=True, text=True, check=True).stdout
-    counted = subprocess.run(["git", "diff", "--numstat", "-z", "-M", built, head], capture_output=True, text=True,
-                             check=True).stdout.split("\0")
+    command = ["git", "diff", "-M", built, head]
+    diff = subprocess.run(command, capture_output=True, text=True, check=True).stdout
+    command = ["git", "diff", "--numstat", "-z", "-M", built, head]
+    counted = subprocess.run(command, capture_output=True, text=True, check=True).stdout.split("\0")
     files = []
     while counted and counted[0]:
         added, deleted, path = counted.pop(0).split("\t", 2)
@@ -810,10 +818,12 @@ def fetch_pr(forge, repo, number, stack, fresh=False):
         sys.exit(str(problem))
     pr["stack"] = stack
     map_id = map_id_of(forge, repo, pr["number"])
-    subprocess.run(["git", "fetch", "origin", forge.fetch_ref(pr["number"])], check=True, capture_output=True)
+    command = ["git", "fetch", "origin", forge.fetch_ref(pr["number"])]
+    subprocess.run(command, check=True, capture_output=True)
     head, base = pr["headRefOid"], pr.pop("baseRefOid")
     ensure_commit(base)
-    merge_base = subprocess.run(["git", "merge-base", head, base], capture_output=True, text=True).stdout.strip() or base
+    command = ["git", "merge-base", head, base]
+    merge_base = subprocess.run(command, capture_output=True, text=True).stdout.strip() or base
     old_path = WORK / f"{map_id}.pr.json"
     old = json.loads(old_path.read_text()) if old_path.exists() else {}
     for sha in (old.get("pinned"), old.get("headRefOid")):
@@ -909,10 +919,8 @@ def plan_lines(map_id, plan):
 def matches_of(term, mode, commit):
     """Maps the files holding the term to their matching lines."""
     flags = {"word": ["-F", "-w"], "substring": ["-F"], "regex": ["-E"]}[mode]
-    found = subprocess.run(
-        ["git", "grep", "-n", "-I", "--null", *flags, "-e", term, commit],
-        capture_output=True, text=True, errors="replace",
-    )
+    command = ["git", "grep", "-n", "-I", "--null", *flags, "-e", term, commit]
+    found = subprocess.run(command, capture_output=True, text=True, errors="replace")
     if found.returncode > 1:
         sys.exit(found.stderr)
     matches = {}
@@ -966,7 +974,8 @@ def source_at(commit):
     """Returns a reader for a file's lines at commit, None when it is not there."""
     @lru_cache(maxsize=None)
     def read(path):
-        shown = subprocess.run(["git", "show", f"{commit}:{path}"], capture_output=True, text=True, errors="replace")
+        command = ["git", "show", f"{commit}:{path}"]
+        shown = subprocess.run(command, capture_output=True, text=True, errors="replace")
         return shown.stdout.splitlines() if shown.returncode == 0 else None
     return read
 
@@ -1196,7 +1205,8 @@ def lines_moved(old, new):
 def delta_of(old, pr, old_rows, new_rows, old_pinned, built):
     """Writes up what changed in a PR since its last map, as the commits added on top, or else the lines that entered or left its diff."""
     if is_ancestor(old["headRefOid"], pr["headRefOid"]) and old_pinned == built:
-        shown = subprocess.run(["git", "diff", "-M", old["headRefOid"], pr["headRefOid"]], capture_output=True, text=True, check=True)
+        command = ["git", "diff", "-M", old["headRefOid"], pr["headRefOid"]]
+        shown = subprocess.run(command, capture_output=True, text=True, check=True)
         return text_only(shown.stdout), "commits"
     changed = lambda rows, path: [row for row in rows.get(path, []) if row[0].startswith(("+", "-"))]
     files = []
@@ -2028,10 +2038,8 @@ def serve():
     # which would otherwise close it along with the console.
     detached = {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" \
         else {"start_new_session": True}
-    subprocess.Popen(
-        [sys.executable, "-X", "utf8", __file__, "serve"],
-        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **detached,
-    )
+    command = [sys.executable, "-X", "utf8", __file__, "serve"]
+    subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **detached)
 
 
 def publish(map_id, asked=True):
@@ -2235,7 +2243,8 @@ def main():
     # a diff or a PR's text may carry. UTF-8 mode makes files, git's output and this script's own output UTF-8, so a
     # run without it starts again with it.
     if os.name == "nt" and not sys.flags.utf8_mode:
-        sys.exit(subprocess.run([sys.executable, "-X", "utf8", *sys.argv]).returncode)
+        command = [sys.executable, "-X", "utf8", *sys.argv]
+        sys.exit(subprocess.run(command).returncode)
     command, args = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else ("", [])
     if command in ("version", "--version") and not args:
         print(VERSION)

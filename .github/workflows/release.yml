@@ -37,7 +37,11 @@ jobs:
             echo "::error::CHANGELOG.md has nothing under '## $VERSION'."
             exit 1
           fi
+      - name: Build the lean skill bundle
+        run: python3 tools/build_dist.py --out dist
       - name: Publish the release
-        run: gh release create "$GITHUB_REF_NAME" --title "MergeAtlas $VERSION" --notes-file notes.md --verify-tag
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "MergeAtlas $VERSION" --notes-file notes.md --verify-tag \
+            "dist/mergeatlas-$VERSION.zip" "dist/mergeatlas-$VERSION.zip.sha256"
         env:
           GH_TOKEN: ${{ github.token }}

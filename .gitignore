@@ -2,3 +2,4 @@
 __pycache__/
 .wrangler/
 .ruff_cache/
+dist/

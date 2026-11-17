@@ -7,6 +7,7 @@
 - `skills/mergeatlas/assets/viewer.html`: the viewer, one file with no build step. `site/map/index.html` is a link to it, so the sample map on the site always runs the current viewer.
 - `site/`: the landing page at mergeatlas.dev.
 - `tests/`: the tests for the script and for what the script and the viewer rely on in each other.
+- `tools/build_dist.py`: builds the lean bundle a release attaches, the skill folder alone. A file the skill needs at run time goes in its `FILES` too.
 
 ## Running the checks
 
