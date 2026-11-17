@@ -139,7 +139,7 @@ def prepare(label, key, skill=None):
     clone = ensure_clone(pull)
     folder, map_id = folder_of(label), map_id_of(pull)
     folder.mkdir(parents=True, exist_ok=True)
-    snapshot(folder, Path(skill) if skill else REPO / "skills" / "mergeatlas")
+    snapshot(folder, Path(skill) if skill else REPO / "plugin" / "skills" / "mergeatlas")
     for left in [*(folder / "home" / "work").glob(f"{map_id}.*"), folder / "home" / "data" / f"{map_id}.json", *folder.glob(f"{key}.*")]:
         clear(left)
     prompt = PROMPT.format(folder=folder, repo=pull["repo"], number=pull["number"])
@@ -279,7 +279,7 @@ def score_pull(label, key):
     pull = pull_of(key)
     folder, map_id, clone = folder_of(label), map_id_of(pull), clone_of(pull)
     stub = folder / "score.py"
-    stub.write_text(stub_text(folder, REPO / "skills" / "mergeatlas" / "scripts" / "mergeatlas.py"))
+    stub.write_text(stub_text(folder, REPO / "plugin" / "skills" / "mergeatlas" / "scripts" / "mergeatlas.py"))
     files = [Path(line.split("\t")[1]) for line in run_stub(stub, clone, "claims", map_id, "--all").splitlines() if "\t" in line]
     links, found = 0, Counter()
     for file in files:

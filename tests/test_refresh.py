@@ -10,7 +10,7 @@ A map is regenerated only when the user runs MergeAtlas, and the script handles 
 
 Code outside a PR's own files is pinned to the commit the PR was built on, so a rebase leaves those links alone.
 
-The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
+The interface under test, in plugin/skills/mergeatlas/scripts/mergeatlas.py:
     fingerprint(card, rows)             -> a hash of the card's added and removed lines only
     patch_id(rows)                      -> a hash of every file's added and removed lines
     line_map(old, new)                  -> {old line number: new line number} for lines both versions keep

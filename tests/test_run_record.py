@@ -7,7 +7,7 @@ Every command that works on a map adds one line to <work-dir>/<map-id>.run.jsonl
 record never holds code, paths, search terms or the map's words, so report can be pasted into a bug report as it
 stands. A run starts where fetch hands the agent work to do, and report sums up the latest one.
 
-The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
+The interface under test, in plugin/skills/mergeatlas/scripts/mergeatlas.py:
     note(map_id, step, **numbers)       -> appends one step to the record
     rule_of(problem)                    -> the rule a publish rejection was for, "other" when no rule names it
     words_in(data)                      -> the words of prose a map holds, link targets left out

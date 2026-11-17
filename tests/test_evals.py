@@ -69,7 +69,7 @@ class Labels(unittest.TestCase):
         self.map_id = run.map_id_of(self.small)
 
     def skill(self, name, script):
-        folder = self.root / name / "skills" / "mergeatlas"
+        folder = self.root / name / "plugin" / "skills" / "mergeatlas"
         (folder / "scripts" / "__pycache__").mkdir(parents=True, exist_ok=True)
         (folder / "scripts" / "mergeatlas.py").write_text(script)
         (folder / "SKILL.md").write_text(name)
@@ -97,7 +97,7 @@ class Labels(unittest.TestCase):
 
 class Snapshots(Labels):
     def test_the_stub_runs_the_skill_against_the_label_s_cache(self):
-        self.prepare("lab", skill=REPO / "skills" / "mergeatlas")
+        self.prepare("lab", skill=REPO / "plugin" / "skills" / "mergeatlas")
         stub = run.folder_of("lab") / "skill" / "scripts" / "mergeatlas.py"
         self.assertTrue((stub.parent / "mergeatlas_real.py").exists())
         self.assertFalse((stub.parent / "__pycache__").exists())

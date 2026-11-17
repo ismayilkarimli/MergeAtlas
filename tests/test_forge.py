@@ -6,7 +6,7 @@ Run from the repository root:
 Nothing here calls GitHub: `gh` is replaced by canned answers, and the tests check what the forge asks of it and how it
 reshapes the answers. The stack queries are covered in test_stack_detection.py.
 
-The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
+The interface under test, in plugin/skills/mergeatlas/scripts/mergeatlas.py:
     forge_for(link)                  -> the forge a link, or the clone's origin when there is none, belongs to
                                         (GitLab's half of that is in test_gitlab.py)
     GitHub.name, .label              -> "github", used in map ids, and "GitHub", shown to the reader

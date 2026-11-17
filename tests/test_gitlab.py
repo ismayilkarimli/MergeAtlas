@@ -8,7 +8,7 @@ the forge asks and how it reshapes what GitLab says. The answers are real: tests
 merge request and the issues one closes as GitLab's API returned them, trimmed to the fields MergeAtlas reads. How the
 viewer opens GitLab's links is tested beside GitHub's in test_release.py.
 
-The interface under test, in skills/mergeatlas/scripts/mergeatlas.py, is GitHub's, with a host to aim glab at:
+The interface under test, in plugin/skills/mergeatlas/scripts/mergeatlas.py, is GitHub's, with a host to aim glab at:
     GitLab(host).parse_target(text)  -> ("pr", project path, IID); a project path may nest groups to any depth
     forge_for(link)                  -> GitLab for a merge request link, and for a link-less fetch when the origin remote is
                                         on gitlab.com or a host with "gitlab" in its name

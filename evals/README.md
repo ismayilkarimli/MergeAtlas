@@ -59,7 +59,7 @@ git worktree add /tmp/mergeatlas-before <the release before the change>
 ```
 
 ```bash
-python3 evals/run.py map before small medium --skill /tmp/mergeatlas-before/skills/mergeatlas
+python3 evals/run.py map before small medium --skill /tmp/mergeatlas-before/plugin/skills/mergeatlas
 ```
 
 ```bash

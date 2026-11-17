@@ -35,7 +35,7 @@ The reviewer gets a review request (often in chat), opens the pull request, and 
 
 ## Brand Commitments
 
-- Name: MergeAtlas. Logo: slate folded map with a git graph and green M / red A glyph (`skills/mergeatlas/assets/logo.svg`, `logo-3d.png`, `logo-glyph.svg`).
+- Name: MergeAtlas. Logo: slate folded map with a git graph and green M / red A glyph (`docs/logo/logo.svg`, `logo-3d.png`, `logo-glyph.svg`).
 - Landing page voice: put the visitor in a reviewer's shoes instead of telling. Second person, present tense, plain; an unnamed narrator, never "we" or "I". "Your colleague", never a name; Sam exists only inside the fake OS.
 - Copy speaks to the job and the limits of the current hire, never to MergeAtlas features. The name opens the headline as "MergeAtlas:" and never appears in the subhead or nav button; "map" names features only inside the game.
 - Questions are the reviewer's own questions at the moment they arise, never quizzes or questions about tools. Show, don't tell. The villain is missing context, never the colleague.

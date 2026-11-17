@@ -8,7 +8,7 @@ The script writes each claim not yet checked to a file with the lines it cites, 
 what the linked words say, and keeps the hash of every claim that held in <work-dir>/<map-id>.checked.json. A claim is
 checked again only when its words, its path or the text of its lines change.
 
-The interface under test, in skills/mergeatlas/scripts/mergeatlas.py:
+The interface under test, in plugin/skills/mergeatlas/scripts/mergeatlas.py:
     claims_of(data, read)               -> {name: [claim, ...]}, the story first, each link under the first name that holds it
     claims(map_id, everything)          -> writes <map-id>.claims/<name>.txt and .json for each name with unchecked claims
     checked(map_id, args)               -> records the claims a checker found to hold

@@ -1,4 +1,4 @@
-<p align="center"><img src="skills/mergeatlas/assets/logo-3d.png" width="180" alt="MergeAtlas logo"></p>
+<p align="center"><img src="docs/logo/logo-3d.png" width="180" alt="MergeAtlas logo"></p>
 
 <h1 align="center">MergeAtlas</h1>
 
@@ -94,14 +94,30 @@ git clone https://github.com/ismayilkarimli/MergeAtlas.git
 ```
 
 ```bash
-ln -s "$PWD/MergeAtlas/skills/mergeatlas" ~/.claude/skills/mergeatlas
+ln -s "$PWD/MergeAtlas/plugin/skills/mergeatlas" ~/.claude/skills/mergeatlas
 ```
 
 This is the setup where `/mergeatlas` works without the plugin's prefix.
 
-### Adding it to a company repository
+### In a company's own plugin marketplace
 
-Each [release](https://github.com/ismayilkarimli/MergeAtlas/releases) carries `mergeatlas-<version>.zip`, the skill alone: `SKILL.md`, the script, the viewer and the license, with none of this repository's tests, evals or site. Unzip it into your repository's skills folder, such as `.claude/skills/`, and compare the `.sha256` beside it. To build the same bundle from a clone, run `python3 tools/build_dist.py`; the same sources give the same zip, byte for byte.
+Everything MergeAtlas runs sits in [`plugin/`](plugin): the plugin manifest, `SKILL.md`, the script, the viewer and the license. Tests, evals and the site live outside it. List MergeAtlas in your marketplace's `.claude-plugin/marketplace.json` with a `git-subdir` source, and Claude Code fetches that folder alone, with a sparse checkout, at the release you name:
+
+```json
+{
+  "name": "mergeatlas",
+  "source": {
+    "source": "git-subdir",
+    "url": "ismayilkarimli/MergeAtlas",
+    "path": "plugin",
+    "ref": "v0.6.0"
+  }
+}
+```
+
+To pin the exact code you reviewed, add `"sha"` with the full commit hash the tag points at; Claude Code then checks out that commit. Moving to a new release is a change to `ref` and `sha`, and `git diff v0.6.0 <new tag> -- plugin` shows everything it brings in.
+
+To vendor the skill instead, each [release](https://github.com/ismayilkarimli/MergeAtlas/releases) carries `mergeatlas-<version>.zip`, the same skill folder, with a `.sha256` beside it. Unzip it into a skills folder such as `.claude/skills/`. `python3 tools/build_dist.py` builds the same zip from a clone, byte for byte.
 
 ### Using it
 
@@ -131,7 +147,7 @@ Ask your agent to "report this map". It runs `mergeatlas.py report`, which sums 
 
 ## How it works
 
-The analysis comes from your agent, which reads the issue, the diff and the surrounding source. `skills/mergeatlas/scripts/mergeatlas.py` does the mechanical part: it fetches the pull request, runs the searches your agent chooses for affected files, checks the map against the diff, and serves it. Those searches are plain text, so MergeAtlas works in any language. Maps and working files stay on your machine in `~/.cache/mergeatlas`.
+The analysis comes from your agent, which reads the issue, the diff and the surrounding source. `plugin/skills/mergeatlas/scripts/mergeatlas.py` does the mechanical part: it fetches the pull request, runs the searches your agent chooses for affected files, checks the map against the diff, and serves it. Those searches are plain text, so MergeAtlas works in any language. Maps and working files stay on your machine in `~/.cache/mergeatlas`.
 
 The viewer's server listens on `127.0.0.1` alone. It hands out the viewer, the published maps and a list of them, and nothing else in that folder, and it refuses requests made under any other host name. While a map is open, the server asks `gh` whether the pull request has new commits, once a minute at most. To report a security problem, see [SECURITY.md](SECURITY.md).
 

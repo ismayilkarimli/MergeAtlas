@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
       - name: Check the tag names the version in the code
         run: |
-          version="$(python3 skills/mergeatlas/scripts/mergeatlas.py version)"
+          version="$(python3 plugin/skills/mergeatlas/scripts/mergeatlas.py version)"
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then
             echo "::error::The tag is $GITHUB_REF_NAME but the code is version $version. Tag v$version, or bump the version first."
             exit 1
