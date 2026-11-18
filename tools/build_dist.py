@@ -42,14 +42,16 @@ def build(out):
     for published in FILES:
         target = folder / published
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(SKILL / published, target)
+        shutil.copy2(SKILL / published, target)
 
     archive = out / f"mergeatlas-{version()}.zip"
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zipped:
         for published in sorted(FILES):
             entry = zipfile.ZipInfo(f"mergeatlas/{published}", date_time=STAMP)
             entry.compress_type = zipfile.ZIP_DEFLATED
-            entry.external_attr = (0o644 & 0xFFFF) << 16
+            # The script runs as a program of its own, as SKILL.md calls it, so it keeps its executable bit.
+            mode = 0o755 if published.startswith("scripts/") else 0o644
+            entry.external_attr = (0o100000 | mode) << 16
             zipped.writestr(entry, (folder / published).read_bytes())
 
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()

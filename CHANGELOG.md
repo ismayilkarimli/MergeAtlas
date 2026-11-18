@@ -4,6 +4,12 @@ What changed in each release of MergeAtlas, newest first. Versions follow [seman
 
 If you installed the Claude Code plugin, you stay on a release until the next one is published, then `/plugin marketplace update mergeatlas` brings it in. Installs through skills.sh or a clone follow the `main` branch.
 
+## 0.6.2 - 2026-11-18
+
+### Changed
+
+- The skill pre-approves only its own script, as `Bash(${CLAUDE_SKILL_DIR}/scripts/mergeatlas.py *)`, where it allowed any `python3`, `python` or `py` command. The script runs as a program of its own, so `SKILL.md` calls it by its path and names no interpreter; where that fails, as it can on Windows, the agent puts `python3`, `python` or `py` in front, and Claude Code asks before running it.
+
 ## 0.6.1 - 2026-11-18
 
 ### Changed

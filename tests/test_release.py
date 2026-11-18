@@ -257,6 +257,13 @@ class TheLeanBundle(unittest.TestCase):
     def test_the_same_sources_give_the_same_zip(self):
         self.assertEqual(self.build()[2], self.build()[2])
 
+    def test_the_bundled_script_stays_executable(self):
+        import zipfile
+        _, archive, _ = self.build()
+        with zipfile.ZipFile(archive) as zipped:
+            mode = zipped.getinfo("mergeatlas/scripts/mergeatlas.py").external_attr >> 16
+        self.assertEqual(mode & 0o777, 0o755)
+
     def test_the_bundled_script_runs(self):
         folder, _, _ = self.build()
         ran = subprocess.run([sys.executable, str(folder / "scripts" / "mergeatlas.py"), "version"],
@@ -277,3 +284,22 @@ class TheSkillsFrontmatter(unittest.TestCase):
 
     def test_it_allows_asking_the_user(self):
         self.assertRegex(self.FRONT, r"(?m)^  - AskUserQuestion$")
+
+    def test_it_pre_approves_its_own_script_and_no_interpreter(self):
+        rules = re.findall(r"(?m)^  - (Bash\(.*\))$", self.FRONT)
+        self.assertEqual(rules, ["Bash(${CLAUDE_SKILL_DIR}/scripts/mergeatlas.py *)", "Bash(git show *)"])
+
+    def test_every_command_it_gives_runs_the_script_the_way_its_rule_allows(self):
+        body = (ROOT / "plugin" / "skills" / "mergeatlas" / "SKILL.md").read_text().split("---", 2)[2]
+        # A span with arguments is a command; a bare name, such as `scripts/mergeatlas.py`, only names the script.
+        commands = [c for c in re.findall(r"`([^`]*mergeatlas\.py[^`]*)`", body) if " " in c]
+        self.assertGreater(len(commands), 5)
+        for command in commands:
+            self.assertTrue(command.startswith("${CLAUDE_SKILL_DIR}/scripts/mergeatlas.py"), command)
+
+    def test_the_script_runs_as_a_program(self):
+        script = ROOT / "plugin" / "skills" / "mergeatlas" / "scripts" / "mergeatlas.py"
+        self.assertTrue(script.read_text().startswith("#!/usr/bin/env python3\n"))
+        mode = subprocess.run(["git", "ls-files", "-s", "--", str(script)], cwd=ROOT, capture_output=True,
+                              text=True).stdout.split(" ")[0]
+        self.assertEqual(mode, "100755")
