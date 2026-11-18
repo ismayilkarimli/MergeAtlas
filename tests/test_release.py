@@ -289,13 +289,19 @@ class TheSkillsFrontmatter(unittest.TestCase):
         rules = re.findall(r"(?m)^  - (Bash\(.*\))$", self.FRONT)
         self.assertEqual(rules, ["Bash(${CLAUDE_SKILL_DIR}/scripts/mergeatlas.py *)", "Bash(git show *)"])
 
-    def test_every_command_it_gives_runs_the_script_the_way_its_rule_allows(self):
+    def test_every_command_it_gives_runs_its_own_script(self):
         body = (ROOT / "plugin" / "skills" / "mergeatlas" / "SKILL.md").read_text().split("---", 2)[2]
         # A span with arguments is a command; a bare name, such as `scripts/mergeatlas.py`, only names the script.
         commands = [c for c in re.findall(r"`([^`]*mergeatlas\.py[^`]*)`", body) if " " in c]
         self.assertGreater(len(commands), 5)
         for command in commands:
-            self.assertTrue(command.startswith("${CLAUDE_SKILL_DIR}/scripts/mergeatlas.py"), command)
+            self.assertTrue(command.startswith("scripts/mergeatlas.py "), command)
+
+    def test_its_body_names_no_agent_specific_variable(self):
+        # Only Claude Code fills in ${CLAUDE_SKILL_DIR}; every agent reads the body, so it names the script by its
+        # place in the skill folder. The variable belongs only in allowed-tools, which other agents ignore.
+        body = (ROOT / "plugin" / "skills" / "mergeatlas" / "SKILL.md").read_text().split("---", 2)[2]
+        self.assertNotIn("${", body)
 
     def test_the_script_runs_as_a_program(self):
         script = ROOT / "plugin" / "skills" / "mergeatlas" / "scripts" / "mergeatlas.py"
