@@ -1,7 +1,8 @@
 name: Release
 
-# Pushing a tag such as v0.2.0 publishes a GitHub release with that version's part of CHANGELOG.md, once CI passes
-# and the tag names the version the script and the plugin carry.
+# Pushing a tag such as v0.2.0, once CI passes and the tag names the version the script and the plugin carry, copies
+# plugin/ into the lean repository the marketplace installs from, then publishes a GitHub release with that version's
+# part of CHANGELOG.md and the zip of the skill.
 on:
   push:
     tags: ["v*"]
@@ -13,8 +14,16 @@ jobs:
   ci:
     uses: ./.github/workflows/ci.yml
 
-  release:
+  plugin:
     needs: ci
+    uses: ./.github/workflows/publish-plugin.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets:
+      PLUGIN_DEPLOY_KEY: ${{ secrets.PLUGIN_DEPLOY_KEY }}
+
+  release:
+    needs: plugin
     runs-on: ubuntu-24.04
     permissions:
       contents: write

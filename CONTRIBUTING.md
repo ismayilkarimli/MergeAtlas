@@ -7,7 +7,7 @@
 - `plugin/skills/mergeatlas/assets/viewer.html`: the viewer, one file with no build step. `site/map/index.html` is a link to it, so the sample map on the site always runs the current viewer.
 - `site/`: the landing page at mergeatlas.dev.
 - `tests/`: the tests for the script and for what the script and the viewer rely on in each other.
-- `plugin/`: everything a user installs, and nothing else, since a company marketplace can fetch this folder alone. Keep tests, notes and images outside it; a test fails when it holds a file `tools/build_dist.py` does not list in `FILES`.
+- `plugin/`: everything a user installs, and nothing else. Each release copies it to [ismayilkarimli/mergeatlas-plugin](https://github.com/ismayilkarimli/mergeatlas-plugin), which the marketplace installs from and which refuses any other change, so never edit that repository: change `plugin/` here. To try a change in Claude Code before it is released, run `claude --plugin-dir ./plugin`. Keep tests, notes and images outside it; a test fails when it holds a file `tools/build_dist.py` does not list in `FILES`.
 - `tools/build_dist.py`: builds the zip a release attaches, the skill folder alone.
 
 ## Running the checks
@@ -57,4 +57,4 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-The release workflow runs CI, checks that the tag names the version in the code, and publishes a GitHub release with that version's part of the changelog.
+The release workflow runs CI, copies `plugin/` into the lean repository as one commit with the same tag, checks that its tree is `plugin/` exactly, then publishes a GitHub release with that version's part of the changelog and the zip of the skill. A tag the lean repository already has is never published again, so a release that went wrong gets a new version. The workflow writes there with a deploy key stored as the `PLUGIN_DEPLOY_KEY` secret, the only key that repository's rulesets let through.

@@ -234,19 +234,25 @@ class TheLeanBundle(unittest.TestCase):
         tracked = subprocess.run(["git", "ls-files", "--", "."], cwd=skill, capture_output=True, text=True).stdout.split()
         self.assertEqual(sorted(tracked), sorted(self.build_dist.FILES))
 
-    def test_the_plugin_folder_holds_only_the_manifest_and_the_skill(self):
+    def test_the_plugin_folder_holds_only_the_manifest_the_skill_and_its_readme(self):
         command = ["git", "ls-files", "--", "plugin"]
         tracked = subprocess.run(command, cwd=ROOT, capture_output=True, text=True).stdout.split()
         self.assertEqual(sorted(tracked), sorted(
-            ["plugin/.claude-plugin/plugin.json"] + [f"plugin/skills/mergeatlas/{f}" for f in self.build_dist.FILES]))
+            ["plugin/.claude-plugin/plugin.json", "plugin/LICENSE", "plugin/README.md"]
+            + [f"plugin/skills/mergeatlas/{f}" for f in self.build_dist.FILES]))
 
-    def test_the_skills_license_is_the_repositorys(self):
-        self.assertEqual((ROOT / "plugin" / "skills" / "mergeatlas" / "LICENSE").read_text(),
-                         (ROOT / "LICENSE").read_text())
+    def test_every_license_copy_is_the_repositorys(self):
+        for copy in (ROOT / "plugin" / "LICENSE", ROOT / "plugin" / "skills" / "mergeatlas" / "LICENSE"):
+            self.assertEqual(copy.read_text(), (ROOT / "LICENSE").read_text(), copy)
 
-    def test_the_marketplace_points_at_the_plugin_folder(self):
+    def test_the_marketplace_installs_the_lean_repository(self):
         marketplace = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
-        self.assertEqual([p["source"] for p in marketplace["plugins"]], ["./plugin"])
+        self.assertEqual([p["source"] for p in marketplace["plugins"]],
+                         [{"source": "github", "repo": "ismayilkarimli/mergeatlas-plugin"}])
+
+    def test_the_lean_readme_names_the_current_release(self):
+        readme = (ROOT / "plugin" / "README.md").read_text()
+        self.assertEqual(set(re.findall(r"v\d+\.\d+\.\d+", readme)), {f"v{mergeatlas.VERSION}"})
 
     def test_the_same_sources_give_the_same_zip(self):
         self.assertEqual(self.build()[2], self.build()[2])
