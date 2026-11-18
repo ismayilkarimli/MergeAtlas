@@ -69,13 +69,14 @@ jobs:
             echo "::error::The lean repository already has $TAG. A published release is never replaced."
             exit 1
           fi
+          git config user.name "MergeAtlas release"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout --quiet -B main
           git rm -r --quiet --ignore-unmatch .
           cp -R ../source/plugin/. .
           git add -A
           source_commit="$(git -C ../source rev-parse HEAD)"
-          git -c user.name="MergeAtlas release" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit --quiet --allow-empty \
+          git commit --quiet --allow-empty \
             -m "MergeAtlas ${TAG#v}" \
             -m "plugin/ from ismayilkarimli/MergeAtlas at $source_commit ($TAG)." \
             -m "Published by the release workflow. This repository takes no other changes: develop at https://github.com/ismayilkarimli/MergeAtlas."
