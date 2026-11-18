@@ -73,6 +73,12 @@ Add this repository as a plugin marketplace, then install the plugin:
 /plugin install mergeatlas@mergeatlas
 ```
 
+The plugin itself installs from [ismayilkarimli/mergeatlas-plugin](https://github.com/ismayilkarimli/mergeatlas-plugin), which holds nothing but the plugin. Adding the marketplace clones this repository to read its list of plugins; to fetch only that list, add it from a terminal with a sparse checkout instead:
+
+```bash
+claude plugin marketplace add ismayilkarimli/MergeAtlas --sparse .claude-plugin
+```
+
 Plugin skills carry the plugin's name, so the command is `/mergeatlas:mergeatlas`. Asking your agent to map a pull request works too. The plugin stays on a release until the next one is published; to bring that in, run `/plugin marketplace update mergeatlas`. [CHANGELOG.md](CHANGELOG.md) lists what each release changed.
 
 ### Other agents, such as Codex
