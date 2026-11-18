@@ -115,12 +115,12 @@ The plugin installs from [ismayilkarimli/mergeatlas-plugin](https://github.com/i
   "source": {
     "source": "github",
     "repo": "ismayilkarimli/mergeatlas-plugin",
-    "ref": "v0.6.1"
+    "ref": "v0.6.2"
   }
 }
 ```
 
-To pin the exact code you reviewed, add `"sha"` with the full commit hash the tag points at. Moving to a new release is a change to `ref` and `sha`, and `git diff v0.6.1 <new tag>` in that repository shows everything it brings in. Each of its commits names the MergeAtlas commit it came from, and its tree is that commit's `plugin/` exactly.
+To pin the exact code you reviewed, add `"sha"` with the full commit hash the tag points at. Moving to a new release is a change to `ref` and `sha`, and `git diff v0.6.2 <new tag>` in that repository shows everything it brings in. Each of its commits names the MergeAtlas commit it came from, and its tree is that commit's `plugin/` exactly.
 
 To vendor the skill instead, each [release](https://github.com/ismayilkarimli/MergeAtlas/releases) carries `mergeatlas-<version>.zip`, the same skill folder, with a `.sha256` beside it. Unzip it into a skills folder such as `.claude/skills/`. `python3 tools/build_dist.py` builds the same zip from a clone, byte for byte.
 
