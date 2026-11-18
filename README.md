@@ -101,21 +101,20 @@ This is the setup where `/mergeatlas` works without the plugin's prefix.
 
 ### In a company's own plugin marketplace
 
-Everything MergeAtlas runs sits in [`plugin/`](plugin): the plugin manifest, `SKILL.md`, the script, the viewer and the license. Tests, evals and the site live outside it. List MergeAtlas in your marketplace's `.claude-plugin/marketplace.json` with a `git-subdir` source, and Claude Code fetches that folder alone, with a sparse checkout, at the release you name:
+The plugin installs from [ismayilkarimli/mergeatlas-plugin](https://github.com/ismayilkarimli/mergeatlas-plugin), which holds the plugin and nothing else: its manifest, `SKILL.md`, the script, the viewer and the license. Each release copies [`plugin/`](plugin) there, and that repository takes no other change, so what you review is what runs. List it in your marketplace's `.claude-plugin/marketplace.json`, pinned to a release:
 
 ```json
 {
   "name": "mergeatlas",
   "source": {
-    "source": "git-subdir",
-    "url": "ismayilkarimli/MergeAtlas",
-    "path": "plugin",
-    "ref": "v0.6.0"
+    "source": "github",
+    "repo": "ismayilkarimli/mergeatlas-plugin",
+    "ref": "v0.6.1"
   }
 }
 ```
 
-To pin the exact code you reviewed, add `"sha"` with the full commit hash the tag points at; Claude Code then checks out that commit. Moving to a new release is a change to `ref` and `sha`, and `git diff v0.6.0 <new tag> -- plugin` shows everything it brings in.
+To pin the exact code you reviewed, add `"sha"` with the full commit hash the tag points at. Moving to a new release is a change to `ref` and `sha`, and `git diff v0.6.1 <new tag>` in that repository shows everything it brings in. Each of its commits names the MergeAtlas commit it came from, and its tree is that commit's `plugin/` exactly.
 
 To vendor the skill instead, each [release](https://github.com/ismayilkarimli/MergeAtlas/releases) carries `mergeatlas-<version>.zip`, the same skill folder, with a `.sha256` beside it. Unzip it into a skills folder such as `.claude/skills/`. `python3 tools/build_dist.py` builds the same zip from a clone, byte for byte.
 

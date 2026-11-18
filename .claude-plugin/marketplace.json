@@ -1,11 +1,16 @@
 {
   "name": "mergeatlas",
   "description": "MergeAtlas: know what you're approving.",
-  "owner": { "name": "Ismayil Karimli" },
+  "owner": {
+    "name": "Ismayil Karimli"
+  },
   "plugins": [
     {
       "name": "mergeatlas",
-      "source": "./plugin",
+      "source": {
+        "source": "github",
+        "repo": "ismayilkarimli/mergeatlas-plugin"
+      },
       "description": "Turn a pull request into an interactive map on localhost: a card per changed file, grouped by intent, with cause-and-effect arrows.",
       "category": "code-review"
     }

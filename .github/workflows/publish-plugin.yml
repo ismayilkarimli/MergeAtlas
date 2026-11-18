@@ -1,0 +1,93 @@
+name: Publish plugin
+
+# Copies plugin/ at a release tag into ismayilkarimli/mergeatlas-plugin, the lean repository the marketplace installs
+# from, as one commit naming the commit it came from, and tags it the same. That repository's rulesets refuse every
+# other write, so this is the only way it changes. The release workflow calls this after CI passes; run it by hand only
+# to publish a tag again.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+    secrets:
+      PLUGIN_DEPLOY_KEY:
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish, such as v0.6.1"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-plugin
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ inputs.tag }}
+      LEAN_REPO: git@github.com:ismayilkarimli/mergeatlas-plugin.git
+    steps:
+      - name: Check the tag
+        run: |
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::$TAG is not a release tag such as v0.6.1."
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          path: source
+          persist-credentials: false
+      - name: Load the deploy key
+        env:
+          PLUGIN_DEPLOY_KEY: ${{ secrets.PLUGIN_DEPLOY_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$PLUGIN_DEPLOY_KEY" > ~/.ssh/lean_repo
+          chmod 600 ~/.ssh/lean_repo
+          # GitHub's published host key, from https://api.github.com/meta, so no first contact is trusted blindly.
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > ~/.ssh/known_hosts
+          echo "GIT_SSH_COMMAND=ssh -i $HOME/.ssh/lean_repo -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" >> "$GITHUB_ENV"
+      - name: Check the tag names the plugin's version
+        run: |
+          version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' source/plugin/.claude-plugin/plugin.json)"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::The tag is $TAG but plugin.json says $version."
+            exit 1
+          fi
+      - name: Copy plugin/ into the lean repository
+        run: |
+          git clone --quiet "$LEAN_REPO" lean
+          cd lean
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "::error::The lean repository already has $TAG. A published release is never replaced."
+            exit 1
+          fi
+          git checkout --quiet -B main
+          git rm -r --quiet --ignore-unmatch .
+          cp -R ../source/plugin/. .
+          git add -A
+          source_commit="$(git -C ../source rev-parse HEAD)"
+          git -c user.name="MergeAtlas release" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet --allow-empty \
+            -m "MergeAtlas ${TAG#v}" \
+            -m "plugin/ from ismayilkarimli/MergeAtlas at $source_commit ($TAG)." \
+            -m "Published by the release workflow. This repository takes no other changes: develop at https://github.com/ismayilkarimli/MergeAtlas."
+          git tag -a "$TAG" -m "MergeAtlas ${TAG#v} from ismayilkarimli/MergeAtlas@$source_commit"
+          git push --quiet origin main "refs/tags/$TAG"
+      - name: Check the lean repository matches plugin/
+        run: |
+          git -C lean fetch --quiet origin "refs/tags/$TAG:refs/tags/check"
+          lean_tree="$(git -C lean rev-parse 'check^{tree}')"
+          source_tree="$(git -C source rev-parse HEAD:plugin)"
+          if [ "$lean_tree" != "$source_tree" ]; then
+            echo "::error::The lean repository's $TAG holds tree $lean_tree, but plugin/ is $source_tree."
+            exit 1
+          fi
+          echo "The lean repository's $TAG is plugin/ exactly: tree $lean_tree."
