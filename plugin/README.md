@@ -5,11 +5,11 @@ This repository is the MergeAtlas plugin for Claude Code, and nothing else: its 
 Each commit here names the MergeAtlas commit it was copied from. To check that a release here is exactly that commit's `plugin/`, compare the two trees:
 
 ```bash
-git rev-parse v0.6.2^{tree}
+git rev-parse v0.6.3^{tree}
 ```
 
 ```bash
-git -C <MergeAtlas clone> rev-parse v0.6.2:plugin
+git -C <MergeAtlas clone> rev-parse v0.6.3:plugin
 ```
 
 ## Installing
@@ -29,7 +29,7 @@ The marketplace installs this repository. To list MergeAtlas in your own marketp
 ```json
 {
   "name": "mergeatlas",
-  "source": { "source": "github", "repo": "ismayilkarimli/mergeatlas-plugin", "ref": "v0.6.2" }
+  "source": { "source": "github", "repo": "ismayilkarimli/mergeatlas-plugin", "ref": "v0.6.3" }
 }
 ```
 
