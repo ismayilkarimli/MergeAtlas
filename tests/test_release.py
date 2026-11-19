@@ -68,6 +68,23 @@ class WhatTheScriptNeedsOfTheViewer(unittest.TestCase):
     def test_the_viewer_names_no_host_of_its_own(self):
         self.assertNotRegex(VIEWER, r"(?i)github|gitlab")
 
+    def test_the_viewer_loads_nothing_from_another_machine(self):
+        self.assertNotRegex(VIEWER, r"<(?:link|script)\b[^>]*\b(?:href|src)=\"(?:https?:)?//")
+        self.assertEqual([u for u in re.findall(r"url\(([^)]*)\)", VIEWER) if not u.startswith(("data:", "#"))], [])
+
+    def test_the_viewer_carries_every_font_it_names(self):
+        for family in ("Atkinson Hyperlegible Next", "Atkinson Hyperlegible Mono"):
+            self.assertRegex(VIEWER, rf'@font-face\{{font-family:"{family}";[^}}]*src:url\(data:font/woff2;base64,')
+        self.assertTrue((ROOT / "plugin" / "skills" / "mergeatlas" / "assets" / "fonts-OFL.txt").is_file())
+
+    def test_the_site_serves_its_own_fonts(self):
+        site = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn("fonts.googleapis.com", site)
+        fonts = re.findall(r"src:url\(([^)]*)\)", site)
+        self.assertEqual(len(fonts), 3)
+        for font in fonts:
+            self.assertTrue((ROOT / "site" / font).is_file(), font)
+
 
 @unittest.skipUnless(NODE, "needs Node.js")
 class ViewerScript(unittest.TestCase):
@@ -222,7 +239,7 @@ class TheLeanBundle(unittest.TestCase):
         _, archive, _ = self.build()
         with zipfile.ZipFile(archive) as zipped:
             self.assertEqual(sorted(zipped.namelist()), [
-                "mergeatlas/LICENSE", "mergeatlas/SKILL.md", "mergeatlas/assets/viewer.html",
+                "mergeatlas/LICENSE", "mergeatlas/SKILL.md", "mergeatlas/assets/fonts-OFL.txt", "mergeatlas/assets/viewer.html",
                 "mergeatlas/scripts/mergeatlas.py"])
 
     def test_it_is_named_for_the_version(self):

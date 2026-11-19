@@ -4,6 +4,12 @@ What changed in each release of MergeAtlas, newest first. Versions follow [seman
 
 If you installed the Claude Code plugin, you stay on a release until the next one is published, then `/plugin marketplace update mergeatlas` brings it in. Installs through skills.sh or a clone follow the `main` branch.
 
+## Unreleased
+
+### Changed
+
+- The viewer carries its fonts inside the page, where it loaded them from Google Fonts, so opening a map, served or shared as a file, asks no other machine for anything. The fonts are cut to Latin and Latin Extended; text in other scripts shows in the system's fonts.
+
 ## 0.6.3 - 2026-11-18
 
 ### Changed

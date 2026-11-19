@@ -21,7 +21,7 @@ SKILL = ROOT / "plugin" / "skills" / "mergeatlas"
 
 # What the bundle holds, by its path in the skill folder. A test fails if the folder holds anything else, so a new file
 # there is a choice to ship it.
-FILES = ["LICENSE", "SKILL.md", "assets/viewer.html", "scripts/mergeatlas.py"]
+FILES = ["LICENSE", "SKILL.md", "assets/fonts-OFL.txt", "assets/viewer.html", "scripts/mergeatlas.py"]
 
 # The earliest date a zip entry can carry, so the zip does not change with the files' modification times.
 STAMP = (1980, 1, 1, 0, 0, 0)

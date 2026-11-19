@@ -14,7 +14,7 @@ Knowing this helps you judge a report, or a risk.
 - **It keeps what it reads in `~/.cache/mergeatlas`.** `work/` holds each mapped pull request's diff, title, description and linked issues, along with the map being written. `data/` holds the published maps. For a private repository, both hold private code.
 - **It serves maps on `127.0.0.1:8765`.** The server hands out the viewer, the files in `data/` and a list of the maps there, and nothing in `work/`. While a map is open in the viewer, the server asks `gh` for that pull request's head commit and state, once a minute at most, so the map can say when the pull request has moved on. It answers that, and the list of maps, to the viewer alone: a request a browser marks as coming from another site's page is refused. It refuses requests made under any host name but `127.0.0.1` and `localhost`. It has no login, so any program running as you on the same machine can read published maps, as it can read the folder itself.
 - **A shared map is a file that runs script.** The HTML file from the Share button or `export` holds the viewer and one map, including the code lines the map quotes. Open one only from someone you would accept a pull request link from.
-- **The viewer loads its fonts from Google Fonts.** That is the only request the viewer itself makes to another machine. Links in a map open GitHub or your tracker when you click them.
+- **The viewer asks no other machine for anything.** Its fonts are inside the page, so a served map and a shared file open with no request beyond the local server. Links in a map open GitHub or your tracker when you click them.
 
 ## What counts as a vulnerability
 

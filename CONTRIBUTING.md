@@ -9,6 +9,7 @@
 - `tests/`: the tests for the script and for what the script and the viewer rely on in each other.
 - `plugin/`: everything a user installs, and nothing else. Each release copies it to [ismayilkarimli/mergeatlas-plugin](https://github.com/ismayilkarimli/mergeatlas-plugin), which the marketplace installs from and which refuses any other change, so never edit that repository: change `plugin/` here. To try a change in Claude Code before it is released, run `claude --plugin-dir ./plugin`. Keep tests, notes and images outside it; a test fails when it holds a file `tools/build_dist.py` does not list in `FILES`.
 - `tools/build_dist.py`: builds the zip a release attaches, the skill folder alone.
+- `tools/embed_fonts.py`: writes the fonts into the viewer and the site, so neither asks another machine for one. Run it with `uv run --with fonttools --with brotli tools/embed_fonts.py` after changing which fonts, weights or characters the pages use.
 
 ## Running the checks
 

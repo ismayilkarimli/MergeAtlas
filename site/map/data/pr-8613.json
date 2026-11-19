@@ -11,7 +11,7 @@
       "base": null,
       "below": null
     },
-    "links": {
+    "links": {"noun": "PR", 
       "host": "GitHub",
       "pr": "https://github.com/excalidraw/excalidraw/pull/8613",
       "ref": "#{n}",
