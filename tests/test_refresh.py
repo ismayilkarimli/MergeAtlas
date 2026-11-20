@@ -36,6 +36,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -68,6 +69,43 @@ class Fingerprints(unittest.TestCase):
         self.assertEqual(mergeatlas.patch_id(mergeatlas.diff_rows(ONE)), mergeatlas.patch_id(mergeatlas.diff_rows(ONE_MOVED)))
         self.assertNotEqual(mergeatlas.patch_id(mergeatlas.diff_rows(ONE)), mergeatlas.patch_id(mergeatlas.diff_rows(two)))
         self.assertNotEqual(mergeatlas.patch_id(mergeatlas.diff_rows(ONE)), mergeatlas.patch_id(mergeatlas.diff_rows(OTHER)))
+
+
+def quoted_section(header, hunk="@@ -1 +1,2 @@\n x\n+changed\n"):
+    """A file's section of a diff as git writes it for a name it quotes, header and all."""
+    return f"diff --git {header}\nindex 1234567..89abcde 100644\n--- {header.split(' ', 1)[0]}\n+++ {header.split(' ', 1)[1]}\n{hunk}"
+
+
+class QuotedPaths(unittest.TestCase):
+    """Git quotes a name with a non-ASCII character, a tab, a quote or a backslash in a diff header, with C escapes and
+    its UTF-8 bytes in octal. These headers are copied from git's own output; Windows cannot create most such names, so
+    the tests do not make the files."""
+
+    NAMES = {
+        '"a/caf\\303\\251.txt" "b/caf\\303\\251.txt"': "café.txt",
+        '"a/tab\\tname.txt" "b/tab\\tname.txt"': "tab\tname.txt",
+        '"a/q\\"uote.txt" "b/q\\"uote.txt"': 'q"uote.txt',
+        '"a/back\\\\slash.txt" "b/back\\\\slash.txt"': "back\\slash.txt",
+        'a/old.txt "b/\\346\\226\\260.txt"': "新.txt",
+    }
+
+    def test_a_quoted_name_first_in_the_diff_is_read(self):
+        for header, name in self.NAMES.items():
+            with self.subTest(name=name):
+                rows = mergeatlas.diff_rows(quoted_section(header))
+                self.assertEqual(rows, {name: [(" x", "R1", 1), ("+changed", "R2", 1)]})
+
+    def test_each_file_keeps_its_own_lines_when_a_quoted_name_follows_a_plain_one(self):
+        diff = ONE + "".join(quoted_section(header) for header in self.NAMES)
+        rows = mergeatlas.diff_rows(diff)
+        self.assertEqual(rows["cfg.txt"], mergeatlas.diff_rows(ONE)["cfg.txt"])
+        self.assertEqual(sorted(rows), sorted(["cfg.txt", *self.NAMES.values()]))
+        for name in self.NAMES.values():
+            self.assertEqual([text for text, _, _ in rows[name]], [" x", "+changed"])
+
+    def test_a_name_with_a_space_still_reads_as_before(self):
+        rows = mergeatlas.diff_rows(diff_of("docs/read me.md", ["@@ -1 +1 @@\n-a\n+b\n"]))
+        self.assertEqual(list(rows), ["docs/read me.md"])
 
 
 class LineMap(unittest.TestCase):
@@ -357,6 +395,30 @@ class RefreshWork(unittest.TestCase):
         self.assertEqual(published["pr"]["pinned"]["commit"], self.base)
         key = [line for line in published["cards"][0]["changes"][0]["snippets"][0] if line.get("key")]
         self.assertEqual([(line["text"], line["line"]) for line in key], [("+B", "R3")])
+
+    def test_a_server_that_cannot_start_is_not_reported_as_a_rejected_map(self):
+        self.first_map()
+        git(self.repo, "checkout", "-q", self.base)
+        base2 = self.commit({"cfg.txt": "top\na\nb\nc\n"}, "rebase target")
+        head2 = self.commit({"cfg.txt": "top\na\nB\nc\n"}, "change b again")
+        busy = "Port 8765 is in use by something other than the MergeAtlas viewer."
+        with mock.patch.object(mergeatlas, "serve", lambda: sys.exit(busy)):
+            with self.assertRaises(SystemExit) as stopped:
+                mergeatlas.refresh_work("o-r-7", *self.pr(head2, base2), base2)
+        self.assertEqual(str(stopped.exception), busy)
+        self.assertFalse((mergeatlas.WORK / "o-r-7.update.json").exists())
+        # the map itself was written before the server was asked to start
+        self.assertEqual(self.published()["pr"]["mapped"]["head"], head2)
+
+    def test_a_refreshed_map_that_fails_its_checks_goes_back_as_partial(self):
+        self.first_map()
+        git(self.repo, "checkout", "-q", self.base)
+        base2 = self.commit({"cfg.txt": "top\na\nb\nc\n"}, "rebase target")
+        head2 = self.commit({"cfg.txt": "top\na\nB\nc\n"}, "change b again")
+        with mock.patch.object(mergeatlas, "problems_in", lambda *_: ["a problem"]):
+            status, plan = mergeatlas.refresh_work("o-r-7", *self.pr(head2, base2), base2)
+        self.assertEqual(status, "partial")
+        self.assertEqual(plan["problems"], "Map rejected:\n  a problem")
 
     def test_review_marks_survive_a_refresh(self):
         self.first_map()
