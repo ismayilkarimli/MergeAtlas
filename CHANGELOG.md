@@ -4,7 +4,7 @@ What changed in each release of MergeAtlas, newest first. Versions follow [seman
 
 If you installed the Claude Code plugin, you stay on a release until the next one is published, then `/plugin marketplace update mergeatlas` brings it in. Installs through skills.sh or a clone follow the `main` branch.
 
-## Unreleased
+## 0.6.5 - 2026-11-20
 
 ### Fixed
 
