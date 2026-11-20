@@ -104,7 +104,9 @@ POINTER = re.compile(
     r"|(earlier|previous|next)\s+cards?)\b",
     re.I,
 )
-FILE_HEADER = re.compile(r"diff --git a/.* b/(.*)$")
+# Git writes a name as it is, or in double quotes when it holds a non-ASCII character, a tab, a quote or a backslash.
+FILE_HEADER = re.compile(r'diff --git (?:a/.*|"a/(?:[^"\\]|\\.)*") (b/.*|"b/(?:[^"\\]|\\.)*")$')
+QUOTED_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
 HUNK_HEADER = re.compile(r"@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)$")
 REACH_KINDS = {"core", "cleanup"}
 MECHANICAL_REASONS = {"whitespace", "formatting", "comments", "rename", "generated", "snapshot"}
@@ -1003,15 +1005,41 @@ def connection_lines(read, at):
             for n in range(max(1, first - SURROUNDING_LINES), min(len(lines), last + SURROUNDING_LINES) + 1)]
 
 
+def unquoted(name):
+    """A name from a diff header as the file is named: git quotes some names, writing C escapes for a tab, a quote or a
+    backslash and each byte of a non-ASCII character's UTF-8 in octal."""
+    if not (len(name) >= 2 and name[0] == name[-1] == '"'):
+        return name
+    body, out, i = name[1:-1], bytearray(), 0
+    while i < len(body):
+        if body[i] != "\\":
+            out += body[i].encode()
+            i += 1
+        elif body[i + 1] in "01234567":
+            out.append(int(body[i + 1:i + 4], 8))
+            i += 4
+        else:
+            out.append(QUOTED_ESCAPES[body[i + 1]])
+            i += 2
+    return out.decode("utf-8", "replace")
+
+
+class Rejected(SystemExit):
+    """publish refusing a map for its problems, apart from any other way it can stop, such as a server that cannot start."""
+
+
 def diff_rows(diff):
     """Maps each file to its diff lines as (text, anchor, hunk), with anchors as GitHub numbers them."""
-    rows, current, old, new, number = {}, None, 0, 0, 0
+    rows, current, path, old, new, number = {}, None, None, 0, 0, 0
     for line in diff.splitlines():
         header = FILE_HEADER.match(line)
         hunk = HUNK_HEADER.match(line)
-        if header:
+        if line.startswith("diff --git "):
+            # a header this cannot read still ends the file before it, so no lines are filed under the wrong file
             current = None
-            path = header.group(1)
+            path = unquoted(header.group(1))[2:] if header else None
+        elif hunk and path is None:
+            continue
         elif hunk:
             current = rows.setdefault(path, [])
             old, new, number = int(hunk.group(1)), int(hunk.group(2)), number + 1
@@ -1291,7 +1319,7 @@ def refresh_work(map_id, pr, diff, built, fresh=False):
         try:
             publish(map_id, asked=False)
             return "refreshed", None
-        except SystemExit as rejected:
+        except Rejected as rejected:
             plan = {**plan, "redo": [], "keep": [c["id"] for c in data["cards"]], "added": [], "gone": [], "fix": [],
                     "recheck": [], "back": 0, "problems": str(rejected)}
             mark_update(map_id, old, plan)
@@ -2058,7 +2086,7 @@ def publish(map_id, asked=True):
     if problems:
         if asked:
             note(map_id, "publish", accepted=False, rejected_for=Counter(rule_of(p) for p in problems))
-        sys.exit("Map rejected:\n" + "\n".join(f"  {p}" for p in problems))
+        raise Rejected("Map rejected:\n" + "\n".join(f"  {p}" for p in problems))
     now, update_path = hashes_of(data), WORK / f"{map_id}.update.json"
     was = json.loads(update_path.read_text()) if update_path.exists() else None
     if asked:

@@ -4,6 +4,13 @@ What changed in each release of MergeAtlas, newest first. Versions follow [seman
 
 If you installed the Claude Code plugin, you stay on a release until the next one is published, then `/plugin marketplace update mergeatlas` brings it in. Installs through skills.sh or a clone follow the `main` branch.
 
+## Unreleased
+
+### Fixed
+
+- A PR that changes a file whose name holds a non-ASCII character, a tab, a quote or a backslash no longer breaks `publish` and `fetch`. Git writes such names in quotes in a diff, which the script did not read: with the file first in the diff it stopped with an error, and otherwise its lines were filed under the file before it.
+- When `fetch` refreshes a map and the viewer server cannot start, it says so, where it reported a rejected map.
+
 ## 0.6.4 - 2026-11-19
 
 ### Changed
